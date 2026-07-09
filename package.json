@@ -1,0 +1,15 @@
+{
+  "name": "evil-eye-arbitrage",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev:server": "npm run dev -w server",
+    "dev:client": "npm run dev -w client",
+    "test": "npm run test -w server",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w client"
+  }
+}

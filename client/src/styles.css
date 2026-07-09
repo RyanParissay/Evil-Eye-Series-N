@@ -1,0 +1,464 @@
+/* ————————————————————————————————————————————————
+   EVIL EYE ARBITRAGE — stark, editorial, Swiss.
+   Pure black, white type, one red. Zero radius, hairline rules,
+   tabular figures for anything numeric.
+   ———————————————————————————————————————————————— */
+
+:root {
+  --black: #000;
+  --white: #fff;
+  --red: #ff2b2b;
+  --grey: rgba(255, 255, 255, 0.55);
+  --hairline: rgba(255, 255, 255, 0.22);
+  --hairline-faint: rgba(255, 255, 255, 0.12);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--black);
+  color: var(--white);
+  font-family: 'Futura', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.45;
+}
+
+.page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 48px 32px 64px;
+}
+
+/* Micro-labels: the uppercase captions that structure the whole page. */
+.micro-label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--grey);
+}
+
+/* ————— Masthead ————— */
+
+.masthead {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-bottom: 24px;
+  border-bottom: 2px solid var(--white);
+}
+
+.masthead svg {
+  align-self: center;
+  color: var(--white);
+}
+
+.wordmark {
+  font-size: clamp(28px, 5vw, 44px);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.wordmark-accent {
+  color: var(--red);
+}
+
+.tagline {
+  margin-left: auto;
+  align-self: center;
+}
+
+/* ————— Control bar ————— */
+
+.control-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 32px;
+  flex-wrap: wrap;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.scan-button {
+  appearance: none;
+  border: none;
+  background: var(--red);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  padding: 16px 34px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  transition: background-color 120ms ease;
+}
+
+.scan-button:hover:not(:disabled) {
+  background: #ff4444;
+}
+
+.scan-button:focus-visible {
+  outline: 2px solid var(--white);
+  outline-offset: 3px;
+}
+
+.scan-button:disabled {
+  background: #5a0f0f;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: wait;
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: var(--white);
+  animation: spin 700ms linear infinite;
+}
+
+/* ————— Slider ————— */
+
+.slider-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 200px;
+}
+
+.slider-block label {
+  cursor: help;
+}
+
+.slider-value {
+  color: var(--red);
+  font-weight: 800;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+input[type='range'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 2px;
+  background: var(--hairline);
+  outline: none;
+  cursor: pointer;
+}
+
+input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--white);
+  border: none;
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--white);
+  border: none;
+  border-radius: 0;
+}
+
+input[type='range']:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
+}
+
+input[type='range']:disabled {
+  opacity: 0.4;
+  cursor: wait;
+}
+
+.slider-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--grey);
+}
+
+/* ————— Usage panel ————— */
+
+.usage-panel {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 72px;
+}
+
+.stat-value {
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+/* ————— Chips / badges ————— */
+
+.chip {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  padding: 3px 7px;
+  white-space: nowrap;
+}
+
+.chip-mock {
+  border: 1px solid var(--hairline);
+  color: var(--grey);
+}
+
+.chip-warn {
+  border: 1px solid var(--red);
+  color: var(--red);
+}
+
+/* ————— Results ————— */
+
+.results {
+  min-height: 320px;
+}
+
+.results-head {
+  padding: 18px 0 10px;
+}
+
+.card {
+  border-bottom: 1px solid var(--hairline);
+  padding: 26px 0;
+}
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.card-title h2 {
+  font-size: clamp(19px, 3vw, 26px);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin: 6px 0 8px;
+}
+
+.card-flags {
+  display: flex;
+  gap: 8px;
+}
+
+.card-profit {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.profit-pct {
+  display: block;
+  color: var(--red);
+  font-size: clamp(30px, 5vw, 46px);
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 6px;
+}
+
+/* Legs: one row per bet. */
+.legs {
+  width: 100%;
+  margin-top: 18px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.legs td {
+  padding: 10px 16px 10px 0;
+  border-top: 1px solid var(--hairline-faint);
+  font-size: 15px;
+  vertical-align: baseline;
+}
+
+.leg-outcome {
+  font-weight: 700;
+  width: 40%;
+}
+
+.leg-book a {
+  color: var(--white);
+  text-decoration: none;
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 1px;
+}
+
+.leg-book a:hover,
+.leg-book a:focus-visible {
+  color: var(--red);
+  border-bottom-color: var(--red);
+  outline: none;
+}
+
+.leg-odds {
+  color: var(--grey);
+}
+
+.leg-stake {
+  font-weight: 700;
+  text-align: right;
+}
+
+/* ————— States (idle / loading / empty / error) ————— */
+
+.state-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+  padding: 84px 24px;
+  color: var(--white);
+}
+
+.state-title {
+  font-size: 21px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.state-detail {
+  color: var(--grey);
+  font-size: 14px;
+  max-width: 46ch;
+}
+
+.state-error {
+  border: 1px solid var(--red);
+  margin-top: 32px;
+  padding: 56px 24px;
+}
+
+.state-error .state-title {
+  color: var(--red);
+}
+
+/* ————— Footer ————— */
+
+.footnote {
+  padding-top: 40px;
+  text-align: center;
+}
+
+/* ————— Motion ————— */
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes iris-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.iris-scanning {
+  animation: iris-pulse 900ms ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner,
+  .iris-scanning {
+    animation: none;
+  }
+}
+
+/* ————— Accessibility helpers ————— */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ————— Responsive ————— */
+
+@media (max-width: 720px) {
+  .page {
+    padding: 28px 18px 48px;
+  }
+
+  .tagline {
+    display: none;
+  }
+
+  .control-bar,
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .scan-button {
+    justify-content: center;
+  }
+
+  .usage-panel {
+    gap: 18px;
+    justify-content: space-between;
+  }
+
+  .card-head {
+    flex-direction: column;
+  }
+
+  .card-profit {
+    text-align: left;
+  }
+
+  .legs td {
+    font-size: 13px;
+    padding-right: 10px;
+  }
+}
