@@ -3,6 +3,7 @@
  * → arbitrage engine → usage report. This is the only place the provider,
  * engine, and persistence meet.
  */
+import { regionTabByKey, type RegionTabKey } from '../../../shared/regionTabs';
 import type { ArbOpportunity, ScanMeta, ScanResponse, UsageReport } from '../../../shared/types';
 import { bookmakerHomepage } from '../config/bookmakerLinks';
 import {
@@ -10,11 +11,11 @@ import {
   MIN_PROFIT_PCT,
   PLAN_MONTHLY_CREDITS,
   PLAN_MONTHLY_PRICE,
-  REGIONS,
   SPORT_PRIORITY,
   SUSPICIOUS_PROFIT_PCT,
 } from '../config/constants';
 import { findArbitrageOpportunities } from '../engine/arbitrage';
+import { filterEventsToBookmakers } from '../engine/bookmakerFilter';
 import { estimateDollarCost } from '../engine/creditCost';
 import { sportsForScan } from '../engine/sportSelection';
 import type { OddsProvider, OddsResult } from '../providers/OddsProvider';
@@ -26,9 +27,22 @@ export interface ScanDeps {
   now?: () => Date;
 }
 
-export async function runScan(deps: ScanDeps, topN: number): Promise<ScanResponse> {
+export interface ScanRequest {
+  topN: number;
+  regionTab: RegionTabKey;
+}
+
+export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<ScanResponse> {
   const now = deps.now ?? (() => new Date());
   const { provider, store } = deps;
+  const { topN } = request;
+
+  // Pre-call credit efficiency: the tab decides which API regions we pay
+  // for. Post-call correctness: the tab's allowlist filters bookmakers
+  // before arb detection (step 4).
+  const tab = regionTabByKey(request.regionTab);
+  if (!tab) throw new Error(`Unknown region tab: ${request.regionTab}`);
+  const regions = tab.apiRegions;
 
   // 1. Free catalogue call. Its headers give us the pre-scan usage baseline.
   const sportsResult = await provider.listSports();
@@ -41,7 +55,7 @@ export async function runScan(deps: ScanDeps, topN: number): Promise<ScanRespons
   //    (e.g. temporarily unavailable market) shouldn't sink the whole scan.
   const settled = await Promise.allSettled(
     targets.map((sport) =>
-      provider.fetchOdds(sport.key, { regions: REGIONS, markets: MARKETS }),
+      provider.fetchOdds(sport.key, { regions, markets: MARKETS }),
     ),
   );
 
@@ -63,8 +77,12 @@ export async function runScan(deps: ScanDeps, topN: number): Promise<ScanRespons
     throw firstFailure;
   }
 
-  // 4. Arbitrage detection over everything we fetched.
-  const events = results.flatMap((r) => r.events);
+  // 4. Drop bookmakers a Canadian cannot register at BEFORE detection, so
+  //    best-odds selection only ever sees accessible books.
+  const events = filterEventsToBookmakers(
+    results.flatMap((r) => r.events),
+    tab.allowedBookmakers,
+  );
   const opportunities = findArbitrageOpportunities(events, {
     minProfitPct: MIN_PROFIT_PCT,
     suspiciousProfitPct: SUSPICIOUS_PROFIT_PCT,
@@ -93,7 +111,8 @@ export async function runScan(deps: ScanDeps, topN: number): Promise<ScanRespons
     scannedAt: now().toISOString(),
     sportsScanned: targets.map((s) => s.key),
     sportsFailed,
-    regions: [...REGIONS],
+    regions: [...regions],
+    regionTab: tab.key,
     topN,
     providerMode: provider.mode,
     usage,

@@ -2,12 +2,11 @@
  * All tunable knobs in one place.
  */
 
-/**
- * Regions requested from The Odds API. Each region multiplies the credit
- * cost of every odds call: one call costs (markets × regions) credits.
- * Options: 'us', 'us2', 'eu', 'uk', 'au'. Start narrow; widen deliberately.
+/*
+ * Regions are no longer a single constant: each region tab in
+ * shared/regionTabs.ts declares its own minimal API region set (the credit
+ * dial) plus its Canadian-accessible bookmaker allowlist (the filter).
  */
-export const REGIONS = ['us', 'eu'] as const;
 
 /** Markets scanned. 'h2h' only for now; add 'spreads' / 'totals' here later. */
 export const MARKETS = ['h2h'] as const;

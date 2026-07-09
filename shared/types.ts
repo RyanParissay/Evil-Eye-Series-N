@@ -117,6 +117,8 @@ export interface ScanMeta {
   /** Sports whose odds fetch failed; scan proceeds without them. */
   sportsFailed: string[];
   regions: string[];
+  /** Which accessibility tab drove region selection and bookmaker filtering. */
+  regionTab?: string;
   topN: number;
   providerMode: 'live' | 'mock';
   usage: UsageReport;

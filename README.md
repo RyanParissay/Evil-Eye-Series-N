@@ -51,12 +51,37 @@ estimated $ = credits_used × (PLAN_MONTHLY_PRICE / PLAN_MONTHLY_CREDITS)
 ```
 
 Edit `PLAN_MONTHLY_PRICE` / `PLAN_MONTHLY_CREDITS` in
-`server/src/config/constants.ts` to match your tier. Regions and markets live
-in the same file.
+`server/src/config/constants.ts` to match your tier. Markets live in the same
+file; regions are owned by the region tabs (below).
 
 Last-scan metadata (timestamp, credits, account totals) persists to
 `server/data/last-scan.json` so the usage panel survives refreshes and
 restarts. No database.
+
+## Region tabs (Canadian accessibility)
+
+The Odds API has no `ca` region, so Canadian coverage works in two layers
+(`shared/regionTabs.ts`):
+
+1. **Pre-call, credit efficiency** — each tab requests only the minimal API
+   regions containing its books. Regions multiply every call's cost, so this
+   is the spend dial:
+
+   | Tab | API regions | Credits/sport | Adds |
+   | --- | --- | --- | --- |
+   | Canada | `eu,uk` | 2 | Ontario-licensed & Canada-friendly books (bet365, Pinnacle, Coolbet, Betway, BetVictor, LeoVegas…) |
+   | Canada + USA | `us,eu,uk` | 3 | US brands with Ontario platforms (FanDuel, DraftKings, BetMGM, Caesars, BetRivers) |
+   | Canada + EU Intl | `eu,uk` | 2 | International books accepting Canadians (1xBet, Marathon Bet — grey market, verify locally) |
+
+2. **Post-call, correctness** — before arbitrage detection, every response is
+   filtered to the tab's allowlist of bookmakers a Canadian can register at
+   with Canadian ID (`server/src/engine/bookmakerFilter.ts`). Filtering
+   happens *before* best-odds selection, so no arb leg can ever point at an
+   inaccessible book.
+
+The allowlists are best-effort config, not legal advice — books enter and
+leave the Canadian market constantly, so verify before relying on one, and
+edit the lists freely in `shared/regionTabs.ts`.
 
 ## The slider → breadth mapping
 
@@ -92,9 +117,11 @@ errored odds) rather than presented uncritically.
 
 ```
 shared/types.ts                     domain types used by both sides
+shared/regionTabs.ts                region tabs: API regions + CA-accessible books
 server/src/
   engine/                           pure logic — no Express imports
     arbitrage.ts                    the arb detector (+ tests)
+    bookmakerFilter.ts              post-call accessibility filter (+ tests)
     creditCost.ts                   credit → dollar math (+ tests)
     sportSelection.ts               slider → breadth mapping (+ tests)
   providers/
@@ -110,9 +137,9 @@ server/src/
 client/src/                         React + Vite, plain CSS, no UI framework
 ```
 
-Run the tests: `npm test` (27 Vitest cases covering 2-way/3-way arbs, no-arb
+Run the tests: `npm test` (31 Vitest cases covering 2-way/3-way arbs, no-arb
 markets, stake splits, same-book and suspicious flags, stale filtering, ties,
-credit math, and the slider mapping).
+credit math, the slider mapping, and the bookmaker accessibility filter).
 
 ## How to extend
 

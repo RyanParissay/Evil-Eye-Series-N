@@ -22,6 +22,7 @@ export const BOOKMAKER_HOMEPAGES: Record<string, string> = {
   ballybet: 'https://play.ballybet.com',
   // Sharp / EU
   pinnacle: 'https://www.pinnacle.com',
+  coolbet: 'https://www.coolbet.com',
   onexbet: 'https://1xbet.com',
   sport888: 'https://www.888sport.com',
   betclic: 'https://www.betclic.com',

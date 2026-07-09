@@ -2,6 +2,7 @@
  * Thin typed client for the Express API. The API key never reaches this
  * side of the wire — the server proxies The Odds API.
  */
+import type { RegionTabKey } from '../../shared/regionTabs';
 import type { ApiErrorBody, ApiErrorCode, ScanMeta, ScanResponse } from '../../shared/types';
 
 export class ApiError extends Error {
@@ -14,11 +15,11 @@ export class ApiError extends Error {
   }
 }
 
-export async function runScan(topN: number): Promise<ScanResponse> {
+export async function runScan(topN: number, regionTab: RegionTabKey): Promise<ScanResponse> {
   return request<ScanResponse>('/api/scan', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ topN }),
+    body: JSON.stringify({ topN, regionTab }),
   });
 }
 

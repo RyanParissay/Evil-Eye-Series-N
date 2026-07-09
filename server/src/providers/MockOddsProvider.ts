@@ -144,7 +144,10 @@ export class MockOddsProvider implements OddsProvider {
           bookmakers: [
             book('bet365', 'Bet365', { Arsenal: 3.0, Draw: 3.2, Chelsea: 2.45 }, 'https://www.bet365.com'),
             book('pinnacle', 'Pinnacle', { Arsenal: 2.72, Draw: 3.45, Chelsea: 2.6 }),
+            // Betfair is not Canadian-accessible, so on the Canada tabs the
+            // third leg must come from Coolbet for the arb to survive.
             book('betfair_ex_uk', 'Betfair', { Arsenal: 2.86, Draw: 3.3, Chelsea: 2.9 }, 'https://www.betfair.com/exchange'),
+            book('coolbet', 'Coolbet', { Arsenal: 2.8, Draw: 3.35, Chelsea: 2.9 }),
           ],
         },
         {

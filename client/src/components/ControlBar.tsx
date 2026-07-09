@@ -1,15 +1,27 @@
+import type { RegionTabKey } from '../../../shared/regionTabs';
 import type { ScanMeta } from '../../../shared/types';
+import { RegionTabs } from './RegionTabs';
 import { UsagePanel } from './UsagePanel';
 
 interface ControlBarProps {
   topN: number;
   onTopNChange: (n: number) => void;
+  regionTab: RegionTabKey;
+  onRegionTabChange: (key: RegionTabKey) => void;
   onScan: () => void;
   scanning: boolean;
   lastMeta: ScanMeta | null;
 }
 
-export function ControlBar({ topN, onTopNChange, onScan, scanning, lastMeta }: ControlBarProps) {
+export function ControlBar({
+  topN,
+  onTopNChange,
+  regionTab,
+  onRegionTabChange,
+  onScan,
+  scanning,
+  lastMeta,
+}: ControlBarProps) {
   return (
     <div className="control-bar">
       <div className="controls">
@@ -47,6 +59,8 @@ export function ControlBar({ topN, onTopNChange, onScan, scanning, lastMeta }: C
             <span>deep</span>
           </div>
         </div>
+
+        <RegionTabs active={regionTab} onChange={onRegionTabChange} disabled={scanning} />
       </div>
 
       <UsagePanel meta={lastMeta} />

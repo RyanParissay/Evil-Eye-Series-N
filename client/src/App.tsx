@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { DEFAULT_REGION_TAB, type RegionTabKey } from '../../shared/regionTabs';
 import type { ApiErrorCode, ScanMeta, ScanResponse } from '../../shared/types';
 import { ApiError, fetchLastScan, runScan } from './api';
 import { ControlBar } from './components/ControlBar';
@@ -13,6 +14,7 @@ type ScanState =
 
 export function App() {
   const [topN, setTopN] = useState(5);
+  const [regionTab, setRegionTab] = useState<RegionTabKey>(DEFAULT_REGION_TAB);
   const [scan, setScan] = useState<ScanState>({ status: 'idle' });
   const [lastMeta, setLastMeta] = useState<ScanMeta | null>(null);
 
@@ -29,7 +31,7 @@ export function App() {
     if (scan.status === 'loading') return;
     setScan({ status: 'loading' });
     try {
-      const data = await runScan(topN);
+      const data = await runScan(topN, regionTab);
       setScan({ status: 'success', data });
       setLastMeta(data.meta);
     } catch (err) {
@@ -55,6 +57,8 @@ export function App() {
       <ControlBar
         topN={topN}
         onTopNChange={setTopN}
+        regionTab={regionTab}
+        onRegionTabChange={setRegionTab}
         onScan={handleScan}
         scanning={scan.status === 'loading'}
         lastMeta={lastMeta}

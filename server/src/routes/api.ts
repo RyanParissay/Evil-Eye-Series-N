@@ -3,6 +3,7 @@
  * statuses, and never leaks the API key.
  */
 import { Router, type NextFunction, type Request, type Response } from 'express';
+import { DEFAULT_REGION_TAB, regionTabByKey } from '../../../shared/regionTabs';
 import type { ApiErrorBody, ApiErrorCode } from '../../../shared/types';
 import { MAX_TOP_N } from '../config/constants';
 import { ProviderError } from '../providers/OddsProvider';
@@ -18,7 +19,12 @@ export function createApiRouter(deps: ScanDeps): Router {
         res.status(400).json(errorBody('bad_request', `topN must be an integer from 1 to ${MAX_TOP_N}`));
         return;
       }
-      res.json(await runScan(deps, topN));
+      const tab = regionTabByKey(req.body?.regionTab ?? DEFAULT_REGION_TAB);
+      if (!tab) {
+        res.status(400).json(errorBody('bad_request', `Unknown regionTab: ${req.body?.regionTab}`));
+        return;
+      }
+      res.json(await runScan(deps, { topN, regionTab: tab.key }));
     } catch (err) {
       next(err);
     }
