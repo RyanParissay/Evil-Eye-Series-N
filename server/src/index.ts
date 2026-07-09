@@ -2,9 +2,9 @@
  * Server entry point. Holds the API key (server-side only), picks the
  * provider, and wires the Express app.
  */
-import 'dotenv/config';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
 import express from 'express';
 import { DEFAULT_PORT, LAST_SCAN_FILE } from './config/constants';
 import { MockOddsProvider } from './providers/MockOddsProvider';
@@ -14,6 +14,10 @@ import { apiErrorHandler, createApiRouter } from './routes/api';
 import { ScanStore } from './scan/scanStore';
 
 const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+// The .env lives at the repo root (shared by both workspaces); load it by
+// absolute path so the server finds it regardless of the launch directory.
+dotenv.config({ path: path.resolve(serverRoot, '../.env') });
 
 const apiKey = process.env.ODDS_API_KEY?.trim();
 const provider: OddsProvider =
