@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ArbOpportunity, OpportunityRecord } from '@shared/types';
 import { OPPORTUNITY_ARCHIVE_AFTER_MS } from '../config/constants';
 import { opportunityFingerprint, opportunityIdFromFingerprint } from './opportunityId';
-import { applyScanToRecords, partitionForArchive } from './opportunityLifecycle';
+import { applyScanToRecords, applyStatusChange, partitionForArchive } from './opportunityLifecycle';
 
 const NOW = new Date('2026-07-09T12:00:00Z');
 const FUTURE = '2026-07-09T23:00:00Z';
@@ -122,6 +122,45 @@ describe('applyScanToRecords', () => {
     );
     const { records } = applyScanToRecords([started], [], SCOPE, NOW);
     expect(records[0].status).toBe('dead');
+  });
+});
+
+describe('applyStatusChange', () => {
+  it('completes an active record', () => {
+    const record = recordFor(makeArb());
+    const change = applyStatusChange(record, 'completed', NOW);
+    expect(change.ok).toBe(true);
+    expect(record.status).toBe('completed');
+    expect(record.statusChangedAt).toBe(NOW.toISOString());
+  });
+
+  it('degrades an active record', () => {
+    const record = recordFor(makeArb());
+    const change = applyStatusChange(record, 'degraded', NOW);
+    expect(change.ok).toBe(true);
+    expect(record.status).toBe('degraded');
+  });
+
+  it('completes a dead record — the bets were placed while it lived', () => {
+    const record = recordFor(makeArb(), { status: 'dead' });
+    expect(applyStatusChange(record, 'completed', NOW).ok).toBe(true);
+    expect(record.status).toBe('completed');
+  });
+
+  it('setting the current status again is a no-op success, not a conflict', () => {
+    const record = recordFor(makeArb(), { status: 'completed', statusChangedAt: '2026-07-09T10:00:00Z' });
+    const change = applyStatusChange(record, 'completed', NOW);
+    expect(change.ok).toBe(true);
+    expect(record.statusChangedAt).toBe('2026-07-09T10:00:00Z');
+  });
+
+  it('never degrades a dead or completed record', () => {
+    const dead = recordFor(makeArb(), { status: 'dead' });
+    const done = recordFor(makeArb(), { status: 'completed' });
+    expect(applyStatusChange(dead, 'degraded', NOW)).toMatchObject({ ok: false });
+    expect(applyStatusChange(done, 'degraded', NOW)).toMatchObject({ ok: false });
+    expect(dead.status).toBe('dead');
+    expect(done.status).toBe('completed');
   });
 });
 

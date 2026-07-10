@@ -223,6 +223,10 @@ export type ApiErrorCode =
   | 'network'
   | 'provider_error'
   | 'bad_request'
+  /** The addressed resource does not exist (e.g. a stale cockpit deep link). */
+  | 'not_found'
+  /** The resource exists but the requested change is not valid from its current state. */
+  | 'conflict'
   | 'internal';
 
 export interface ApiErrorBody {

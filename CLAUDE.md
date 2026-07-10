@@ -8,7 +8,7 @@ this file is the working map.
 ## Commands
 
 ```bash
-npm test               # Vitest, server workspace (run from repo root)
+npm test               # Vitest, server AND client workspaces (run from repo root)
 npm run typecheck      # tsc for server AND client
 npm run dev:server     # Express on :8787 (mock mode without ODDS_API_KEY)
 npm run dev:client     # Vite on :5173
@@ -33,6 +33,9 @@ server/src/
                  Wire-format mapping and ProviderError creation happen ONLY here.
   scan/          scanRequest.ts  — request body validation (THE place for new options)
                  scanService.ts  — orchestration: catalogue → odds → engine → usage
+                 detection.ts    — the reusable detection slice (allowlist filter →
+                 engine → link fallbacks); runScan, cockpit re-verify, and Phase-4
+                 presets all go through it
                  scanStore.ts    — last-scan JSON persistence (write-then-rename)
   bookmakers/    Per-book config (enabled/balance/status/notes). Registry
                  self-populates from each scan's raw feed. effectiveBookmakers.ts
@@ -136,8 +139,21 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   IDs are its first 16 hex chars); alertService re-exports it.
 - A scan can only declare a record dead within its own scope (same region
   tab + rescanned sport, fingerprint gone) or when the event commenced.
-  'degraded'/'completed' are cockpit (Phase 3) transitions — don't set them
-  from scan code.
+  'degraded'/'completed' are cockpit transitions (applyStatusChange →
+  updateStatus → PATCH /api/opportunities/:id) — don't set them from scan
+  code. Completing is allowed even on a dead record (the bets were placed
+  while it lived); degrading is active-only; re-setting the current status
+  is a no-op success so double-taps never error.
+- 404s use ApiErrorCode 'not_found' (stale cockpit deep link ≠ validation
+  error) and invalid transitions use 'conflict' (409). Don't collapse them
+  back into 'bad_request'.
 - last-snapshot.json stores the RAW pre-filter feed on purpose — Advanced
   Mode presets must be able to recompute with books outside the current
   allowlist filter. Don't "fix" it to store filtered events.
+- Snapshot addressing (decided 2026-07-10): the snapshot stays LATEST-ONLY.
+  Cockpit re-verify does NOT recompute from it — it does a fresh
+  single-sport fetch (a few credits, and you want live prices before
+  staking anyway). Snapshot recompute is Phase-4 advanced mode only, and
+  only for events still present in the latest snapshot; records from older
+  scans are simply not recomputable. Accepted limitation — don't build
+  per-scan snapshot files to "fix" it.

@@ -29,7 +29,7 @@ export function createBookmakersRouter(service: BookmakerService): Router {
       if (!updated) {
         res
           .status(404)
-          .json(errorBody('bad_request', `Unknown bookmaker: ${req.params.key} (run a scan first)`));
+          .json(errorBody('not_found', `Unknown bookmaker: ${req.params.key} (run a scan first)`));
         return;
       }
       res.json(updated);

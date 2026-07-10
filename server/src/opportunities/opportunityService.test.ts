@@ -85,6 +85,35 @@ describe('OpportunityService', () => {
     expect((await service.list())[0].alertedAt).toBe(NOW.toISOString());
   });
 
+  it('updateStatus completes a record by id and reports the updated record', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    await service.recordScan([makeArb()], SCOPE);
+    const [record] = await service.list();
+
+    const outcome = await service.updateStatus(record.id, 'completed');
+    expect(outcome).toMatchObject({ ok: true, record: { id: record.id, status: 'completed' } });
+    expect((await service.get(record.id))?.status).toBe('completed');
+  });
+
+  it('updateStatus distinguishes unknown ids from invalid transitions', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    await service.recordScan([makeArb()], SCOPE);
+    const [record] = await service.list();
+    await service.recordScan([], SCOPE); // kills it: sport rescanned, fingerprint gone
+
+    expect(await service.updateStatus('nope', 'completed')).toMatchObject({
+      ok: false,
+      reason: 'not_found',
+    });
+    expect(await service.updateStatus(record.id, 'degraded')).toMatchObject({
+      ok: false,
+      reason: 'conflict',
+    });
+    expect((await service.get(record.id))?.status).toBe('dead');
+  });
+
   it('ages settled records into the archive and drops them from the active file', async () => {
     const store = new FakeStore();
     const archive = new FakeArchive();

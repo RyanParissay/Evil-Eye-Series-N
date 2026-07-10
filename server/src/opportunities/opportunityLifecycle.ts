@@ -98,6 +98,32 @@ export function applyScanToRecords(
   return { records: [...byFingerprint.values()], newCount, deadCount };
 }
 
+/** Statuses the cockpit may set by hand; scans own active/dead. */
+export type CockpitStatus = 'degraded' | 'completed';
+
+export type StatusChange = { ok: true } | { ok: false; message: string };
+
+/**
+ * Cockpit-driven transition, mutating in place like applyScanToRecords.
+ * Completing is always allowed (even on a dead record — the bets were placed
+ * while it lived, and history is history). Degrading only makes sense while
+ * the opportunity is still live. Re-setting the current status is a no-op
+ * success so a double-tapped button never surfaces an error.
+ */
+export function applyStatusChange(
+  record: OpportunityRecord,
+  target: CockpitStatus,
+  now: Date,
+): StatusChange {
+  if (record.status === target) return { ok: true };
+  if (target === 'degraded' && record.status !== 'active') {
+    return { ok: false, message: `Cannot degrade a ${record.status} opportunity` };
+  }
+  record.status = target;
+  record.statusChangedAt = now.toISOString();
+  return { ok: true };
+}
+
 /**
  * Dead/completed records past the archive window leave the active file for
  * the append-only monthly archive (Phase 5 streams those for dashboards).

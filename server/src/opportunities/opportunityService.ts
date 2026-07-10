@@ -3,8 +3,18 @@
  * routes, and the alert notifier composition talk to.
  */
 import type { ArbOpportunity, OpportunityRecord, OpportunityStatus } from '@shared/types';
-import { applyScanToRecords, partitionForArchive, type ScanScope } from './opportunityLifecycle';
+import {
+  applyScanToRecords,
+  applyStatusChange,
+  partitionForArchive,
+  type CockpitStatus,
+  type ScanScope,
+} from './opportunityLifecycle';
 import type { OpportunityArchiveWriter, OpportunityDataStore } from './opportunityStore';
+
+export type UpdateStatusOutcome =
+  | { ok: true; record: OpportunityRecord }
+  | { ok: false; reason: 'not_found' | 'conflict'; message: string };
 
 export class OpportunityService {
   constructor(
@@ -45,6 +55,29 @@ export class OpportunityService {
         }
       }
       return { data, result: undefined };
+    });
+  }
+
+  /** Cockpit-driven transition (degraded/completed) on one record. */
+  async updateStatus(id: string, target: CockpitStatus): Promise<UpdateStatusOutcome> {
+    const at = this.now();
+    return this.store.update((data) => {
+      const record = data.records.find((r) => r.id === id);
+      if (!record) {
+        return {
+          data,
+          result: {
+            ok: false as const,
+            reason: 'not_found' as const,
+            message: `Unknown opportunity: ${id}`,
+          },
+        };
+      }
+      const change = applyStatusChange(record, target, at);
+      const result: UpdateStatusOutcome = change.ok
+        ? { ok: true, record }
+        : { ok: false, reason: 'conflict', message: change.message };
+      return { data, result };
     });
   }
 

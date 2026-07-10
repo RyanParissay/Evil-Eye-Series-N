@@ -1,13 +1,15 @@
 /**
- * HTTP boundary for persisted opportunities. Read-only in Phase 2; the
- * Phase-3 cockpit adds re-verify and leg-tracking mutations.
+ * HTTP boundary for persisted opportunities: list/detail reads plus the
+ * cockpit's status mutations (degraded/completed — scans own active/dead).
  */
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import type { OpportunityStatus } from '@shared/types';
+import type { CockpitStatus } from '../opportunities/opportunityLifecycle';
 import type { OpportunityService } from '../opportunities/opportunityService';
 import { errorBody } from './api';
 
 const STATUSES: readonly OpportunityStatus[] = ['active', 'degraded', 'dead', 'completed'];
+const COCKPIT_STATUSES: readonly CockpitStatus[] = ['degraded', 'completed'];
 
 export function createOpportunitiesRouter(service: OpportunityService): Router {
   const router = Router();
@@ -35,10 +37,32 @@ export function createOpportunitiesRouter(service: OpportunityService): Router {
     try {
       const record = await service.get(req.params.id);
       if (!record) {
-        res.status(404).json(errorBody('bad_request', `Unknown opportunity: ${req.params.id}`));
+        res.status(404).json(errorBody('not_found', `Unknown opportunity: ${req.params.id}`));
         return;
       }
       res.json(record);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const status = (req.body ?? {}).status;
+      if (!COCKPIT_STATUSES.includes(status)) {
+        res
+          .status(400)
+          .json(errorBody('bad_request', `status must be one of: ${COCKPIT_STATUSES.join(', ')}`));
+        return;
+      }
+      const outcome = await service.updateStatus(req.params.id, status);
+      if (!outcome.ok) {
+        res
+          .status(outcome.reason === 'not_found' ? 404 : 409)
+          .json(errorBody(outcome.reason, outcome.message));
+        return;
+      }
+      res.json(outcome.record);
     } catch (err) {
       next(err);
     }

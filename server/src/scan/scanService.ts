@@ -6,20 +6,16 @@
 import type { ArbOpportunity, OddsEvent, ScanMeta, ScanResponse, UsageReport } from '@shared/types';
 import type { RegionTabConfig } from '@shared/regionTabs';
 import type { FetchPlan } from '../bookmakers/effectiveBookmakers';
-import { bookmakerHomepage } from '../config/bookmakerLinks';
 import {
   MARKETS,
-  MIN_PROFIT_PCT,
   PLAN_MONTHLY_CREDITS,
   PLAN_MONTHLY_PRICE,
   SPORT_PRIORITY,
-  SUSPICIOUS_PROFIT_PCT,
 } from '../config/constants';
-import { findArbitrageOpportunities } from '../engine/arbitrage';
-import { filterEventsToBookmakers } from '../engine/bookmakerFilter';
 import { estimateDollarCost } from '../engine/creditCost';
 import { sportsForScan } from '../engine/sportSelection';
 import type { OddsProvider, OddsResult } from '../providers/OddsProvider';
+import { detectOpportunities } from './detection';
 import type { ScanRequest } from './scanRequest';
 import type { ScanStore } from './scanStore';
 
@@ -129,24 +125,14 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
     }
   }
 
-  // 4. Drop bookmakers a Canadian cannot register at — and any the user
-  //    disabled — BEFORE detection, so best-odds selection only ever sees
-  //    usable books.
-  const events = filterEventsToBookmakers(
+  // 4. Detection slice (see detection.ts): drop bookmakers a Canadian cannot
+  //    register at — and any the user disabled — BEFORE the engine, and
+  //    evaluate exactly the markets we paid to fetch.
+  const opportunities = detectOpportunities(
     rawEvents,
     plan ? plan.allowedKeys : tab.allowedBookmakers,
+    { topN, now: now(), marketKeys: [...markets] },
   );
-  // The engine must evaluate exactly the markets we paid to fetch — without
-  // this, adding a market to MARKETS would spend credits on odds the engine
-  // then ignores.
-  const opportunities = findArbitrageOpportunities(events, {
-    minProfitPct: MIN_PROFIT_PCT,
-    suspiciousProfitPct: SUSPICIOUS_PROFIT_PCT,
-    topN,
-    now: now(),
-    marketKeys: [...markets],
-  });
-  fillLinkFallbacks(opportunities);
 
   // 4⅓. Persist: the raw snapshot (offline recomputation) and the
   //      opportunity records (IDs, lifecycle). Neither failure is fatal,
@@ -225,15 +211,6 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
   }
 
   return { opportunities, meta };
-}
-
-/** API links win; otherwise fall back to the bookmaker's homepage. */
-function fillLinkFallbacks(opportunities: ArbOpportunity[]): void {
-  for (const arb of opportunities) {
-    for (const leg of arb.legs) {
-      leg.link ??= bookmakerHomepage(leg.bookmakerKey);
-    }
-  }
 }
 
 function maxOrNull(values: Array<number | null>): number | null {
