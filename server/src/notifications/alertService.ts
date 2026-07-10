@@ -97,18 +97,23 @@ export function formatAlertMessage(
   appUrl?: string,
   plan?: StakePlan | null,
 ): string {
+  // A plan that collapsed to zero (a book's balance blocks any stake)
+  // reads as a warning, not as "$0.00" dollar amounts.
+  const stakeable = plan != null && plan.totalStaked > 0;
   const legs = arb.legs
     .map(
       (leg, i) =>
         `${leg.bookmakerTitle}: ${leg.outcome}${leg.point != null ? ` ${formatPoint(leg.point)}` : ''} @${leg.odds}` +
-        (plan ? ` → $${plan.stakes[i].toFixed(2)}` : ''),
+        (stakeable ? ` → $${plan.stakes[i].toFixed(2)}` : ''),
     )
     .join(' / ');
-  const money = plan
+  const money = stakeable
     ? ` Stake $${plan.totalStaked.toFixed(2)} for +$${plan.guaranteedProfit.toFixed(2)} guaranteed${
         plan.capped ? ` (capped by ${plan.cappedBy} balance)` : ''
       }.`
-    : '';
+    : plan?.capped
+      ? ` ⚠ ${plan.cappedBy} balance blocks any stake — update balances.`
+      : '';
   const starts = new Date(arb.commenceTime).toLocaleString('en-CA', {
     month: 'short',
     day: 'numeric',

@@ -37,7 +37,9 @@ export function planStakes(
   legs.forEach((leg, i) => {
     const balance = balances.get(leg.bookmakerKey);
     if (balance == null) return;
-    const maxTotal = balance / shares[i];
+    // A zero or negative recorded balance blocks the position entirely —
+    // never emit negative "stakes".
+    const maxTotal = Math.max(balance, 0) / shares[i];
     if (maxTotal < total) {
       total = maxTotal;
       cappedBy = leg.bookmakerKey;

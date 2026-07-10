@@ -263,6 +263,17 @@ describe('formatAlertMessage', () => {
       cappedBy: 'pinnacle',
     });
     expect(capped).toContain('capped by pinnacle balance');
+
+    // A collapsed plan (a book blocks any stake) must not print $0 nonsense.
+    const blocked = formatAlertMessage(makeArb(), undefined, {
+      stakes: [0, 0],
+      totalStaked: 0,
+      guaranteedProfit: 0,
+      capped: true,
+      cappedBy: 'pinnacle',
+    });
+    expect(blocked).not.toContain('$0.00');
+    expect(blocked).toContain('pinnacle balance blocks any stake');
   });
 
   it('shows signed lines for point-based legs', () => {

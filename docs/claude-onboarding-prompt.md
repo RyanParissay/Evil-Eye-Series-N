@@ -39,19 +39,30 @@ each phase (`docs/superpowers/specs/`):
 3. ✅ Execution cockpit (react-router shell; mobile-first
    `/opportunity/:id` with bankroll scaler, per-leg bet tickets,
    re-verify, mark-completed; WhatsApp alerts carry the deep link)
-4. ⬜ NEXT — Advanced mode: book presets recomputing from the stored
-   latest raw snapshot, zero API cost. Entry point already exists:
-   `detectOpportunities` in `server/src/scan/detection.ts`.
-5. ⬜ Ledger + P&L dashboard + CSV (stream the JSONL archives)
-6. ⬜ Paper trading "shadow fund" (SIMULATED-labeled, alert-selection
-   parity, lazy settlement at commence time)
-7. ⬜ Fund position & bankroll ops (persisted bankroll, exact-dollar
-   alert stakes, balance caps, apply-to-balances reconciliation)
+4. ✅ Advanced mode (`/advanced`): presets (static + dynamic All-enabled/
+   Funded-only) recomputing the stored raw snapshot via
+   `POST /api/advanced/recompute` — zero credits structurally (no
+   provider in the dependency graph), never writes records, cockpit
+   links only for known record ids.
+5. ✅ Ledger + P&L (`/ledger`): completions capture actual filled
+   odds/stakes (`execution.lockedProfit` = worst-leg payout − staked;
+   unpriced completions counted but never summed), streaming JSONL read
+   model, equity/monthly/by-book (stake-weighted)/by-sport/decay/capture
+   rate, Excel-safe CSV export. `strategy: 'arb'` discriminator on records.
+6. ✅ Paper trading: `alertWorthy` extracted as the one selection core
+   (WhatsApp + paper share it), entries at alert-time odds on the
+   post-filterAlertable stream, pure lazy settlement at commence time
+   (compounding %-staking), ideal + haircut curves — everything labeled
+   SIMULATED (`simulated: true` in payloads), own store, reset action.
+7. ✅ Fund position: `shared/stakePlanning.ts` planStakes (THE single
+   cap-aware stake implementation, used by alert dollars AND cockpit —
+   whole-position rescale to the binding book's balance), fund settings
+   (bankroll/default stake/unallocated), position panel with low/stale
+   balance warnings, apply-to-balances with exact revert.
 
-Phases 4–7 have a definitive mission spec with per-phase acceptance
-criteria and operating rules: **`docs/mission-phases-4-7.md`** — when that
-file is provided or readable, it governs; one phase per session, design
-doc + approval before implementing.
+The governing spec (acceptance criteria + operating rules) is
+**`docs/mission-phases-4-7.md`**. Roadmap items (Pinnacle merge, +EV,
+CLV, middles) remain deliberately unbuilt.
 
 Health: **181 tests green** (164 server, 17 client — Vitest), `tsc` clean
 in both workspaces. `.env` has a live `ODDS_API_KEY`; no `TWILIO_*` vars

@@ -48,4 +48,13 @@ describe('planStakes', () => {
     expect(plan.totalStaked).toBe(0);
     expect(plan.stakes).toEqual([0, 0]);
   });
+
+  it('a NEGATIVE recorded balance never produces negative stakes', () => {
+    const plan = planStakes(LEGS, 500, new Map([['pinnacle', -118.97]]));
+    expect(plan.capped).toBe(true);
+    expect(plan.cappedBy).toBe('pinnacle');
+    expect(plan.totalStaked).toBe(0);
+    expect(plan.stakes).toEqual([0, 0]);
+    expect(plan.guaranteedProfit).toBe(0);
+  });
 });
