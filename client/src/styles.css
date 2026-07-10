@@ -1242,3 +1242,178 @@ select.bm-input {
   border-bottom-color: var(--red);
   outline: none;
 }
+
+/* ————————————————————————————————————————————————
+   ADVANCED MODE — /advanced. Namespace: .adv-*
+   Snapshot replays: same system, chips do the selecting.
+   ———————————————————————————————————————————————— */
+
+.adv-back {
+  color: var(--white);
+  text-decoration: none;
+}
+
+.adv-back:hover,
+.adv-back:focus-visible {
+  color: var(--red);
+  outline: none;
+}
+
+.adv-controls {
+  padding: 20px 0;
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.adv-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.adv-preset {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--hairline);
+}
+
+.adv-preset.is-active {
+  border-color: var(--red);
+}
+
+.adv-preset-use,
+.adv-preset-edit,
+.adv-save,
+.adv-bulk button {
+  background: var(--black);
+  color: var(--white);
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.adv-preset-use {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.adv-preset.is-active .adv-preset-use {
+  color: var(--red);
+}
+
+.adv-preset-edit {
+  padding: 8px 8px;
+  color: var(--grey);
+  border-left: 1px solid var(--hairline-faint);
+}
+
+.adv-preset-edit:hover {
+  color: var(--red);
+}
+
+.adv-save {
+  border: 1px solid var(--white);
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.adv-save:hover:not(:disabled) {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.adv-save:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.adv-preset-use:focus-visible,
+.adv-preset-edit:focus-visible,
+.adv-save:focus-visible,
+.adv-bulk button:focus-visible,
+.adv-chip:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
+}
+
+.adv-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.adv-search {
+  background: var(--black);
+  border: 1px solid var(--hairline);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 10px 12px;
+  max-width: 320px;
+  border-radius: 0;
+}
+
+.adv-search:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
+}
+
+.adv-bulk {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.adv-bulk button {
+  padding: 2px 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--grey);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.adv-bulk button:hover {
+  color: var(--red);
+}
+
+.adv-books {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.adv-chip {
+  background: var(--black);
+  border: 1px solid var(--hairline);
+  color: var(--grey);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.adv-chip.is-on {
+  border-color: var(--white);
+  color: var(--white);
+  box-shadow: inset 0 -3px 0 var(--red);
+}
+
+.adv-chip-note {
+  color: var(--white);
+  margin-left: 6px;
+  font-weight: 700;
+}
+
+.card-profit .card-cockpit-link {
+  margin-top: 8px;
+}

@@ -46,6 +46,10 @@ server/src/
                  opportunityService.ts, verifyService.ts (cockpit re-verify:
                  cheap legs-only live fetch → re-price → persist),
                  opportunityStore.ts (active JSON + monthly JSONL archive).
+  presets/       Advanced-mode book presets. presetStore.ts (JsonStore),
+                 presetService.ts (CRUD + seeding + pure resolvePresetKeys —
+                 dynamic presets resolve all_enabled/funded against the
+                 registry at evaluation time; 'funded' requires enabled too).
   lib/           jsonStore.ts — generic crash-safe serialized JSON store; every
                  file store (scan/whatsapp/bookmakers) is or should be one.
   notifications/ WhatsApp alerts: whatsappSender.ts (Twilio via fetch OR console
@@ -160,6 +164,10 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
 - last-snapshot.json stores the RAW pre-filter feed on purpose — Advanced
   Mode presets must be able to recompute with books outside the current
   allowlist filter. Don't "fix" it to store filtered events.
+- POST /api/advanced/recompute has NO provider in its dependency graph —
+  zero credits is structural. It never writes opportunity records; the
+  client only deep-links cards whose id is in knownRecordIds (no
+  fabricated records, no dead links).
 - Snapshot addressing (decided 2026-07-10): the snapshot stays LATEST-ONLY.
   Cockpit re-verify does NOT recompute from it — it does a fresh
   single-sport fetch (a few credits, and you want live prices before

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { DEFAULT_REGION_TAB, type RegionTabKey } from '../../../shared/regionTabs';
 import type {
   ApiErrorCode,
@@ -145,7 +146,10 @@ export function ScanPage() {
         <h1 className="wordmark">
           Evil Eye <span className="wordmark-accent">Arbitrage</span>
         </h1>
-        <p className="tagline micro-label">Cross-book odds surveillance · guaranteed-profit finder</p>
+        <p className="tagline micro-label">
+          Cross-book odds surveillance · guaranteed-profit finder ·{' '}
+          <Link to="/advanced" className="adv-back">Advanced →</Link>
+        </p>
       </header>
 
       <ControlBar

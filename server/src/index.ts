@@ -15,6 +15,7 @@ import {
   LAST_SNAPSHOT_FILE,
   OPPORTUNITIES_FILE,
   OPPORTUNITY_ARCHIVE_DIR,
+  PRESETS_FILE,
   WHATSAPP_DATA_FILE,
 } from './config/constants';
 import { notifyNewOpportunities } from './notifications/alertService';
@@ -23,6 +24,9 @@ import { senderFromEnv } from './notifications/whatsappSender';
 import { OpportunityService } from './opportunities/opportunityService';
 import { OpportunityArchive, OpportunityStore } from './opportunities/opportunityStore';
 import { verifyOpportunity } from './opportunities/verifyService';
+import { PresetService } from './presets/presetService';
+import { PresetStore } from './presets/presetStore';
+import { createAdvancedRouter } from './routes/advanced';
 import { MockOddsProvider } from './providers/MockOddsProvider';
 import type { OddsProvider } from './providers/OddsProvider';
 import { TheOddsApiProvider } from './providers/TheOddsApiProvider';
@@ -73,6 +77,15 @@ const app = express();
 app.use(express.json());
 app.use('/api/whatsapp', createWhatsAppRouter({ store: whatsappStore, sender: whatsappSender }));
 app.use('/api/bookmakers', createBookmakersRouter(bookmakerService));
+app.use(
+  '/api',
+  createAdvancedRouter({
+    presets: new PresetService(new PresetStore(path.join(serverRoot, PRESETS_FILE))),
+    snapshots: snapshotStore,
+    opportunities: opportunityService,
+    books: bookmakerService,
+  }),
+);
 app.use(
   '/api/opportunities',
   createOpportunitiesRouter(opportunityService, (id) =>

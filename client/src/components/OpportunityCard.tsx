@@ -10,9 +10,12 @@ import type { ArbOpportunity, BookmakerStatusValue } from '../../../shared/types
 export function OpportunityCard({
   arb,
   bookStatus,
+  cockpitLink = true,
 }: {
   arb: ArbOpportunity;
   bookStatus?: Map<string, BookmakerStatusValue>;
+  /** Advanced mode passes false for snapshot-only results with no record. */
+  cockpitLink?: boolean;
 }) {
   return (
     <article className="card">
@@ -44,7 +47,7 @@ export function OpportunityCard({
         <div className="card-profit">
           <span className="profit-pct">+{arb.profitPct.toFixed(2)}%</span>
           <span className="micro-label">index {arb.arbIndex.toFixed(4)}</span>
-          {arb.id && (
+          {arb.id && cockpitLink && (
             <Link className="card-cockpit-link micro-label" to={`/opportunity/${arb.id}`}>
               Cockpit →
             </Link>

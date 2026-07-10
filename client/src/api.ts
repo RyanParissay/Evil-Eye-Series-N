@@ -6,6 +6,8 @@ import type { RegionTabKey } from '../../shared/regionTabs';
 import type {
   ApiErrorBody,
   ApiErrorCode,
+  ArbOpportunity,
+  BookPreset,
   BookmakerConfig,
   BookmakerStatusValue,
   OpportunityRecord,
@@ -59,6 +61,53 @@ export async function patchBookmaker(
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(patch),
+  });
+}
+
+/* ————— Advanced mode (presets over the latest snapshot) ————— */
+
+export interface RecomputeResponse {
+  snapshot: { fetchedAt: string; regionTab: string; sportsScanned: string[] } | null;
+  opportunities: ArbOpportunity[];
+  /** Opportunity ids that have persisted records — the only valid cockpit links. */
+  knownRecordIds: string[];
+  /** The book keys actually evaluated (dynamic presets resolved server-side). */
+  bookmakerKeys: string[];
+}
+
+export async function fetchPresets(): Promise<BookPreset[]> {
+  const { presets } = await request<{ presets: BookPreset[] }>('/api/presets');
+  return presets;
+}
+
+export async function createPreset(name: string, bookmakerKeys: string[]): Promise<BookPreset> {
+  return request<BookPreset>('/api/presets', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name, bookmakerKeys }),
+  });
+}
+
+export async function renamePreset(id: string, name: string): Promise<BookPreset> {
+  return request<BookPreset>(`/api/presets/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function deletePreset(id: string): Promise<void> {
+  await requestVoid(`/api/presets/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+/** Zero-credit: recomputes from the stored snapshot, never the provider. */
+export async function recompute(
+  body: { presetId: string } | { bookmakerKeys: string[] },
+): Promise<RecomputeResponse> {
+  return request<RecomputeResponse>('/api/advanced/recompute', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
   });
 }
 
@@ -135,6 +184,12 @@ async function whatsappRequest(
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await requestVoid(url, init);
+  return (await response.json()) as T;
+}
+
+/** Same error mapping as request<T>, for endpoints with no response body (204). */
+async function requestVoid(url: string, init?: RequestInit): Promise<Response> {
   let response: Response;
   try {
     response = await fetch(url, init);
@@ -154,5 +209,5 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
       body?.error.code ?? 'internal',
     );
   }
-  return (await response.json()) as T;
+  return response;
 }

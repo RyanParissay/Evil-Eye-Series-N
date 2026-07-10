@@ -184,6 +184,27 @@ export interface ScanResponse {
   meta: ScanMeta;
 }
 
+/* ————— Advanced mode (Phase 4) ————— */
+
+/** Rules a dynamic preset resolves against the bookmaker registry. */
+export type BookPresetRule = 'all_enabled' | 'funded';
+
+/**
+ * A saved book selection for snapshot recomputes. Static presets carry
+ * explicit keys; dynamic presets resolve their rule at evaluation time
+ * (so "All enabled" always means the CURRENT enabled set).
+ */
+export interface BookPreset {
+  id: string;
+  name: string;
+  kind: 'static' | 'dynamic';
+  /** Static only; empty for dynamic presets. */
+  bookmakerKeys: string[];
+  rule?: BookPresetRule;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
 /** Operational status of a bookmaker account, set manually by the user. */
 export type BookmakerStatusValue = 'active' | 'limited' | 'dead';
 

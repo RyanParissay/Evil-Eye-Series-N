@@ -77,6 +77,9 @@ export const OPPORTUNITY_ARCHIVE_AFTER_MS = 7 * 24 * 3_600_000;
 /** The latest raw odds snapshot, for offline recomputation (gitignored). */
 export const LAST_SNAPSHOT_FILE = 'data/last-snapshot.json';
 
+/** Advanced-mode book presets (gitignored). */
+export const PRESETS_FILE = 'data/presets.json';
+
 /**
  * Re-verify marks a record degraded only when fresh profit fell more than
  * this many percentage points below the detection profit — a 2.34% → 2.31%

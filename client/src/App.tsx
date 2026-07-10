@@ -5,6 +5,7 @@
  * no shared store above this level yet.
  */
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { AdvancedPage } from './pages/AdvancedPage';
 import { CockpitPage } from './pages/CockpitPage';
 import { ScanPage } from './pages/ScanPage';
 
@@ -13,6 +14,7 @@ export function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<ScanPage />} />
+        <Route path="/advanced" element={<AdvancedPage />} />
         <Route path="/opportunity/:id" element={<CockpitPage />} />
       </Routes>
     </BrowserRouter>
