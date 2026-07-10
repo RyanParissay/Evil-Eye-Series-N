@@ -37,6 +37,10 @@ server/src/
   bookmakers/    Per-book config (enabled/balance/status/notes). Registry
                  self-populates from each scan's raw feed. effectiveBookmakers.ts
                  (pure rules), bookmakerService.ts (façade), bookmakerStore.ts.
+  opportunities/ Persisted opportunity records. opportunityId.ts (fingerprint —
+                 THE identity, alert dedup imports it), opportunityLifecycle.ts
+                 (pure transitions), opportunityService.ts, opportunityStore.ts
+                 (active JSON + monthly JSONL archive under data/).
   lib/           jsonStore.ts — generic crash-safe serialized JSON store; every
                  file store (scan/whatsapp/bookmakers) is or should be one.
   notifications/ WhatsApp alerts: whatsappSender.ts (Twilio via fetch OR console
@@ -128,4 +132,12 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   NOT inside alertService (which only knows suspicious/sameBook).
 - The alert fingerprint hashes event + market + legs but NOT profit — that's
   the debounce. Don't "improve" it by including profitPct, or every odds
-  wobble re-alerts.
+  wobble re-alerts. It now lives in opportunities/opportunityId.ts (record
+  IDs are its first 16 hex chars); alertService re-exports it.
+- A scan can only declare a record dead within its own scope (same region
+  tab + rescanned sport, fingerprint gone) or when the event commenced.
+  'degraded'/'completed' are cockpit (Phase 3) transitions — don't set them
+  from scan code.
+- last-snapshot.json stores the RAW pre-filter feed on purpose — Advanced
+  Mode presets must be able to recompute with books outside the current
+  allowlist filter. Don't "fix" it to store filtered events.

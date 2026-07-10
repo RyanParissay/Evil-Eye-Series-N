@@ -142,6 +142,32 @@ contains those books, so brand-new books won't be discovered until a scan
 runs by regions (e.g. after enabling more books). Region tabs remain the
 outer accessibility boundary — book config refines them, never widens them.
 
+## Opportunity persistence
+
+Every detected opportunity becomes a durable record with a stable ID —
+`sha256(event + market + legs)` truncated to 16 hex chars — so re-detections
+across scans update one record instead of duplicating it. Records live in
+`server/data/opportunities.json` and carry lifecycle status:
+
+- **active** — created on detection; re-detections refresh odds/profit and
+  revive dead records (detection-time profit is kept separately).
+- **dead** — its sport was rescanned on the same region tab and the
+  fingerprint is gone, or the event has commenced. Scans that didn't cover
+  the record (other tab, other sports) say nothing.
+- **degraded** / **completed** — reserved for the execution cockpit's
+  re-verify and leg-tracking (next phase); scans alone can't set them.
+
+Records also track whether a WhatsApp alert was actually sent (`alerted`),
+feeding the capture-rate math in the P&L phase. Dead/completed records move
+to append-only monthly archives (`server/data/opportunity-archive/*.jsonl`)
+after 7 days. Read them back via `GET /api/opportunities?status=active` or
+`GET /api/opportunities/:id`.
+
+Each scan also saves its **raw pre-filter snapshot** to
+`server/data/last-snapshot.json` (latest only) so later features can
+recompute opportunities against arbitrary bookmaker subsets without another
+paid API call.
+
 ## WhatsApp alerts
 
 Connect a phone number in the UI ("WhatsApp alerts" panel) and the server
@@ -211,11 +237,17 @@ server/src/                         (imports shared/ via the @shared alias)
     scanRequest.ts                  request validation — new scan options start here (+ tests)
     scanService.ts                  orchestrates catalogue → odds → engine → usage (+ tests)
     scanStore.ts                    file persistence for last-scan metadata
+    snapshotStore.ts                latest raw snapshot for offline recomputation
   bookmakers/
     bookmakerStore.ts               registry persistence (self-populates from the feed)
     effectiveBookmakers.ts          fetch plan + alertable rules, pure (+ tests)
     bookmakerService.ts             façade for scans, routes, alerts (+ tests)
     bookmakerRequests.ts            PATCH validation (+ tests)
+  opportunities/
+    opportunityId.ts                fingerprint identity (shared with alert dedup)
+    opportunityLifecycle.ts         pure status transitions per scan (+ tests)
+    opportunityService.ts           recordScan / markAlerted / get / list (+ tests)
+    opportunityStore.ts             active JSON file + monthly JSONL archive
   lib/jsonStore.ts                  generic crash-safe serialized JSON store
   notifications/
     whatsappSender.ts               WhatsAppSender interface: Twilio (fetch) + console dev mode
@@ -226,6 +258,7 @@ server/src/                         (imports shared/ via the @shared alias)
   routes/api.ts                     POST /api/scan, GET /api/last-scan
   routes/whatsapp.ts                /api/whatsapp: status, connect, verify, threshold, test, disconnect
   routes/bookmakers.ts              GET /api/bookmakers, PATCH /api/bookmakers/:key
+  routes/opportunities.ts           GET /api/opportunities[?status=], GET /api/opportunities/:id
   config/constants.ts               every tunable knob
   config/bookmakerLinks.ts          homepage fallbacks when the API sends no link
 client/src/                         React + Vite, plain CSS, no UI framework
@@ -235,7 +268,7 @@ The `@shared/*` alias is declared twice — `server/tsconfig.json` (tsc + tsx)
 and `server/vitest.config.ts` (vitest doesn't read tsconfig paths). Keep them
 in sync.
 
-Run the tests: `npm test` (104 Vitest cases covering 2-way/3-way arbs, totals
+Run the tests: `npm test` (118 Vitest cases covering 2-way/3-way arbs, totals
 and spreads line grouping, no-arb markets, stake splits, same-book and
 suspicious flags, stale filtering, ties, credit math, the slider mapping, the
 bookmaker accessibility filter, request validation, scan orchestration

@@ -204,6 +204,54 @@ describe('runScan', () => {
     expect(result.opportunities).toHaveLength(1);
   });
 
+  it('persists the raw snapshot and records opportunities before returning', async () => {
+    const written: Array<{ regionTab: string; events: unknown[] }> = [];
+    const recorded: Array<{ count: number; scope: { sportsScanned: string[]; regionTab: string } }> = [];
+    const result = await runScan(
+      deps(stubProvider([totalsArbEvent()]), {
+        markets: ['totals'],
+        snapshots: {
+          async save(snapshot) {
+            written.push({ regionTab: snapshot.regionTab, events: snapshot.events });
+          },
+        },
+        opportunityLog: {
+          async recordScan(opportunities, scope) {
+            recorded.push({ count: opportunities.length, scope });
+          },
+        },
+      }),
+      { topN: 5, tab: CA_TAB },
+    );
+    expect(written).toHaveLength(1);
+    expect(written[0].regionTab).toBe('ca');
+    expect(written[0].events).toHaveLength(1); // raw, pre-filter
+    expect(recorded).toEqual([
+      { count: 1, scope: { sportsScanned: ['basketball_nba'], regionTab: 'ca' } },
+    ]);
+    expect(result.opportunities).toHaveLength(1);
+  });
+
+  it('failing persistence never fails the scan', async () => {
+    const result = await runScan(
+      deps(stubProvider([totalsArbEvent()]), {
+        markets: ['totals'],
+        snapshots: {
+          async save() {
+            throw new Error('disk full');
+          },
+        },
+        opportunityLog: {
+          async recordScan() {
+            throw new Error('disk full');
+          },
+        },
+      }),
+      { topN: 5, tab: CA_TAB },
+    );
+    expect(result.opportunities).toHaveLength(1);
+  });
+
   it('hands each scan’s opportunities to the notifier', async () => {
     const seen: unknown[] = [];
     const result = await runScan(

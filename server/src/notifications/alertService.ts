@@ -4,13 +4,13 @@
  * pure so it unit-tests without I/O; notifyNewOpportunities is the
  * orchestrator runScan fires and forgets — it must never fail a scan.
  */
-import { createHash } from 'node:crypto';
 import type { ArbOpportunity } from '@shared/types';
 import {
   WHATSAPP_MAX_ALERTS_PER_HOUR,
   WHATSAPP_MAX_CONSECUTIVE_FAILURES,
   WHATSAPP_SENT_ALERT_RETENTION_MS,
 } from '../config/constants';
+import { opportunityFingerprint } from '../opportunities/opportunityId';
 import type {
   WhatsAppData,
   WhatsAppDataStore,
@@ -21,21 +21,9 @@ import type { WhatsAppSender } from './whatsappSender';
 
 const HOUR_MS = 3_600_000;
 
-/**
- * Identity of an opportunity that survives across scans: event + market +
- * the exact leg set (book/outcome/line). Profit is deliberately NOT part of
- * the identity — a return wobbling 2.31% → 2.34% is the same opportunity
- * and must not re-alert (the debounce). New legs = new opportunity.
- */
-export function opportunityFingerprint(arb: ArbOpportunity): string {
-  const legs = arb.legs
-    .map((leg) => `${leg.bookmakerKey}:${leg.outcome}:${leg.point ?? ''}`)
-    .sort()
-    .join('|');
-  return createHash('sha256')
-    .update(`${arb.eventId}|${arb.marketKey}|${legs}`)
-    .digest('hex');
-}
+// Identity lives in opportunities/opportunityId.ts (persistence shares it);
+// re-exported here because it IS this module's dedup key.
+export { opportunityFingerprint } from '../opportunities/opportunityId';
 
 export interface PlannedAlert {
   subscription: WhatsAppSubscription;
@@ -107,17 +95,23 @@ export interface AlertDeps {
   now?: () => Date;
 }
 
+export interface NotifyResult {
+  /** Fingerprints actually sent to at least one subscriber this dispatch. */
+  sentFingerprints: string[];
+}
+
 export async function notifyNewOpportunities(
   deps: AlertDeps,
   opportunities: ArbOpportunity[],
-): Promise<void> {
+): Promise<NotifyResult> {
   const now = (deps.now ?? (() => new Date()))();
 
-  await deps.store.update(async (data) => {
+  return deps.store.update(async (data) => {
     const { planned, droppedByRateLimit } = selectAlerts(opportunities, data, now);
     if (droppedByRateLimit > 0) {
       console.warn(`WhatsApp: dropped ${droppedByRateLimit} alert(s) — hourly rate limit`);
     }
+    const sent = new Set<string>();
 
     for (const { subscription, opportunity, fingerprint } of planned) {
       // An earlier failure in this batch may have deactivated it.
@@ -126,6 +120,7 @@ export async function notifyNewOpportunities(
         await deps.sender.send(subscription.phoneE164, formatAlertMessage(opportunity));
         subscription.failedSendCount = 0;
         subscription.sendTimestamps.push(now.toISOString());
+        sent.add(fingerprint);
         data.sentAlerts.push({
           phoneE164: subscription.phoneE164,
           fingerprint,
@@ -147,7 +142,7 @@ export async function notifyNewOpportunities(
     }
 
     prune(data, now);
-    return { data, result: undefined };
+    return { data, result: { sentFingerprints: [...sent] } };
   });
 }
 

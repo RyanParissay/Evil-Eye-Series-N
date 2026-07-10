@@ -65,6 +65,18 @@ export const LAST_SCAN_FILE = 'data/last-scan.json';
 /** Where the bookmaker registry/config persists (gitignored). */
 export const BOOKMAKERS_FILE = 'data/bookmakers.json';
 
+/** Active opportunity records (gitignored). */
+export const OPPORTUNITIES_FILE = 'data/opportunities.json';
+
+/** Monthly JSONL archives of settled opportunities (gitignored). */
+export const OPPORTUNITY_ARCHIVE_DIR = 'data/opportunity-archive';
+
+/** Dead/completed records move from the active file to the archive after this. */
+export const OPPORTUNITY_ARCHIVE_AFTER_MS = 7 * 24 * 3_600_000;
+
+/** The latest raw odds snapshot, for offline recomputation (gitignored). */
+export const LAST_SNAPSHOT_FILE = 'data/last-snapshot.json';
+
 /* ————— WhatsApp alerts ————— */
 
 /** Where subscriptions + sent-alert records persist (gitignored). */

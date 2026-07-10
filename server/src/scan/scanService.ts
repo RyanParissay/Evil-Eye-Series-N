@@ -36,12 +36,35 @@ export interface ScanDeps {
   notifier?: (opportunities: ArbOpportunity[]) => void | Promise<void>;
   /** Bookmaker config layer (see bookmakers/). Optional: scans work without it. */
   books?: BookmakerIntegration;
+  /** Opportunity persistence (see opportunities/). Optional. */
+  opportunityLog?: OpportunityLogIntegration;
+  /** Latest-raw-snapshot persistence (snapshotStore.ts). Optional. */
+  snapshots?: SnapshotIntegration;
 }
 
 /** What runScan needs from BookmakerService — structural, for tests. */
 export interface BookmakerIntegration {
   fetchPlan(tab: RegionTabConfig): Promise<FetchPlan>;
   recordSeen(events: OddsEvent[]): Promise<void>;
+}
+
+/** What runScan needs from OpportunityService — structural, for tests. */
+export interface OpportunityLogIntegration {
+  recordScan(
+    opportunities: ArbOpportunity[],
+    scope: { sportsScanned: string[]; regionTab: string },
+  ): Promise<void>;
+}
+
+/** What runScan needs from SnapshotStore — structural, for tests. */
+export interface SnapshotIntegration {
+  save(snapshot: {
+    fetchedAt: string;
+    regionTab: string;
+    markets: string[];
+    sportsScanned: string[];
+    events: OddsEvent[];
+  }): Promise<void>;
 }
 
 export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<ScanResponse> {
@@ -124,6 +147,35 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
     marketKeys: [...markets],
   });
   fillLinkFallbacks(opportunities);
+
+  // 4⅓. Persist: the raw snapshot (offline recomputation) and the
+  //      opportunity records (IDs, lifecycle). Neither failure is fatal,
+  //      but recording MUST precede alert dispatch so markAlerted has
+  //      records to flag.
+  const scannedKeys = targets.map((s) => s.key);
+  if (deps.snapshots) {
+    try {
+      await deps.snapshots.save({
+        fetchedAt: now().toISOString(),
+        regionTab: tab.key,
+        markets: [...markets],
+        sportsScanned: scannedKeys,
+        events: rawEvents,
+      });
+    } catch (err) {
+      console.warn('Snapshot persistence failed:', err);
+    }
+  }
+  if (deps.opportunityLog) {
+    try {
+      await deps.opportunityLog.recordScan(opportunities, {
+        sportsScanned: scannedKeys,
+        regionTab: tab.key,
+      });
+    } catch (err) {
+      console.warn('Opportunity persistence failed:', err);
+    }
+  }
 
   // 4½. Alert dispatch is deliberately not awaited: subscribers get their
   //     WhatsApp messages while the HTTP response returns immediately.

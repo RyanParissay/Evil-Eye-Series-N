@@ -100,6 +100,47 @@ export interface ArbOpportunity {
   suspicious: boolean;
 }
 
+/**
+ * Lifecycle of a persisted opportunity. Scans set active/dead; degraded
+ * (re-verified, reduced but positive) and completed (both legs placed) are
+ * set by the Phase-3 cockpit flows.
+ */
+export type OpportunityStatus = 'active' | 'degraded' | 'dead' | 'completed';
+
+/**
+ * A detected opportunity as persisted across scans. Identity is the
+ * fingerprint (event + market + legs, profit excluded), so re-detections
+ * update the same record instead of duplicating it.
+ */
+export interface OpportunityRecord {
+  /** First 16 hex chars of the fingerprint — stable and URL-safe. */
+  id: string;
+  fingerprint: string;
+  eventId: string;
+  sportKey: string;
+  sportTitle: string;
+  eventName: string;
+  commenceTime: string;
+  marketKey: string;
+  /** Legs with odds/stakes as of the most recent sighting. */
+  legs: ArbLeg[];
+  profitPctAtDetection: number;
+  /** Profit as of the most recent sighting. */
+  profitPct: number;
+  arbIndex: number;
+  status: OpportunityStatus;
+  suspicious: boolean;
+  sameBookmaker: boolean;
+  /** Region tab whose scan surfaced it (scopes the dead-detection rule). */
+  regionTab: string;
+  detectedAt: string;
+  lastSeenAt: string;
+  statusChangedAt: string;
+  /** Whether a WhatsApp alert was actually sent for it. */
+  alerted: boolean;
+  alertedAt: string | null;
+}
+
 /** Credit/cost accounting for a scan. */
 export interface UsageReport {
   /** Credits computed from the per-call (markets × regions) math. */

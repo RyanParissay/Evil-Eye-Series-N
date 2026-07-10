@@ -232,14 +232,27 @@ describe('notifyNewOpportunities', () => {
     const sender = new FakeSender();
     const deps = { store, sender, now: () => NOW };
 
-    await notifyNewOpportunities(deps, [makeArb()]);
+    const first = await notifyNewOpportunities(deps, [makeArb()]);
     expect(sender.sent).toHaveLength(1);
     expect(sender.sent[0].to).toBe('+14165551234');
     expect(store.data.sentAlerts).toHaveLength(1);
+    expect(first.sentFingerprints).toEqual([opportunityFingerprint(makeArb())]);
 
     // Same opportunity next scan, profit wobbled — no second message.
-    await notifyNewOpportunities(deps, [makeArb({ profitPct: 2.4 })]);
+    const second = await notifyNewOpportunities(deps, [makeArb({ profitPct: 2.4 })]);
     expect(sender.sent).toHaveLength(1);
+    expect(second.sentFingerprints).toEqual([]);
+  });
+
+  it('reports a failed send as not sent', async () => {
+    const store = new FakeStore(makeData());
+    const sender = new FakeSender();
+    sender.failNext = 1;
+    const { sentFingerprints } = await notifyNewOpportunities(
+      { store, sender, now: () => NOW },
+      [makeArb()],
+    );
+    expect(sentFingerprints).toEqual([]);
   });
 
   it('deactivates the subscription after consecutive send failures', async () => {
