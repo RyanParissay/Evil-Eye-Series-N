@@ -34,6 +34,11 @@ server/src/
   scan/          scanRequest.ts  — request body validation (THE place for new options)
                  scanService.ts  — orchestration: catalogue → odds → engine → usage
                  scanStore.ts    — last-scan JSON persistence (write-then-rename)
+  bookmakers/    Per-book config (enabled/balance/status/notes). Registry
+                 self-populates from each scan's raw feed. effectiveBookmakers.ts
+                 (pure rules), bookmakerService.ts (façade), bookmakerStore.ts.
+  lib/           jsonStore.ts — generic crash-safe serialized JSON store; every
+                 file store (scan/whatsapp/bookmakers) is or should be one.
   notifications/ WhatsApp alerts: whatsappSender.ts (Twilio via fetch OR console
                  dev mode), alertService.ts (threshold match, fingerprint dedup,
                  rate limit, failure deactivation), verification.ts (hashed
@@ -111,6 +116,16 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
 - WhatsApp runs in dev mode (messages → server console) when `TWILIO_*` vars
   are missing OR `WHATSAPP_DEV_MODE=true`. In dev mode the verification code
   is read from the server log. `server/data/whatsapp.json` is runtime state.
+- `DEV_MODE=true` is the umbrella: mock odds provider + console WhatsApp,
+  overriding the individual switches.
+- The scan fetches by The Odds API's `bookmakers` param (10 books = 1
+  region-equivalent) only when STRICTLY cheaper than the tab's regions —
+  see planFetch. Deliberate consequence: while active, the feed omits
+  non-allowlisted books, so the registry can't discover them; fetching by
+  regions still does. Don't "optimize" the strictness away.
+- Limited/dead books: visible in results (badged), excluded from alerts via
+  BookmakerService.filterAlertable composed into the notifier in index.ts —
+  NOT inside alertService (which only knows suspicious/sameBook).
 - The alert fingerprint hashes event + market + legs but NOT profit — that's
   the debounce. Don't "improve" it by including profitPct, or every odds
   wobble re-alerts.

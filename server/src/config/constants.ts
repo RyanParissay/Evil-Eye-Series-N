@@ -62,6 +62,9 @@ export const DEFAULT_PORT = 8787;
 /** Where last-scan metadata persists across server restarts (gitignored). */
 export const LAST_SCAN_FILE = 'data/last-scan.json';
 
+/** Where the bookmaker registry/config persists (gitignored). */
+export const BOOKMAKERS_FILE = 'data/bookmakers.json';
+
 /* ————— WhatsApp alerts ————— */
 
 /** Where subscriptions + sent-alert records persist (gitignored). */

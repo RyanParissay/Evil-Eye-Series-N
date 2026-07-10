@@ -6,6 +6,8 @@ import type { RegionTabKey } from '../../shared/regionTabs';
 import type {
   ApiErrorBody,
   ApiErrorCode,
+  BookmakerConfig,
+  BookmakerStatusValue,
   ScanMeta,
   ScanResponse,
   WhatsAppStatus,
@@ -32,6 +34,31 @@ export async function runScan(topN: number, regionTab: RegionTabKey): Promise<Sc
 export async function fetchLastScan(): Promise<ScanMeta | null> {
   const { meta } = await request<{ meta: ScanMeta | null }>('/api/last-scan');
   return meta;
+}
+
+/* ————— Bookmaker configuration ————— */
+
+export interface BookmakerPatchBody {
+  enabled?: boolean;
+  balance?: number | null;
+  status?: BookmakerStatusValue;
+  notes?: string;
+}
+
+export async function fetchBookmakers(): Promise<BookmakerConfig[]> {
+  const { bookmakers } = await request<{ bookmakers: BookmakerConfig[] }>('/api/bookmakers');
+  return bookmakers;
+}
+
+export async function patchBookmaker(
+  key: string,
+  patch: BookmakerPatchBody,
+): Promise<BookmakerConfig> {
+  return request<BookmakerConfig>(`/api/bookmakers/${encodeURIComponent(key)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
 }
 
 /* ————— WhatsApp alerts ————— */

@@ -1,7 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DEFAULT_REGION_TAB, type RegionTabKey } from '../../shared/regionTabs';
-import type { ApiErrorCode, ScanMeta, ScanResponse } from '../../shared/types';
-import { ApiError, fetchLastScan, runScan } from './api';
+import type {
+  ApiErrorCode,
+  BookmakerConfig,
+  ScanMeta,
+  ScanResponse,
+} from '../../shared/types';
+import {
+  ApiError,
+  fetchBookmakers,
+  fetchLastScan,
+  patchBookmaker,
+  runScan,
+  type BookmakerPatchBody,
+} from './api';
 import {
   loadAutoScanSettings,
   msUntilNextScan,
@@ -9,6 +21,7 @@ import {
   shouldDisableAutoScan,
   type AutoScanSettings,
 } from './autoScan';
+import { BookmakerPanel } from './components/BookmakerPanel';
 import { ControlBar } from './components/ControlBar';
 import { EyeGlyph } from './components/EyeGlyph';
 import { OpportunityCard } from './components/OpportunityCard';
@@ -39,6 +52,29 @@ export function App() {
     setAutoScan(next);
     saveAutoScanSettings(window.localStorage, next);
   }
+
+  // The bookmaker registry: shared by the settings panel and the leg
+  // warnings on opportunity cards. Scans grow it, so refetch after each one.
+  const [books, setBooks] = useState<BookmakerConfig[] | null>(null);
+  useEffect(() => {
+    fetchBookmakers()
+      .then(setBooks)
+      .catch(() => {
+        // Server unreachable — the scan UI surfaces that already.
+      });
+  }, [lastScanAt]);
+
+  async function patchBook(key: string, patch: BookmakerPatchBody) {
+    const updated = await patchBookmaker(key, patch);
+    setBooks((current) =>
+      current ? current.map((b) => (b.key === updated.key ? updated : b)) : current,
+    );
+  }
+
+  const bookStatus = useMemo(
+    () => new Map(books?.map((b) => [b.key, b.status]) ?? []),
+    [books],
+  );
 
   // Hydrate the usage panel from the server's persisted last-scan record,
   // and anchor the auto-update countdown to it: with a 10-minute interval
@@ -126,6 +162,8 @@ export function App() {
 
       <WhatsAppPanel />
 
+      <BookmakerPanel books={books} onPatch={patchBook} />
+
       <main className="results">
         {scan.status === 'idle' && (
           <div className="state-block">
@@ -179,7 +217,11 @@ export function App() {
               {scan.data.meta.sportsScanned.length} sports · stakes shown per $100
             </div>
             {scan.data.opportunities.map((arb) => (
-              <OpportunityCard key={`${arb.eventId}-${arb.marketKey}`} arb={arb} />
+              <OpportunityCard
+                key={`${arb.eventId}-${arb.marketKey}`}
+                arb={arb}
+                bookStatus={bookStatus}
+              />
             ))}
           </>
         )}

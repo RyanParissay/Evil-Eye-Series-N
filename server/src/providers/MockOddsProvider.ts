@@ -10,10 +10,11 @@
  *  - an already-commenced event (must be filtered as stale)
  *
  * Simulates the credit meter: starts with some usage and burns
- * (markets × regions) credits per odds call, like the real API.
+ * (markets × regions) credits per odds call — or markets × ceil(books/10)
+ * when the bookmakers param is used — like the real API.
  */
 import type { OddsEvent, SportInfo } from '@shared/types';
-import { creditsForOddsCall } from '../engine/creditCost';
+import { creditsForOddsCall, regionEquivalentsForBookmakers } from '../engine/creditCost';
 import type {
   FetchOddsParams,
   OddsProvider,
@@ -47,9 +48,23 @@ export class MockOddsProvider implements OddsProvider {
   }
 
   async fetchOdds(sportKey: string, params: FetchOddsParams): Promise<OddsResult> {
-    const credits = creditsForOddsCall(params.markets.length, params.regions.length);
+    // Mirror the real API's bookmakers-param behavior: it replaces regions
+    // (both in the response and in the ceil(n/10) billing).
+    const byBookmakers = params.bookmakers && params.bookmakers.length > 0;
+    const credits = creditsForOddsCall(
+      params.markets.length,
+      byBookmakers
+        ? regionEquivalentsForBookmakers(params.bookmakers!.length)
+        : params.regions.length,
+    );
     this.requestsUsed += credits;
-    const events = this.fixtures()[sportKey] ?? [];
+    let events = this.fixtures()[sportKey] ?? [];
+    if (byBookmakers) {
+      const wanted = new Set(params.bookmakers);
+      events = events
+        .map((e) => ({ ...e, bookmakers: e.bookmakers.filter((b) => wanted.has(b.key)) }))
+        .filter((e) => e.bookmakers.length > 0);
+    }
     return { events, usage: this.usage(credits) };
   }
 
@@ -101,6 +116,10 @@ export class MockOddsProvider implements OddsProvider {
             book('fanduel', 'FanDuel', { 'Los Angeles Lakers': 2.1, 'Boston Celtics': 1.78 }, 'https://sportsbook.fanduel.com/basketball/nba'),
             book('draftkings', 'DraftKings', { 'Los Angeles Lakers': 1.83, 'Boston Celtics': 2.12 }, 'https://sportsbook.draftkings.com/leagues/basketball/nba'),
             book('betmgm', 'BetMGM', { 'Los Angeles Lakers': 1.95, 'Boston Celtics': 1.87 }),
+            // Never the best price on either side — feed variety only.
+            book('betway', 'Betway', { 'Los Angeles Lakers': 1.9, 'Boston Celtics': 1.85 }),
+            book('williamhill_us', 'Caesars', { 'Los Angeles Lakers': 1.88, 'Boston Celtics': 1.9 }),
+            book('betrivers', 'BetRivers', { 'Los Angeles Lakers': 1.92, 'Boston Celtics': 1.84 }),
           ],
         },
         {
@@ -148,6 +167,9 @@ export class MockOddsProvider implements OddsProvider {
             // third leg must come from Coolbet for the arb to survive.
             book('betfair_ex_uk', 'Betfair', { Arsenal: 2.86, Draw: 3.3, Chelsea: 2.9 }, 'https://www.betfair.com/exchange'),
             book('coolbet', 'Coolbet', { Arsenal: 2.8, Draw: 3.35, Chelsea: 2.9 }),
+            // Never the best price on any outcome — feed variety only.
+            book('betvictor', 'BetVictor', { Arsenal: 2.7, Draw: 3.2, Chelsea: 2.5 }),
+            book('leovegas', 'LeoVegas', { Arsenal: 2.75, Draw: 3.25, Chelsea: 2.55 }),
           ],
         },
         {
@@ -178,6 +200,7 @@ export class MockOddsProvider implements OddsProvider {
           bookmakers: [
             book('pinnacle', 'Pinnacle', { 'Colorado Avalanche': 2.15, 'Toronto Maple Leafs': 2.05 }),
             book('fanduel', 'FanDuel', { 'Colorado Avalanche': 1.8, 'Toronto Maple Leafs': 1.92 }),
+            book('sport888', '888sport', { 'Colorado Avalanche': 1.85, 'Toronto Maple Leafs': 1.9 }),
           ],
         },
       ],
@@ -208,6 +231,8 @@ export class MockOddsProvider implements OddsProvider {
           bookmakers: [
             book('fanduel', 'FanDuel', { 'New York Yankees': 1.74, 'Houston Astros': 2.1 }),
             book('draftkings', 'DraftKings', { 'New York Yankees': 1.72, 'Houston Astros': 2.14 }),
+            book('betsson', 'Betsson', { 'New York Yankees': 1.7, 'Houston Astros': 2.05 }),
+            book('nordicbet', 'NordicBet', { 'New York Yankees': 1.71, 'Houston Astros': 2.08 }),
           ],
         },
       ],

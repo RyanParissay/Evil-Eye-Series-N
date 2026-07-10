@@ -67,11 +67,15 @@ export class ConsoleWhatsAppSender implements WhatsAppSender {
 }
 
 /**
- * Twilio when fully configured, console otherwise. WHATSAPP_DEV_MODE=true
- * forces console mode even with credentials present.
+ * Twilio when fully configured, console otherwise. WHATSAPP_DEV_MODE=true —
+ * or the app-wide DEV_MODE=true umbrella — forces console mode even with
+ * credentials present.
  */
 export function senderFromEnv(env: NodeJS.ProcessEnv = process.env): WhatsAppSender {
-  if (env.WHATSAPP_DEV_MODE?.trim().toLowerCase() === 'true') {
+  if (
+    env.WHATSAPP_DEV_MODE?.trim().toLowerCase() === 'true' ||
+    env.DEV_MODE?.trim().toLowerCase() === 'true'
+  ) {
     return new ConsoleWhatsAppSender();
   }
   const accountSid = env.TWILIO_ACCOUNT_SID?.trim();

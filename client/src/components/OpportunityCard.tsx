@@ -1,10 +1,18 @@
-import type { ArbOpportunity } from '../../../shared/types';
+import type { ArbOpportunity, BookmakerStatusValue } from '../../../shared/types';
 
 /**
  * One guaranteed-profit opportunity: the event, the profit, and one row per
- * leg saying exactly where to put how much money at what odds.
+ * leg saying exactly where to put how much money at what odds. Legs whose
+ * book the user marked limited/dead carry a warning — visible, never hidden,
+ * but those opportunities don't alert and shouldn't be staked.
  */
-export function OpportunityCard({ arb }: { arb: ArbOpportunity }) {
+export function OpportunityCard({
+  arb,
+  bookStatus,
+}: {
+  arb: ArbOpportunity;
+  bookStatus?: Map<string, BookmakerStatusValue>;
+}) {
   return (
     <article className="card">
       <header className="card-head">
@@ -59,6 +67,7 @@ export function OpportunityCard({ arb }: { arb: ArbOpportunity }) {
                 ) : (
                   leg.bookmakerTitle
                 )}
+                {legWarning(bookStatus?.get(leg.bookmakerKey))}
               </td>
               <td className="leg-odds">{leg.odds.toFixed(2)}</td>
               <td className="leg-stake">${leg.stake.toFixed(2)}</td>
@@ -67,6 +76,22 @@ export function OpportunityCard({ arb }: { arb: ArbOpportunity }) {
         </tbody>
       </table>
     </article>
+  );
+}
+
+function legWarning(status: BookmakerStatusValue | undefined) {
+  if (!status || status === 'active') return null;
+  return (
+    <span
+      className="chip chip-warn leg-book-warning"
+      title={
+        status === 'limited'
+          ? 'You marked this book limited — the arb is shown but never alerted; stake with care.'
+          : 'You marked this book dead — the arb is shown but never alerted; do not stake here.'
+      }
+    >
+      ⚠ {status}
+    </span>
   );
 }
 

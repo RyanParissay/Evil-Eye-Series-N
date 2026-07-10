@@ -10,7 +10,7 @@
  * Uses global fetch (Node 18+). No Express imports.
  */
 import type { OddsEvent, SportInfo } from '@shared/types';
-import { creditsForOddsCall } from '../engine/creditCost';
+import { creditsForOddsCall, regionEquivalentsForBookmakers } from '../engine/creditCost';
 import type {
   FetchOddsParams,
   OddsProvider,
@@ -84,11 +84,21 @@ export class TheOddsApiProvider implements OddsProvider {
   }
 
   async fetchOdds(sportKey: string, params: FetchOddsParams): Promise<OddsResult> {
-    const credits = creditsForOddsCall(params.markets.length, params.regions.length);
+    // The bookmakers param replaces regions (it takes priority server-side
+    // anyway) and bills every 10 books as one region-equivalent.
+    const byBookmakers = params.bookmakers && params.bookmakers.length > 0;
+    const credits = creditsForOddsCall(
+      params.markets.length,
+      byBookmakers
+        ? regionEquivalentsForBookmakers(params.bookmakers!.length)
+        : params.regions.length,
+    );
     const { body, usage } = await this.request<ApiEvent[]>(
       `/sports/${encodeURIComponent(sportKey)}/odds`,
       {
-        regions: params.regions.join(','),
+        ...(byBookmakers
+          ? { bookmakers: params.bookmakers!.join(',') }
+          : { regions: params.regions.join(',') }),
         markets: params.markets.join(','),
         oddsFormat: 'decimal', // the arbitrage math depends on decimal odds
         includeLinks: 'true', // bookmaker/market/outcome deep links when the plan has them

@@ -666,3 +666,197 @@ input[type='range']:disabled {
     min-width: 0;
   }
 }
+
+/* ————— Switches (auto update, bookmaker toggles) ————— */
+/* Green means exactly one thing in this app: surveillance is live. */
+
+.switch {
+  appearance: none;
+  border: 1px solid var(--hairline);
+  background: none;
+  width: 40px;
+  height: 22px;
+  padding: 2px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: border-color 120ms ease;
+}
+
+.switch:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
+}
+
+.switch-thumb {
+  width: 14px;
+  height: 14px;
+  background: var(--grey);
+  transition: transform 120ms ease, background-color 120ms ease;
+}
+
+.switch[aria-checked='true'] {
+  border-color: var(--green);
+}
+
+.switch[aria-checked='true'] .switch-thumb {
+  background: var(--green);
+  transform: translateX(18px);
+}
+
+.switch-small {
+  width: 34px;
+  height: 19px;
+}
+
+.switch-small .switch-thumb {
+  width: 11px;
+  height: 11px;
+}
+
+.switch-small[aria-checked='true'] .switch-thumb {
+  transform: translateX(15px);
+}
+
+/* ————— Auto update block ————— */
+
+.auto-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auto-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.auto-live {
+  color: var(--green);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--green);
+}
+
+.live-dot-pulse {
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.auto-burn {
+  color: var(--grey);
+  font-weight: 500;
+}
+
+/* ————— Bookmaker panel ————— */
+
+.bm-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.bm-toggle {
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--white);
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.bm-toggle:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 3px;
+}
+
+.bm-summary {
+  color: var(--red);
+}
+
+.bm-chevron {
+  color: var(--grey);
+  font-size: 11px;
+}
+
+.bm-scroll {
+  overflow-x: auto;
+}
+
+.bm-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 640px;
+}
+
+.bm-table th {
+  text-align: left;
+  font-weight: 500;
+  padding: 6px 14px 6px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.bm-table td {
+  padding: 8px 14px 8px 0;
+  border-bottom: 1px solid var(--hairline-faint);
+  vertical-align: middle;
+}
+
+.bm-book {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.bm-status-chip {
+  margin-left: 8px;
+}
+
+.bm-input {
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.bm-input-balance {
+  width: 90px;
+}
+
+.bm-input-notes {
+  width: 100%;
+  min-width: 140px;
+}
+
+.bm-seen {
+  white-space: nowrap;
+}
+
+.bm-row-disabled .bm-book,
+.bm-row-disabled .bm-seen {
+  opacity: 0.45;
+}
+
+select.bm-input {
+  background: var(--black);
+}
+
+.leg-book-warning {
+  margin-left: 8px;
+}

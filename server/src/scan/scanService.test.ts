@@ -138,6 +138,72 @@ describe('runScan', () => {
     expect(result.meta.usage.apiCallCount).toBe(2); // free sports call + 1 odds call
   });
 
+  it('fetches by book list when the plan says so, and registers seen books', async () => {
+    const seen: string[][] = [];
+    const fetched: Array<readonly string[] | undefined> = [];
+    const provider = stubProvider([totalsArbEvent()]);
+    const origFetch = provider.fetchOdds.bind(provider);
+    provider.fetchOdds = (sportKey, params) => {
+      fetched.push(params.bookmakers);
+      return origFetch(sportKey, params);
+    };
+
+    const result = await runScan(
+      deps(provider, {
+        markets: ['totals'],
+        books: {
+          async fetchPlan() {
+            return { bookmakersParam: ['bet365', 'pinnacle'], allowedKeys: ['bet365', 'pinnacle'] };
+          },
+          async recordSeen(events) {
+            seen.push(events.flatMap((e) => e.bookmakers.map((b) => b.key)));
+          },
+        },
+      }),
+      { topN: 5, tab: CA_TAB },
+    );
+
+    expect(fetched).toEqual([['bet365', 'pinnacle']]);
+    expect(seen).toEqual([['bet365', 'pinnacle']]);
+    expect(result.opportunities).toHaveLength(1);
+  });
+
+  it('the plan’s allowed keys drive the defensive filter (disabled book kills the arb)', async () => {
+    const result = await runScan(
+      deps(stubProvider([totalsArbEvent()]), {
+        markets: ['totals'],
+        books: {
+          async fetchPlan() {
+            // Pinnacle disabled: fetch untouched (regions), but detection
+            // must not use it — the totals arb needs both books, so it dies.
+            return { bookmakersParam: undefined, allowedKeys: ['bet365'] };
+          },
+          async recordSeen() {},
+        },
+      }),
+      { topN: 5, tab: CA_TAB },
+    );
+    expect(result.opportunities).toHaveLength(0);
+  });
+
+  it('a failing registry update never fails the scan', async () => {
+    const result = await runScan(
+      deps(stubProvider([totalsArbEvent()]), {
+        markets: ['totals'],
+        books: {
+          async fetchPlan() {
+            return { bookmakersParam: undefined, allowedKeys: [...CA_TAB.allowedBookmakers] };
+          },
+          async recordSeen() {
+            throw new Error('disk full');
+          },
+        },
+      }),
+      { topN: 5, tab: CA_TAB },
+    );
+    expect(result.opportunities).toHaveLength(1);
+  });
+
   it('hands each scan’s opportunities to the notifier', async () => {
     const seen: unknown[] = [];
     const result = await runScan(

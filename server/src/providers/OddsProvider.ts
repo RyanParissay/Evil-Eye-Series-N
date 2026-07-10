@@ -28,6 +28,12 @@ export interface OddsResult {
 export interface FetchOddsParams {
   regions: readonly string[];
   markets: readonly string[];
+  /**
+   * Fetch these specific books instead of whole regions (The Odds API bills
+   * every 10 books as one region-equivalent). When set, `regions` is only
+   * a fallback description — providers must prefer this list.
+   */
+  bookmakers?: readonly string[];
 }
 
 export interface OddsProvider {

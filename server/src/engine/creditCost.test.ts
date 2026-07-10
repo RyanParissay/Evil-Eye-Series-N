@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { creditsForOddsCall, estimateDollarCost } from './creditCost';
+import {
+  creditsForOddsCall,
+  estimateDollarCost,
+  regionEquivalentsForBookmakers,
+} from './creditCost';
+
+describe('regionEquivalentsForBookmakers', () => {
+  it('bills every group of 10 bookmakers as one region', () => {
+    expect(regionEquivalentsForBookmakers(1)).toBe(1);
+    expect(regionEquivalentsForBookmakers(10)).toBe(1);
+    expect(regionEquivalentsForBookmakers(11)).toBe(2);
+    expect(regionEquivalentsForBookmakers(20)).toBe(2);
+    expect(regionEquivalentsForBookmakers(21)).toBe(3);
+  });
+
+  it('never returns less than one region-equivalent', () => {
+    expect(regionEquivalentsForBookmakers(0)).toBe(1);
+  });
+});
 
 describe('creditsForOddsCall', () => {
   it('charges markets × regions per The Odds API billing model', () => {

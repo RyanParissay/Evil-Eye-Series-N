@@ -119,6 +119,29 @@ arbs where one book holds every best price get a **same book** warning badge;
 arbs above ~15% profit are flagged **too good — verify** (usually stale or
 errored odds) rather than presented uncritically.
 
+## Bookmaker configuration
+
+The **Bookmakers** panel lists every book the odds feed has ever carried —
+the registry populates itself from scans, nothing is hardcoded. Per book you
+can set:
+
+- **Enabled** — disabled books are excluded from fetching and detection
+  entirely. Bonus: when the enabled allowlist is small enough, the scan
+  fetches by book list instead of by region (The Odds API bills every 10
+  books as one region-equivalent), which makes scans cheaper — with ≤10
+  enabled books the default Canada tab halves its odds-call credits.
+- **Status** — `active` / `limited` / `dead`. Limited and dead books stay
+  visible in results with a ⚠ badge on the affected leg, but opportunities
+  touching them are never sent as WhatsApp alerts and shouldn't be staked.
+- **Balance** — manually-tracked bankroll per book (used by stake
+  suggestions in a later phase).
+- **Notes** — anything worth remembering ("stake capped at $50").
+
+Caveat, by design: while the book-list fetch is active the feed only
+contains those books, so brand-new books won't be discovered until a scan
+runs by regions (e.g. after enabling more books). Region tabs remain the
+outer accessibility boundary — book config refines them, never widens them.
+
 ## WhatsApp alerts
 
 Connect a phone number in the UI ("WhatsApp alerts" panel) and the server
@@ -188,6 +211,12 @@ server/src/                         (imports shared/ via the @shared alias)
     scanRequest.ts                  request validation — new scan options start here (+ tests)
     scanService.ts                  orchestrates catalogue → odds → engine → usage (+ tests)
     scanStore.ts                    file persistence for last-scan metadata
+  bookmakers/
+    bookmakerStore.ts               registry persistence (self-populates from the feed)
+    effectiveBookmakers.ts          fetch plan + alertable rules, pure (+ tests)
+    bookmakerService.ts             façade for scans, routes, alerts (+ tests)
+    bookmakerRequests.ts            PATCH validation (+ tests)
+  lib/jsonStore.ts                  generic crash-safe serialized JSON store
   notifications/
     whatsappSender.ts               WhatsAppSender interface: Twilio (fetch) + console dev mode
     alertService.ts                 threshold match, fingerprint dedup, rate limit (+ tests)
@@ -196,6 +225,7 @@ server/src/                         (imports shared/ via the @shared alias)
     whatsappRequests.ts             request validation, E.164 normalize/mask (+ tests)
   routes/api.ts                     POST /api/scan, GET /api/last-scan
   routes/whatsapp.ts                /api/whatsapp: status, connect, verify, threshold, test, disconnect
+  routes/bookmakers.ts              GET /api/bookmakers, PATCH /api/bookmakers/:key
   config/constants.ts               every tunable knob
   config/bookmakerLinks.ts          homepage fallbacks when the API sends no link
 client/src/                         React + Vite, plain CSS, no UI framework
@@ -205,7 +235,7 @@ The `@shared/*` alias is declared twice — `server/tsconfig.json` (tsc + tsx)
 and `server/vitest.config.ts` (vitest doesn't read tsconfig paths). Keep them
 in sync.
 
-Run the tests: `npm test` (82 Vitest cases covering 2-way/3-way arbs, totals
+Run the tests: `npm test` (104 Vitest cases covering 2-way/3-way arbs, totals
 and spreads line grouping, no-arb markets, stake splits, same-book and
 suspicious flags, stale filtering, ties, credit math, the slider mapping, the
 bookmaker accessibility filter, request validation, scan orchestration

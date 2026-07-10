@@ -137,6 +137,27 @@ export interface ScanResponse {
   meta: ScanMeta;
 }
 
+/** Operational status of a bookmaker account, set manually by the user. */
+export type BookmakerStatusValue = 'active' | 'limited' | 'dead';
+
+/**
+ * Per-bookmaker operational config. The registry is derived from the odds
+ * feed (every book seen in a scan is upserted); the rest is manual entry.
+ */
+export interface BookmakerConfig {
+  key: string;
+  title: string;
+  /** Disabled books are excluded from fetching and detection entirely. */
+  enabled: boolean;
+  /** Manually-tracked bankroll at this book, in dollars. Null = not set. */
+  balance: number | null;
+  /** limited/dead books stay visible (badged) but never alert. */
+  status: BookmakerStatusValue;
+  notes: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+}
+
 /**
  * WhatsApp alert subscription state as the client is allowed to see it:
  * the phone number only ever crosses the wire masked.

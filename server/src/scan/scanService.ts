@@ -3,7 +3,9 @@
  * → arbitrage engine → usage report. This is the only place the provider,
  * engine, and persistence meet.
  */
-import type { ArbOpportunity, ScanMeta, ScanResponse, UsageReport } from '@shared/types';
+import type { ArbOpportunity, OddsEvent, ScanMeta, ScanResponse, UsageReport } from '@shared/types';
+import type { RegionTabConfig } from '@shared/regionTabs';
+import type { FetchPlan } from '../bookmakers/effectiveBookmakers';
 import { bookmakerHomepage } from '../config/bookmakerLinks';
 import {
   MARKETS,
@@ -32,6 +34,14 @@ export interface ScanDeps {
    * opportunities. A notifier failure must never slow or fail the scan.
    */
   notifier?: (opportunities: ArbOpportunity[]) => void | Promise<void>;
+  /** Bookmaker config layer (see bookmakers/). Optional: scans work without it. */
+  books?: BookmakerIntegration;
+}
+
+/** What runScan needs from BookmakerService — structural, for tests. */
+export interface BookmakerIntegration {
+  fetchPlan(tab: RegionTabConfig): Promise<FetchPlan>;
+  recordSeen(events: OddsEvent[]): Promise<void>;
 }
 
 export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<ScanResponse> {
@@ -52,11 +62,16 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
   // 2. The slider controls breadth: how many sports (= paid odds calls) we hit.
   const targets = sportsForScan(sportsResult.sports, topN, SPORT_PRIORITY);
 
+  // 2½. The bookmaker config layer may shrink the fetch itself: when the
+  //     enabled allowlist is strictly cheaper than the tab's regions
+  //     (10 books = 1 region-equivalent), fetch by book list instead.
+  const plan = deps.books ? await deps.books.fetchPlan(tab) : null;
+
   // 3. Fetch odds for every target sport concurrently. One failing sport
   //    (e.g. temporarily unavailable market) shouldn't sink the whole scan.
   const settled = await Promise.allSettled(
     targets.map((sport) =>
-      provider.fetchOdds(sport.key, { regions, markets }),
+      provider.fetchOdds(sport.key, { regions, markets, bookmakers: plan?.bookmakersParam }),
     ),
   );
 
@@ -80,11 +95,23 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
     throw firstFailure;
   }
 
-  // 4. Drop bookmakers a Canadian cannot register at BEFORE detection, so
-  //    best-odds selection only ever sees accessible books.
+  // 3½. Register every book present in the raw feed, so the settings UI
+  //     lists exactly what the feed carries. Not critical-path.
+  const rawEvents = results.flatMap((r) => r.events);
+  if (deps.books) {
+    try {
+      await deps.books.recordSeen(rawEvents);
+    } catch (err) {
+      console.warn('Bookmaker registry update failed:', err);
+    }
+  }
+
+  // 4. Drop bookmakers a Canadian cannot register at — and any the user
+  //    disabled — BEFORE detection, so best-odds selection only ever sees
+  //    usable books.
   const events = filterEventsToBookmakers(
-    results.flatMap((r) => r.events),
-    tab.allowedBookmakers,
+    rawEvents,
+    plan ? plan.allowedKeys : tab.allowedBookmakers,
   );
   // The engine must evaluate exactly the markets we paid to fetch — without
   // this, adding a market to MARKETS would spend credits on odds the engine
