@@ -34,7 +34,13 @@ server/src/
   scan/          scanRequest.ts  — request body validation (THE place for new options)
                  scanService.ts  — orchestration: catalogue → odds → engine → usage
                  scanStore.ts    — last-scan JSON persistence (write-then-rename)
+  notifications/ WhatsApp alerts: whatsappSender.ts (Twilio via fetch OR console
+                 dev mode), alertService.ts (threshold match, fingerprint dedup,
+                 rate limit, failure deactivation), verification.ts (hashed
+                 6-digit codes), subscriptionStore.ts (JSON persistence,
+                 serialized update()), whatsappRequests.ts (validation, E.164).
   routes/        Express boundary: parse → runScan → JSON; ProviderError → HTTP status.
+                 api.ts (/api/scan, /api/last-scan) + whatsapp.ts (/api/whatsapp/*).
   config/        constants.ts (every tunable) + bookmakerLinks.ts (homepage fallbacks)
 client/src/      React/Vite; talks only to /api/*; renders shared types verbatim.
 ```
@@ -61,6 +67,14 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
 - **Scans are on-demand only** — no polling, no timers. That's a product
   decision (credit spend), not an accident.
 - **Suspicious/same-book arbs are flagged, never hidden.** The user decides.
+  (Exception: they're never PUSHED — WhatsApp alerts skip them by design.)
+- **Twilio credentials never leave the server process** — same rule as the
+  odds key. The client sees the phone number only masked (`/api/whatsapp/status`).
+- **Alert dispatch is fire-and-forget.** runScan's notifier hook must never
+  slow or fail a scan; a Twilio outage is a console.warn, not a 500.
+- **Alerts piggyback on scans.** The notifier fires only when a scan runs
+  (manual or client auto-scan) — it must not become a server-side scheduler
+  (that's the "scans are on-demand only" invariant wearing another hat).
 
 ## Extension recipes
 
@@ -78,6 +92,9 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   `index.ts`. Engine and UI need no changes.
 - **New region tab / bookmaker list edits:** `shared/regionTabs.ts` only.
   Keep `apiRegions` minimal — every region multiplies every call's cost.
+- **New notification channel (Telegram, email, …):** implement the
+  `WhatsAppSender` interface in `notifications/`, swap it in at `index.ts`.
+  The alert pipeline (selection, dedup, rate limit) is channel-agnostic.
 
 ## Gotchas
 
@@ -91,3 +108,9 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   `server/vitest.config.ts` before suspecting anything else.
 - Root `.env` is loaded by absolute path from `server/src/index.ts`, so the
   server works regardless of the directory it's launched from.
+- WhatsApp runs in dev mode (messages → server console) when `TWILIO_*` vars
+  are missing OR `WHATSAPP_DEV_MODE=true`. In dev mode the verification code
+  is read from the server log. `server/data/whatsapp.json` is runtime state.
+- The alert fingerprint hashes event + market + legs but NOT profit — that's
+  the debounce. Don't "improve" it by including profitPct, or every odds
+  wobble re-alerts.

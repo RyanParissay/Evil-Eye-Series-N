@@ -119,6 +119,56 @@ arbs where one book holds every best price get a **same book** warning badge;
 arbs above ~15% profit are flagged **too good — verify** (usually stale or
 errored odds) rather than presented uncritically.
 
+## WhatsApp alerts
+
+Connect a phone number in the UI ("WhatsApp alerts" panel) and the server
+messages you whenever a scan finds an opportunity at or above your chosen
+minimum return. Alerts ride on the scans you already run — the manual button
+or auto update — the server never scans (or spends credits) on its own.
+
+The flow: enter your number and threshold → a 6-digit code arrives on
+WhatsApp → confirm it → alerts are live. Codes are stored hashed, expire in
+10 minutes, and allow 5 attempts. Once connected you can edit the threshold,
+send a test message, or disconnect.
+
+Safety rails, all tunable in `config/constants.ts`:
+
+- **Dedup/debounce** — an opportunity is fingerprinted by event + market +
+  legs; you're alerted once per fingerprint, so a return wobbling
+  2.31% → 2.34% never re-alerts. Sent records age out after 7 days.
+- **Rate limit** — max 10 alerts per hour; excess is dropped and logged.
+- **Failure handling** — after 3 consecutive send failures the subscription
+  pauses itself; a successful "Send test" re-enables it.
+- Suspicious (>15%) and same-book arbs stay in the UI but are never pushed.
+
+### Dev mode (no Twilio account needed)
+
+With no `TWILIO_*` variables set — or with `WHATSAPP_DEV_MODE=true` — the
+server logs every would-be message to its console instead of sending. The
+panel shows a **dev mode** chip. Grab the verification code from the server
+log to complete the connect flow.
+
+### Real messages via the Twilio sandbox (free)
+
+1. Sign up at https://www.twilio.com and open the console.
+2. Copy the **Account SID** and **Auth Token** (Console → Account Info) into
+   `.env` as `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN`.
+3. Activate the WhatsApp sandbox: **Messaging → Try it out → Send a WhatsApp
+   message**. Twilio shows a shared sandbox number (e.g. `+1 415 523 8886`)
+   and a join code like `join yellow-lion`.
+4. From your phone, WhatsApp the join code to the sandbox number. You're now
+   allowed to receive sandbox messages for 72 h (re-send the join code to
+   renew).
+5. Put the sandbox number in `.env` as `TWILIO_WHATSAPP_FROM=+14155238886`,
+   set `WHATSAPP_DEV_MODE=false`, restart the server — the startup log should
+   say `WhatsApp: Twilio configured`.
+6. Connect your number in the UI, confirm the code that arrives on WhatsApp,
+   then press **Send test**.
+
+The sandbox is enough for personal use. Going to production (your own number,
+no join-code ritual, messages outside the 24 h session window) requires a
+Twilio-approved WhatsApp sender and message templates.
+
 ## Architecture
 
 ```
@@ -138,7 +188,14 @@ server/src/                         (imports shared/ via the @shared alias)
     scanRequest.ts                  request validation — new scan options start here (+ tests)
     scanService.ts                  orchestrates catalogue → odds → engine → usage (+ tests)
     scanStore.ts                    file persistence for last-scan metadata
+  notifications/
+    whatsappSender.ts               WhatsAppSender interface: Twilio (fetch) + console dev mode
+    alertService.ts                 threshold match, fingerprint dedup, rate limit (+ tests)
+    verification.ts                 6-digit codes: hash, expiry, attempts (+ tests)
+    subscriptionStore.ts            file persistence for subscriptions + sent alerts (+ tests)
+    whatsappRequests.ts             request validation, E.164 normalize/mask (+ tests)
   routes/api.ts                     POST /api/scan, GET /api/last-scan
+  routes/whatsapp.ts                /api/whatsapp: status, connect, verify, threshold, test, disconnect
   config/constants.ts               every tunable knob
   config/bookmakerLinks.ts          homepage fallbacks when the API sends no link
 client/src/                         React + Vite, plain CSS, no UI framework
@@ -148,11 +205,13 @@ The `@shared/*` alias is declared twice — `server/tsconfig.json` (tsc + tsx)
 and `server/vitest.config.ts` (vitest doesn't read tsconfig paths). Keep them
 in sync.
 
-Run the tests: `npm test` (47 Vitest cases covering 2-way/3-way arbs, totals
+Run the tests: `npm test` (82 Vitest cases covering 2-way/3-way arbs, totals
 and spreads line grouping, no-arb markets, stake splits, same-book and
 suspicious flags, stale filtering, ties, credit math, the slider mapping, the
-bookmaker accessibility filter, request validation, and scan orchestration
-including partial-failure handling).
+bookmaker accessibility filter, request validation, scan orchestration
+including partial-failure handling, and the WhatsApp alert pipeline —
+verification codes, fingerprint dedup, rate limiting, failure deactivation,
+store serialization).
 
 ## How to extend
 

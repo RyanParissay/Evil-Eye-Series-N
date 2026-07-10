@@ -57,6 +57,6 @@ export function apiErrorHandler(
   res.status(500).json(errorBody('internal', 'Unexpected server error'));
 }
 
-function errorBody(code: ApiErrorCode, message: string): ApiErrorBody {
+export function errorBody(code: ApiErrorCode, message: string): ApiErrorBody {
   return { error: { code, message } };
 }

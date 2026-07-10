@@ -27,6 +27,11 @@ export interface ScanDeps {
   /** Markets to fetch AND evaluate. Defaults to the MARKETS constant. */
   markets?: readonly string[];
   now?: () => Date;
+  /**
+   * Alert dispatch (WhatsApp), invoked fire-and-forget with each scan's
+   * opportunities. A notifier failure must never slow or fail the scan.
+   */
+  notifier?: (opportunities: ArbOpportunity[]) => void | Promise<void>;
 }
 
 export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<ScanResponse> {
@@ -92,6 +97,18 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
     marketKeys: [...markets],
   });
   fillLinkFallbacks(opportunities);
+
+  // 4½. Alert dispatch is deliberately not awaited: subscribers get their
+  //     WhatsApp messages while the HTTP response returns immediately.
+  if (deps.notifier) {
+    try {
+      void Promise.resolve(deps.notifier(opportunities)).catch((err) => {
+        console.warn('Alert notifier failed:', err);
+      });
+    } catch (err) {
+      console.warn('Alert notifier failed:', err);
+    }
+  }
 
   // 5. Usage report: credits computed from the markets × regions math,
   //    cross-checked against the header delta.

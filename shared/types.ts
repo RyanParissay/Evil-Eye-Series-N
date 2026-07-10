@@ -137,6 +137,23 @@ export interface ScanResponse {
   meta: ScanMeta;
 }
 
+/**
+ * WhatsApp alert subscription state as the client is allowed to see it:
+ * the phone number only ever crosses the wire masked.
+ */
+export interface WhatsAppStatus {
+  /** A phone number is verified and linked. */
+  connected: boolean;
+  /** Alerts are currently enabled (auto-off after repeated send failures). */
+  active: boolean;
+  /** A verification code is out, waiting to be confirmed. */
+  pendingVerification: boolean;
+  phoneMasked: string | null;
+  thresholdPercent: number | null;
+  /** True when the server logs messages instead of sending via Twilio. */
+  devMode: boolean;
+}
+
 /** Machine-readable error codes surfaced to the UI. */
 export type ApiErrorCode =
   | 'invalid_api_key'

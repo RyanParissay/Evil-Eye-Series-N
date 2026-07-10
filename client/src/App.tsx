@@ -12,6 +12,7 @@ import {
 import { ControlBar } from './components/ControlBar';
 import { EyeGlyph } from './components/EyeGlyph';
 import { OpportunityCard } from './components/OpportunityCard';
+import { WhatsAppPanel } from './components/WhatsAppPanel';
 
 type ScanState =
   | { status: 'idle' }
@@ -122,6 +123,8 @@ export function App() {
         onAutoScanChange={updateAutoScan}
         lastScanAt={lastScanAt}
       />
+
+      <WhatsAppPanel />
 
       <main className="results">
         {scan.status === 'idle' && (

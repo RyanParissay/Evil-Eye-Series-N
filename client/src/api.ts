@@ -3,7 +3,13 @@
  * side of the wire — the server proxies The Odds API.
  */
 import type { RegionTabKey } from '../../shared/regionTabs';
-import type { ApiErrorBody, ApiErrorCode, ScanMeta, ScanResponse } from '../../shared/types';
+import type {
+  ApiErrorBody,
+  ApiErrorCode,
+  ScanMeta,
+  ScanResponse,
+  WhatsAppStatus,
+} from '../../shared/types';
 
 export class ApiError extends Error {
   constructor(
@@ -26,6 +32,50 @@ export async function runScan(topN: number, regionTab: RegionTabKey): Promise<Sc
 export async function fetchLastScan(): Promise<ScanMeta | null> {
   const { meta } = await request<{ meta: ScanMeta | null }>('/api/last-scan');
   return meta;
+}
+
+/* ————— WhatsApp alerts ————— */
+
+export async function fetchWhatsAppStatus(): Promise<WhatsAppStatus> {
+  return request<WhatsAppStatus>('/api/whatsapp/status');
+}
+
+/** Starts (or restarts) verification: sends a 6-digit code to the number. */
+export async function whatsappConnect(
+  phone: string,
+  thresholdPercent: number,
+): Promise<WhatsAppStatus> {
+  return whatsappRequest('/api/whatsapp/connect', 'POST', { phone, thresholdPercent });
+}
+
+export async function whatsappVerify(code: string): Promise<WhatsAppStatus> {
+  return whatsappRequest('/api/whatsapp/verify', 'POST', { code });
+}
+
+export async function whatsappSetThreshold(thresholdPercent: number): Promise<WhatsAppStatus> {
+  return whatsappRequest('/api/whatsapp/threshold', 'PATCH', { thresholdPercent });
+}
+
+export async function whatsappSendTest(): Promise<WhatsAppStatus> {
+  return whatsappRequest('/api/whatsapp/test', 'POST');
+}
+
+export async function whatsappDisconnect(): Promise<WhatsAppStatus> {
+  return whatsappRequest('/api/whatsapp/disconnect', 'DELETE');
+}
+
+async function whatsappRequest(
+  url: string,
+  method: string,
+  body?: Record<string, unknown>,
+): Promise<WhatsAppStatus> {
+  return request<WhatsAppStatus>(url, {
+    method,
+    ...(body && {
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  });
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {

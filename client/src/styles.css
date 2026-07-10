@@ -523,3 +523,146 @@ input[type='range']:disabled {
     padding-right: 10px;
   }
 }
+
+/* ————— WhatsApp alerts panel ————— */
+
+.wa-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.wa-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wa-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.wa-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.wa-field-narrow {
+  min-width: 120px;
+}
+
+.wa-input {
+  appearance: none;
+  background: none;
+  border: 1px solid var(--hairline);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  padding: 10px 12px;
+}
+
+.wa-input:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: -1px;
+}
+
+.wa-input::placeholder {
+  color: var(--grey);
+}
+
+.wa-input-code {
+  letter-spacing: 0.4em;
+  font-weight: 700;
+  max-width: 140px;
+}
+
+.wa-value {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 10px 0;
+}
+
+.wa-threshold-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.wa-button {
+  appearance: none;
+  border: none;
+  background: var(--red);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  padding: 12px 22px;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.wa-button:hover:not(:disabled) {
+  background: #ff4444;
+}
+
+.wa-button:focus-visible {
+  outline: 2px solid var(--white);
+  outline-offset: 3px;
+}
+
+.wa-button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.wa-button-quiet {
+  background: none;
+  border: 1px solid var(--hairline);
+  color: var(--grey);
+}
+
+.wa-button-quiet:hover:not(:disabled) {
+  background: none;
+  color: var(--white);
+}
+
+.wa-button-danger:hover:not(:disabled) {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.chip-live {
+  border: 1px solid var(--white);
+  color: var(--white);
+}
+
+.wa-note {
+  font-size: 12px;
+  color: var(--grey);
+}
+
+.wa-note-error {
+  color: var(--red);
+}
+
+@media (max-width: 640px) {
+  .wa-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .wa-field {
+    min-width: 0;
+  }
+}

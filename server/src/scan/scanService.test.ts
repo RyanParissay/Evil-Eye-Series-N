@@ -138,6 +138,30 @@ describe('runScan', () => {
     expect(result.meta.usage.apiCallCount).toBe(2); // free sports call + 1 odds call
   });
 
+  it('hands each scan’s opportunities to the notifier', async () => {
+    const seen: unknown[] = [];
+    const result = await runScan(
+      deps(stubProvider([totalsArbEvent()]), {
+        markets: ['totals'],
+        notifier: (opportunities) => void seen.push(opportunities),
+      }),
+      { topN: 5, tab: CA_TAB },
+    );
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toEqual(result.opportunities);
+  });
+
+  it('a rejecting notifier never fails the scan', async () => {
+    const result = await runScan(
+      deps(stubProvider([totalsArbEvent()]), {
+        markets: ['totals'],
+        notifier: () => Promise.reject(new Error('twilio down')),
+      }),
+      { topN: 5, tab: CA_TAB },
+    );
+    expect(result.opportunities).toHaveLength(1);
+  });
+
   it('filters bookmakers to the tab allowlist before detection', async () => {
     // Same arb, but the best Under price sits at a non-CA book: the arb must
     // not survive on the CA tab (Betfair is not in its allowlist).

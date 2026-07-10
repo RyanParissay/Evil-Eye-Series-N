@@ -61,3 +61,23 @@ export const DEFAULT_PORT = 8787;
 
 /** Where last-scan metadata persists across server restarts (gitignored). */
 export const LAST_SCAN_FILE = 'data/last-scan.json';
+
+/* ————— WhatsApp alerts ————— */
+
+/** Where subscriptions + sent-alert records persist (gitignored). */
+export const WHATSAPP_DATA_FILE = 'data/whatsapp.json';
+
+/** Verification codes die this long after being issued. */
+export const WHATSAPP_CODE_TTL_MS = 10 * 60_000;
+
+/** Wrong guesses allowed before a verification code is burned. */
+export const WHATSAPP_MAX_VERIFY_ATTEMPTS = 5;
+
+/** Alert messages per subscriber per rolling hour; excess is dropped. */
+export const WHATSAPP_MAX_ALERTS_PER_HOUR = 10;
+
+/** Consecutive send failures before a subscription deactivates itself. */
+export const WHATSAPP_MAX_CONSECUTIVE_FAILURES = 3;
+
+/** Sent-alert dedup records older than this are pruned. */
+export const WHATSAPP_SENT_ALERT_RETENTION_MS = 7 * 24 * 3_600_000;
