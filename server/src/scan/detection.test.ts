@@ -50,6 +50,8 @@ describe('detectOpportunities', () => {
     for (const leg of arbs[0].legs) {
       expect(leg.link).toEqual(expect.stringContaining('https://'));
     }
+    // The persisted-record id rides along so the UI can deep-link the cockpit.
+    expect(arbs[0].id).toMatch(/^[0-9a-f]{16}$/);
   });
 
   it('never prices an arb through a book outside the allowlist', () => {

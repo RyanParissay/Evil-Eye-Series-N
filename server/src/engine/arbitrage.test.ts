@@ -1,6 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import type { OddsEvent } from '@shared/types';
-import { findArbitrageOpportunities } from './arbitrage';
+import { findArbitrageOpportunities, priceLegs } from './arbitrage';
+
+describe('priceLegs', () => {
+  it('prices a leg set: arb index, profit, per-$100 stake split', () => {
+    const { arbIndex, profitPct, stakes } = priceLegs([2.1, 2.12]);
+    expect(arbIndex).toBeCloseTo(1 / 2.1 + 1 / 2.12, 6);
+    expect(profitPct).toBeCloseTo((1 / arbIndex - 1) * 100, 6);
+    expect(stakes[0]).toBeCloseTo((100 * (1 / 2.1)) / arbIndex, 1);
+    expect(stakes[0] + stakes[1]).toBeCloseTo(100, 1);
+  });
+
+  it('still reports the math when the arb is gone (S ≥ 1)', () => {
+    const { arbIndex, profitPct } = priceLegs([1.9, 1.9]);
+    expect(arbIndex).toBeGreaterThan(1);
+    expect(profitPct).toBeLessThan(0);
+  });
+});
 
 /** Reference "now" for all tests; events default to 2h in the future. */
 const NOW = new Date('2026-07-08T12:00:00Z');

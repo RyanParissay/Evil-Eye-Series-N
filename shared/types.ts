@@ -75,6 +75,12 @@ export interface ArbLeg {
 }
 
 export interface ArbOpportunity {
+  /**
+   * The persisted OpportunityRecord id (fingerprint prefix), filled by the
+   * detection slice so scan results can deep-link `/opportunity/:id`.
+   * Absent only on engine output that hasn't passed through detection.
+   */
+  id?: string;
   eventId: string;
   sportKey: string;
   sportTitle: string;

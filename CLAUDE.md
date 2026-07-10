@@ -42,8 +42,10 @@ server/src/
                  (pure rules), bookmakerService.ts (façade), bookmakerStore.ts.
   opportunities/ Persisted opportunity records. opportunityId.ts (fingerprint —
                  THE identity, alert dedup imports it), opportunityLifecycle.ts
-                 (pure transitions), opportunityService.ts, opportunityStore.ts
-                 (active JSON + monthly JSONL archive under data/).
+                 (pure transitions incl. applyStatusChange/applyVerification),
+                 opportunityService.ts, verifyService.ts (cockpit re-verify:
+                 cheap legs-only live fetch → re-price → persist),
+                 opportunityStore.ts (active JSON + monthly JSONL archive).
   lib/           jsonStore.ts — generic crash-safe serialized JSON store; every
                  file store (scan/whatsapp/bookmakers) is or should be one.
   notifications/ WhatsApp alerts: whatsappSender.ts (Twilio via fetch OR console
@@ -55,6 +57,14 @@ server/src/
                  api.ts (/api/scan, /api/last-scan) + whatsapp.ts (/api/whatsapp/*).
   config/        constants.ts (every tunable) + bookmakerLinks.ts (homepage fallbacks)
 client/src/      React/Vite; talks only to /api/*; renders shared types verbatim.
+                 App.tsx is a react-router shell: pages/ScanPage.tsx (the
+                 dashboard) + pages/CockpitPage.tsx (/opportunity/:id, the
+                 mobile-first execution page WhatsApp deep links open).
+                 cockpit.ts = pure display math (bankroll scaling only — the
+                 engine still owns all arb math). Cockpit CSS is namespaced
+                 .cockpit-* and mobile-first; the rest of styles.css is
+                 desktop-first. No new colors: status renders typographically
+                 (completed = the one inverted white block).
 ```
 
 Import `shared/` from server code as `@shared/...` — the alias is declared in

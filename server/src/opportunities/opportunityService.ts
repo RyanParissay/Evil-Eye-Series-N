@@ -6,6 +6,7 @@ import type { ArbOpportunity, OpportunityRecord, OpportunityStatus } from '@shar
 import {
   applyScanToRecords,
   applyStatusChange,
+  applyVerification,
   partitionForArchive,
   type CockpitStatus,
   type ScanScope,
@@ -77,6 +78,30 @@ export class OpportunityService {
       const result: UpdateStatusOutcome = change.ok
         ? { ok: true, record }
         : { ok: false, reason: 'conflict', message: change.message };
+      return { data, result };
+    });
+  }
+
+  /**
+   * Fold freshly fetched leg odds into one record (see applyVerification).
+   * Completed records are history and never re-verify.
+   */
+  async applyVerification(
+    id: string,
+    legOdds: Array<number | null>,
+  ): Promise<UpdateStatusOutcome> {
+    const at = this.now();
+    return this.store.update((data) => {
+      const record = data.records.find((r) => r.id === id);
+      let result: UpdateStatusOutcome;
+      if (!record) {
+        result = { ok: false, reason: 'not_found', message: `Unknown opportunity: ${id}` };
+      } else if (record.status === 'completed') {
+        result = { ok: false, reason: 'conflict', message: 'Cannot verify a completed opportunity' };
+      } else {
+        applyVerification(record, legOdds, at);
+        result = { ok: true, record };
+      }
       return { data, result };
     });
   }

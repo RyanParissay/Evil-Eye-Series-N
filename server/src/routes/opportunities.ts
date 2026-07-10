@@ -6,12 +6,16 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import type { OpportunityStatus } from '@shared/types';
 import type { CockpitStatus } from '../opportunities/opportunityLifecycle';
 import type { OpportunityService } from '../opportunities/opportunityService';
+import type { VerifyOutcome } from '../opportunities/verifyService';
 import { errorBody } from './api';
 
 const STATUSES: readonly OpportunityStatus[] = ['active', 'degraded', 'dead', 'completed'];
 const COCKPIT_STATUSES: readonly CockpitStatus[] = ['degraded', 'completed'];
 
-export function createOpportunitiesRouter(service: OpportunityService): Router {
+/** verifyOpportunity with its deps already bound (wired in index.ts). */
+export type VerifyRunner = (id: string) => Promise<VerifyOutcome>;
+
+export function createOpportunitiesRouter(service: OpportunityService, verify: VerifyRunner): Router {
   const router = Router();
 
   router.get('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -43,6 +47,22 @@ export function createOpportunitiesRouter(service: OpportunityService): Router {
       res.json(record);
     } catch (err) {
       next(err);
+    }
+  });
+
+  router.post('/:id/verify', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const outcome = await verify(req.params.id);
+      if (!outcome.ok) {
+        res
+          .status(outcome.reason === 'not_found' ? 404 : 409)
+          .json(errorBody(outcome.reason, outcome.message));
+        return;
+      }
+      const { record, legOdds, creditsCharged } = outcome;
+      res.json({ record, legOdds, creditsCharged });
+    } catch (err) {
+      next(err); // ProviderError maps in apiErrorHandler, same as /api/scan
     }
   });
 

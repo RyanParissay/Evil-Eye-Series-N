@@ -212,6 +212,15 @@ describe('formatAlertMessage', () => {
     expect(message).toContain('Pinnacle: Boston Celtics @2.05');
   });
 
+  it('appends the cockpit deep link when an app URL is configured', () => {
+    const arb = makeArb();
+    const id = opportunityFingerprint(arb).slice(0, 16);
+    const message = formatAlertMessage(arb, 'http://localhost:5173');
+    expect(message).toContain(`http://localhost:5173/opportunity/${id}`);
+    // No URL configured → no dangling link.
+    expect(formatAlertMessage(arb)).not.toContain('/opportunity/');
+  });
+
   it('shows signed lines for point-based legs', () => {
     const arb = makeArb({
       marketKey: 'spreads',
@@ -242,6 +251,18 @@ describe('notifyNewOpportunities', () => {
     const second = await notifyNewOpportunities(deps, [makeArb({ profitPct: 2.4 })]);
     expect(sender.sent).toHaveLength(1);
     expect(second.sentFingerprints).toEqual([]);
+  });
+
+  it('sends the deep link when deps carry the app URL', async () => {
+    const store = new FakeStore(makeData());
+    const sender = new FakeSender();
+    await notifyNewOpportunities(
+      { store, sender, now: () => NOW, appUrl: 'https://evil.eye' },
+      [makeArb()],
+    );
+    expect(sender.sent[0].body).toContain(
+      `https://evil.eye/opportunity/${opportunityFingerprint(makeArb()).slice(0, 16)}`,
+    );
   });
 
   it('reports a failed send as not sent', async () => {

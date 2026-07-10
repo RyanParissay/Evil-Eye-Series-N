@@ -5,7 +5,8 @@
  * Everything else (degraded, completed) belongs to the Phase-3 cockpit.
  */
 import type { ArbOpportunity, OpportunityRecord } from '@shared/types';
-import { OPPORTUNITY_ARCHIVE_AFTER_MS } from '../config/constants';
+import { OPPORTUNITY_ARCHIVE_AFTER_MS, VERIFY_PROFIT_TOLERANCE_PP } from '../config/constants';
+import { priceLegs } from '../engine/arbitrage';
 import { opportunityFingerprint, opportunityIdFromFingerprint } from './opportunityId';
 
 export interface ScanScope {
@@ -96,6 +97,50 @@ export function applyScanToRecords(
   }
 
   return { records: [...byFingerprint.values()], newCount, deadCount };
+}
+
+/**
+ * Re-verify: fold freshly fetched odds for the record's exact legs back
+ * into it. `legOdds` aligns with record.legs; null = that leg is no longer
+ * offered. Any missing leg (or a commenced event upstream passing all
+ * nulls) kills the record without touching the stored numbers — the status
+ * says why, the numbers say what was last seen. When every leg is priced,
+ * odds/stakes/profit update to the fresh truth and the status follows:
+ * profit gone → dead; shrunk beyond the tolerance → degraded; else active
+ * (reviving degraded/dead, exactly like scan re-detection).
+ */
+export function applyVerification(
+  record: OpportunityRecord,
+  legOdds: Array<number | null>,
+  now: Date,
+): 'active' | 'degraded' | 'dead' {
+  const setStatus = (status: 'active' | 'degraded' | 'dead') => {
+    if (record.status !== status) {
+      record.status = status;
+      record.statusChangedAt = now.toISOString();
+    }
+    return status;
+  };
+
+  if (legOdds.length !== record.legs.length || legOdds.some((o) => o == null)) {
+    return setStatus('dead');
+  }
+
+  const odds = legOdds as number[];
+  const { arbIndex, profitPct, stakes } = priceLegs(odds);
+  record.legs.forEach((leg, i) => {
+    leg.odds = odds[i];
+    leg.stake = stakes[i];
+  });
+  record.arbIndex = arbIndex;
+  record.profitPct = profitPct;
+  record.lastSeenAt = now.toISOString();
+
+  if (profitPct <= 0) return setStatus('dead');
+  if (profitPct < record.profitPctAtDetection - VERIFY_PROFIT_TOLERANCE_PP) {
+    return setStatus('degraded');
+  }
+  return setStatus('active');
 }
 
 /** Statuses the cockpit may set by hand; scans own active/dead. */

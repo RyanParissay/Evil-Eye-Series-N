@@ -10,7 +10,7 @@ import {
   WHATSAPP_MAX_CONSECUTIVE_FAILURES,
   WHATSAPP_SENT_ALERT_RETENTION_MS,
 } from '../config/constants';
-import { opportunityFingerprint } from '../opportunities/opportunityId';
+import { opportunityFingerprint, opportunityIdFromFingerprint } from '../opportunities/opportunityId';
 import type {
   WhatsAppData,
   WhatsAppDataStore,
@@ -69,7 +69,7 @@ export function selectAlerts(
   return { planned, droppedByRateLimit };
 }
 
-export function formatAlertMessage(arb: ArbOpportunity): string {
+export function formatAlertMessage(arb: ArbOpportunity, appUrl?: string): string {
   const legs = arb.legs
     .map(
       (leg) =>
@@ -82,7 +82,12 @@ export function formatAlertMessage(arb: ArbOpportunity): string {
     hour: 'numeric',
     minute: '2-digit',
   });
-  return `🔔 New arb: ${arb.eventName} (${arb.marketKey}) — ${arb.profitPct.toFixed(2)}% return. ${legs}. Starts ${starts}.`;
+  // The cockpit deep link: record ids are the fingerprint's 16-char prefix,
+  // so the URL is stable across re-detections.
+  const link = appUrl
+    ? ` ${appUrl.replace(/\/$/, '')}/opportunity/${opportunityIdFromFingerprint(opportunityFingerprint(arb))}`
+    : '';
+  return `🔔 New arb: ${arb.eventName} (${arb.marketKey}) — ${arb.profitPct.toFixed(2)}% return. ${legs}. Starts ${starts}.${link}`;
 }
 
 function formatPoint(point: number): string {
@@ -93,6 +98,8 @@ export interface AlertDeps {
   store: WhatsAppDataStore;
   sender: WhatsAppSender;
   now?: () => Date;
+  /** Public base URL of the client; when set, alerts carry a cockpit deep link. */
+  appUrl?: string;
 }
 
 export interface NotifyResult {
@@ -117,7 +124,7 @@ export async function notifyNewOpportunities(
       // An earlier failure in this batch may have deactivated it.
       if (!subscription.active) continue;
       try {
-        await deps.sender.send(subscription.phoneE164, formatAlertMessage(opportunity));
+        await deps.sender.send(subscription.phoneE164, formatAlertMessage(opportunity, deps.appUrl));
         subscription.failedSendCount = 0;
         subscription.sendTimestamps.push(now.toISOString());
         sent.add(fingerprint);

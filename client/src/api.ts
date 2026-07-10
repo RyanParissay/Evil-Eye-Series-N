@@ -8,6 +8,7 @@ import type {
   ApiErrorCode,
   BookmakerConfig,
   BookmakerStatusValue,
+  OpportunityRecord,
   ScanMeta,
   ScanResponse,
   WhatsAppStatus,
@@ -58,6 +59,34 @@ export async function patchBookmaker(
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(patch),
+  });
+}
+
+/* ————— Opportunities (the cockpit) ————— */
+
+export interface VerifyResponse {
+  record: OpportunityRecord;
+  /** Fresh odds aligned with record.legs; null = leg no longer offered. */
+  legOdds: Array<number | null>;
+  creditsCharged: number;
+}
+
+export async function fetchOpportunity(id: string): Promise<OpportunityRecord> {
+  return request<OpportunityRecord>(`/api/opportunities/${encodeURIComponent(id)}`);
+}
+
+/** Re-price the record's exact legs with a fresh (cheap) provider call. */
+export async function verifyOpportunity(id: string): Promise<VerifyResponse> {
+  return request<VerifyResponse>(`/api/opportunities/${encodeURIComponent(id)}/verify`, {
+    method: 'POST',
+  });
+}
+
+export async function completeOpportunity(id: string): Promise<OpportunityRecord> {
+  return request<OpportunityRecord>(`/api/opportunities/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ status: 'completed' }),
   });
 }
 

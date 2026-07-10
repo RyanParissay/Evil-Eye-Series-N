@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { ArbOpportunity, OpportunityRecord } from '@shared/types';
 import { OPPORTUNITY_ARCHIVE_AFTER_MS } from '../config/constants';
 import { opportunityFingerprint, opportunityIdFromFingerprint } from './opportunityId';
-import { applyScanToRecords, applyStatusChange, partitionForArchive } from './opportunityLifecycle';
+import {
+  applyScanToRecords,
+  applyStatusChange,
+  applyVerification,
+  partitionForArchive,
+} from './opportunityLifecycle';
 
 const NOW = new Date('2026-07-09T12:00:00Z');
 const FUTURE = '2026-07-09T23:00:00Z';
@@ -161,6 +166,56 @@ describe('applyStatusChange', () => {
     expect(applyStatusChange(done, 'degraded', NOW)).toMatchObject({ ok: false });
     expect(dead.status).toBe('dead');
     expect(done.status).toBe('completed');
+  });
+});
+
+describe('applyVerification', () => {
+  // Detection was at 2.34% (odds 2.1 / 2.05 → S ≈ 0.9657).
+
+  it('keeps the record active when fresh odds hold up, updating the numbers', () => {
+    const record = recordFor(makeArb());
+    expect(applyVerification(record, [2.12, 2.06], NOW)).toBe('active');
+    expect(record.status).toBe('active');
+    expect(record.legs.map((l) => l.odds)).toEqual([2.12, 2.06]);
+    expect(record.arbIndex).toBeCloseTo(1 / 2.12 + 1 / 2.06, 6);
+    expect(record.profitPct).toBeGreaterThan(record.profitPctAtDetection);
+    expect(record.legs[0].stake + record.legs[1].stake).toBeCloseTo(100, 1);
+    expect(record.lastSeenAt).toBe(NOW.toISOString());
+  });
+
+  it('degrades when profit shrank materially but is still positive', () => {
+    const record = recordFor(makeArb());
+    // 2.05/2.02 → S ≈ 0.9829 → ~1.74%: positive, > 0.1pp below 2.34%.
+    expect(applyVerification(record, [2.05, 2.02], NOW)).toBe('degraded');
+    expect(record.status).toBe('degraded');
+    expect(record.profitPct).toBeGreaterThan(0);
+    expect(record.statusChangedAt).toBe(NOW.toISOString());
+  });
+
+  it('tolerates a tiny wobble below detection profit without degrading', () => {
+    const record = recordFor(makeArb());
+    // 2.1/1.995 → ~2.31%: within the 0.1pp tolerance of 2.34%.
+    expect(applyVerification(record, [2.1, 1.995], NOW)).toBe('active');
+  });
+
+  it('kills the record when the profit is gone, keeping the honest numbers', () => {
+    const record = recordFor(makeArb());
+    expect(applyVerification(record, [1.9, 1.9], NOW)).toBe('dead');
+    expect(record.status).toBe('dead');
+    expect(record.profitPct).toBeLessThan(0);
+  });
+
+  it('kills the record when any leg is no longer offered, leaving numbers as stored', () => {
+    const record = recordFor(makeArb());
+    expect(applyVerification(record, [2.1, null], NOW)).toBe('dead');
+    expect(record.status).toBe('dead');
+    expect(record.profitPct).toBe(2.34); // stale numbers stay; the status says why
+  });
+
+  it('revives a degraded or dead record whose legs price like new', () => {
+    const record = recordFor(makeArb(), { status: 'dead' });
+    expect(applyVerification(record, [2.1, 2.05], NOW)).toBe('active');
+    expect(record.status).toBe('active');
   });
 });
 

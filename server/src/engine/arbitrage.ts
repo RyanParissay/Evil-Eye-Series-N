@@ -45,6 +45,29 @@ interface OutcomeSide {
 
 const NOMINAL_TOTAL_STAKE = 100;
 
+export interface LegPricing {
+  /** S = Σ 1/odds. Below 1.0 means guaranteed profit. */
+  arbIndex: number;
+  /** (1/S − 1) × 100 — negative when the arb is gone. */
+  profitPct: number;
+  /** Per-leg stakes out of a nominal $100, rounded to cents. */
+  stakes: number[];
+}
+
+/**
+ * The one place the stake-split math lives: detection prices candidate leg
+ * sets through it, and the cockpit's re-verify re-prices stored legs with
+ * fresh odds. Callers decide what S ≥ 1 means for them.
+ */
+export function priceLegs(odds: number[]): LegPricing {
+  const arbIndex = odds.reduce((sum, o) => sum + 1 / o, 0);
+  return {
+    arbIndex,
+    profitPct: (1 / arbIndex - 1) * 100,
+    stakes: odds.map((o) => Math.round(((NOMINAL_TOTAL_STAKE * (1 / o)) / arbIndex) * 100) / 100),
+  };
+}
+
 export function findArbitrageOpportunities(
   events: OddsEvent[],
   options: ArbEngineOptions = {},
@@ -156,30 +179,28 @@ function evaluateLineGroup(
     return { side, bestPrice, tied };
   });
 
-  const arbIndex = bestBySide.reduce((sum, o) => sum + 1 / o.bestPrice, 0);
+  const { arbIndex, profitPct, stakes } = priceLegs(bestBySide.map((o) => o.bestPrice));
   if (arbIndex >= 1) return null;
 
   // Tie-break: greedily prefer a bookmaker not already used by another leg.
   // Same-book "arbs" are usually data quirks, so when identical odds are
   // available elsewhere, take the executable combination.
   const usedBooks = new Set<string>();
-  const legs: ArbLeg[] = bestBySide.map(({ side, bestPrice, tied }) => {
+  const legs: ArbLeg[] = bestBySide.map(({ side, bestPrice, tied }, i) => {
     const offer = tied.find((o) => !usedBooks.has(o.bookmakerKey)) ?? tied[0];
     usedBooks.add(offer.bookmakerKey);
-    const rawStake = (NOMINAL_TOTAL_STAKE * (1 / bestPrice)) / arbIndex;
     return {
       outcome: side.name,
       point: side.point,
       bookmakerKey: offer.bookmakerKey,
       bookmakerTitle: offer.bookmakerTitle,
       odds: bestPrice,
-      stake: Math.round(rawStake * 100) / 100,
+      stake: stakes[i],
       link: offer.link,
     };
   });
 
   const distinctBooks = new Set(legs.map((l) => l.bookmakerKey));
-  const profitPct = (1 / arbIndex - 1) * 100;
 
   return {
     eventId: event.id,

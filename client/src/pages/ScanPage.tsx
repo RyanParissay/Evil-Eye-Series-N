@@ -1,0 +1,236 @@
+import { useEffect, useMemo, useState } from 'react';
+import { DEFAULT_REGION_TAB, type RegionTabKey } from '../../../shared/regionTabs';
+import type {
+  ApiErrorCode,
+  BookmakerConfig,
+  ScanMeta,
+  ScanResponse,
+} from '../../../shared/types';
+import {
+  ApiError,
+  fetchBookmakers,
+  fetchLastScan,
+  patchBookmaker,
+  runScan,
+  type BookmakerPatchBody,
+} from '../api';
+import {
+  loadAutoScanSettings,
+  msUntilNextScan,
+  saveAutoScanSettings,
+  shouldDisableAutoScan,
+  type AutoScanSettings,
+} from '../autoScan';
+import { BookmakerPanel } from '../components/BookmakerPanel';
+import { ControlBar } from '../components/ControlBar';
+import { EyeGlyph } from '../components/EyeGlyph';
+import { OpportunityCard } from '../components/OpportunityCard';
+import { WhatsAppPanel } from '../components/WhatsAppPanel';
+import { errorHint, errorTitle } from '../errorCopy';
+
+type ScanState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'success'; data: ScanResponse }
+  | { status: 'error'; code: ApiErrorCode; message: string; autoDisabled?: boolean };
+
+export function ScanPage() {
+  const [topN, setTopN] = useState(5);
+  const [regionTab, setRegionTab] = useState<RegionTabKey>(DEFAULT_REGION_TAB);
+  const [scan, setScan] = useState<ScanState>({ status: 'idle' });
+  const [lastMeta, setLastMeta] = useState<ScanMeta | null>(null);
+
+  // Auto-update: persisted so the switch "stays on" across refreshes.
+  const [autoScan, setAutoScan] = useState<AutoScanSettings>(() =>
+    loadAutoScanSettings(window.localStorage),
+  );
+  // Epoch ms of the last completed scan ATTEMPT (success or error) — the
+  // anchor the auto-update countdown schedules from. Failures count too, so
+  // a failing scan can never turn into a hot retry loop.
+  const [lastScanAt, setLastScanAt] = useState<number | null>(null);
+
+  function updateAutoScan(next: AutoScanSettings) {
+    setAutoScan(next);
+    saveAutoScanSettings(window.localStorage, next);
+  }
+
+  // The bookmaker registry: shared by the settings panel and the leg
+  // warnings on opportunity cards. Scans grow it, so refetch after each one.
+  const [books, setBooks] = useState<BookmakerConfig[] | null>(null);
+  useEffect(() => {
+    fetchBookmakers()
+      .then(setBooks)
+      .catch(() => {
+        // Server unreachable — the scan UI surfaces that already.
+      });
+  }, [lastScanAt]);
+
+  async function patchBook(key: string, patch: BookmakerPatchBody) {
+    const updated = await patchBookmaker(key, patch);
+    setBooks((current) =>
+      current ? current.map((b) => (b.key === updated.key ? updated : b)) : current,
+    );
+  }
+
+  const bookStatus = useMemo(
+    () => new Map(books?.map((b) => [b.key, b.status]) ?? []),
+    [books],
+  );
+
+  // Hydrate the usage panel from the server's persisted last-scan record,
+  // and anchor the auto-update countdown to it: with a 10-minute interval
+  // and a scan 3 minutes ago, reopening the page waits 7 minutes.
+  useEffect(() => {
+    fetchLastScan()
+      .then((meta) => {
+        if (!meta) return;
+        setLastMeta((current) => current ?? meta);
+        const at = Date.parse(meta.scannedAt);
+        if (Number.isFinite(at)) setLastScanAt((current) => current ?? at);
+      })
+      .catch(() => {
+        // No last scan (or server briefly unreachable) — panel shows dashes.
+      });
+  }, []);
+
+  async function handleScan(source: 'manual' | 'auto' = 'manual') {
+    if (scan.status === 'loading') return;
+    setScan({ status: 'loading' });
+    try {
+      const data = await runScan(topN, regionTab);
+      setScan({ status: 'success', data });
+      setLastMeta(data.meta);
+    } catch (err) {
+      const isApi = err instanceof ApiError;
+      const code: ApiErrorCode = isApi ? err.code : 'internal';
+      // A bad key or spent quota won't fix itself — switch auto mode off
+      // rather than re-hitting the API every X minutes. Functional update:
+      // the closure's autoScan may predate a mid-scan slider change.
+      const autoDisabled = source === 'auto' && shouldDisableAutoScan(code);
+      if (autoDisabled) {
+        setAutoScan((current) => {
+          const next = { ...current, enabled: false };
+          saveAutoScanSettings(window.localStorage, next);
+          return next;
+        });
+      }
+      setScan({
+        status: 'error',
+        code,
+        message: isApi ? err.message : 'Something unexpected broke. Check the server logs.',
+        autoDisabled,
+      });
+    } finally {
+      setLastScanAt(Date.now());
+    }
+  }
+
+  // The auto-update loop: while enabled and not already scanning, arm a
+  // timer for when the next scan is due. Completing any scan (manual or
+  // auto) moves lastScanAt, re-arming for a fresh interval. Deliberately no
+  // dependency array: re-arming every render keeps the closure's
+  // topN/regionTab fresh, and the delay is computed from the absolute
+  // lastScanAt, so constant re-arming causes no drift.
+  useEffect(() => {
+    if (!autoScan.enabled || scan.status === 'loading') return;
+    const delay = msUntilNextScan(lastScanAt, autoScan.intervalMins, Date.now());
+    const id = window.setTimeout(() => void handleScan('auto'), delay);
+    return () => window.clearTimeout(id);
+  });
+
+  return (
+    <div className="page">
+      <header className="masthead">
+        <EyeGlyph size={52} state={scan.status === 'loading' ? 'scanning' : 'open'} />
+        <h1 className="wordmark">
+          Evil Eye <span className="wordmark-accent">Arbitrage</span>
+        </h1>
+        <p className="tagline micro-label">Cross-book odds surveillance · guaranteed-profit finder</p>
+      </header>
+
+      <ControlBar
+        topN={topN}
+        onTopNChange={setTopN}
+        regionTab={regionTab}
+        onRegionTabChange={setRegionTab}
+        onScan={() => void handleScan('manual')}
+        scanning={scan.status === 'loading'}
+        lastMeta={lastMeta}
+        autoScan={autoScan}
+        onAutoScanChange={updateAutoScan}
+        lastScanAt={lastScanAt}
+      />
+
+      <WhatsAppPanel />
+
+      <BookmakerPanel books={books} onPatch={patchBook} />
+
+      <main className="results">
+        {scan.status === 'idle' && (
+          <div className="state-block">
+            <EyeGlyph size={64} state="open" />
+            <p className="state-title">The eye is open.</p>
+            <p className="state-detail">
+              Run a scan to sweep live odds across bookmakers for guaranteed-profit spreads.
+              Scans cost API credits — nothing runs until you press the button.
+            </p>
+          </div>
+        )}
+
+        {scan.status === 'loading' && (
+          <div className="state-block" role="status">
+            <EyeGlyph size={64} state="scanning" />
+            <p className="state-title">Scanning the books…</p>
+            <p className="state-detail">Fetching odds and hunting for prices that disagree.</p>
+          </div>
+        )}
+
+        {scan.status === 'error' && (
+          <div className="state-block state-error" role="alert">
+            <p className="state-title">{errorTitle(scan.code)}</p>
+            <p className="state-detail">{scan.message}</p>
+            <p className="state-detail">{errorHint(scan.code)}</p>
+            {scan.autoDisabled && (
+              <p className="state-detail">
+                Auto update turned itself off so it doesn't retry into this error. Fix the cause,
+                then flip the switch back on.
+              </p>
+            )}
+          </div>
+        )}
+
+        {scan.status === 'success' && scan.data.opportunities.length === 0 && (
+          <div className="state-block">
+            <EyeGlyph size={64} state="closed" />
+            <p className="state-title">No arbitrage found.</p>
+            <p className="state-detail">
+              Markets are efficient right now. Scanned {scan.data.meta.sportsScanned.length}{' '}
+              sports — try again later or widen the scan.
+            </p>
+          </div>
+        )}
+
+        {scan.status === 'success' && scan.data.opportunities.length > 0 && (
+          <>
+            <div className="results-head micro-label">
+              {scan.data.opportunities.length} opportunit
+              {scan.data.opportunities.length === 1 ? 'y' : 'ies'} · scanned{' '}
+              {scan.data.meta.sportsScanned.length} sports · stakes shown per $100
+            </div>
+            {scan.data.opportunities.map((arb) => (
+              <OpportunityCard
+                key={`${arb.eventId}-${arb.marketKey}`}
+                arb={arb}
+                bookStatus={bookStatus}
+              />
+            ))}
+          </>
+        )}
+      </main>
+
+      <footer className="footnote micro-label">
+        Odds comparison and information only — verify prices at the book before staking anything.
+      </footer>
+    </div>
+  );
+}

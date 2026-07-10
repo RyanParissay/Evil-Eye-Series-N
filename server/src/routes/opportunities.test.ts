@@ -4,8 +4,9 @@ import { describe, expect, it } from 'vitest';
 import type { ArbOpportunity, OpportunityRecord } from '@shared/types';
 import { OpportunityService } from '../opportunities/opportunityService';
 import type { OpportunityData, OpportunityDataStore } from '../opportunities/opportunityStore';
+import { ProviderError } from '../providers/OddsProvider';
 import { apiErrorHandler } from './api';
-import { createOpportunitiesRouter } from './opportunities';
+import { createOpportunitiesRouter, type VerifyRunner } from './opportunities';
 
 const NOW = new Date('2026-07-09T12:00:00Z');
 const SCOPE = { sportsScanned: ['basketball_nba'], regionTab: 'ca' };
@@ -50,16 +51,20 @@ function makeArb(overrides: Partial<ArbOpportunity> = {}): ArbOpportunity {
   };
 }
 
-async function appWithOneRecord() {
+async function appWithOneRecord(verify: VerifyRunner = unusedVerify) {
   const service = new OpportunityService(new FakeStore(), new FakeArchive(), () => NOW);
   await service.recordScan([makeArb()], SCOPE);
   const [record] = await service.list();
   const app = express();
   app.use(express.json());
-  app.use('/api/opportunities', createOpportunitiesRouter(service));
+  app.use('/api/opportunities', createOpportunitiesRouter(service, verify));
   app.use(apiErrorHandler);
   return { app, service, record };
 }
+
+const unusedVerify: VerifyRunner = async () => {
+  throw new Error('verify not expected in this test');
+};
 
 describe('opportunities routes', () => {
   it('GET /:id returns the record', async () => {
@@ -101,6 +106,51 @@ describe('opportunities routes', () => {
       .send({ status: 'completed' });
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('not_found');
+  });
+
+  it('POST /:id/verify returns the runner outcome', async () => {
+    const { app, record } = await appWithOneRecord(async (id) => ({
+      ok: true,
+      record: { ...record, id, status: 'degraded' },
+      legOdds: [2.05, 2.02],
+      creditsCharged: 1,
+    }));
+    const res = await request(app).post(`/api/opportunities/${record.id}/verify`);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      record: { id: record.id, status: 'degraded' },
+      legOdds: [2.05, 2.02],
+      creditsCharged: 1,
+    });
+  });
+
+  it('POST /:id/verify maps not_found and conflict', async () => {
+    const notFound = await appWithOneRecord(async (id) => ({
+      ok: false,
+      reason: 'not_found',
+      message: `Unknown opportunity: ${id}`,
+    }));
+    const res404 = await request(notFound.app).post('/api/opportunities/nope/verify');
+    expect(res404.status).toBe(404);
+    expect(res404.body.error.code).toBe('not_found');
+
+    const conflict = await appWithOneRecord(async () => ({
+      ok: false,
+      reason: 'conflict',
+      message: 'Cannot verify a completed opportunity',
+    }));
+    const res409 = await request(conflict.app).post('/api/opportunities/x/verify');
+    expect(res409.status).toBe(409);
+    expect(res409.body.error.code).toBe('conflict');
+  });
+
+  it('POST /:id/verify maps provider failures like a scan does', async () => {
+    const { app, record } = await appWithOneRecord(async () => {
+      throw new ProviderError('quota', 'quota_exhausted', 401);
+    });
+    const res = await request(app).post(`/api/opportunities/${record.id}/verify`);
+    expect(res.status).toBe(429);
+    expect(res.body.error.code).toBe('quota_exhausted');
   });
 
   it('PATCH /:id maps an invalid transition to 409 conflict', async () => {

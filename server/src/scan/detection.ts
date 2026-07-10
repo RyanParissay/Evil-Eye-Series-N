@@ -9,6 +9,7 @@ import { bookmakerHomepage } from '../config/bookmakerLinks';
 import { MIN_PROFIT_PCT, SUSPICIOUS_PROFIT_PCT } from '../config/constants';
 import { findArbitrageOpportunities } from '../engine/arbitrage';
 import { filterEventsToBookmakers } from '../engine/bookmakerFilter';
+import { opportunityFingerprint, opportunityIdFromFingerprint } from '../opportunities/opportunityId';
 
 export interface DetectionOptions {
   topN: number;
@@ -33,6 +34,9 @@ export function detectOpportunities(
     marketKeys: options.marketKeys,
   });
   fillLinkFallbacks(opportunities);
+  for (const arb of opportunities) {
+    arb.id = opportunityIdFromFingerprint(opportunityFingerprint(arb));
+  }
   return opportunities;
 }
 

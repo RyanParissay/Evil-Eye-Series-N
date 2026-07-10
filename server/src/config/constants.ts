@@ -77,6 +77,13 @@ export const OPPORTUNITY_ARCHIVE_AFTER_MS = 7 * 24 * 3_600_000;
 /** The latest raw odds snapshot, for offline recomputation (gitignored). */
 export const LAST_SNAPSHOT_FILE = 'data/last-snapshot.json';
 
+/**
+ * Re-verify marks a record degraded only when fresh profit fell more than
+ * this many percentage points below the detection profit — a 2.34% → 2.31%
+ * wobble is noise, not degradation.
+ */
+export const VERIFY_PROFIT_TOLERANCE_PP = 0.1;
+
 /* ————— WhatsApp alerts ————— */
 
 /** Where subscriptions + sent-alert records persist (gitignored). */

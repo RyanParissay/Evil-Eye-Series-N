@@ -22,6 +22,7 @@ import { WhatsAppStore } from './notifications/subscriptionStore';
 import { senderFromEnv } from './notifications/whatsappSender';
 import { OpportunityService } from './opportunities/opportunityService';
 import { OpportunityArchive, OpportunityStore } from './opportunities/opportunityStore';
+import { verifyOpportunity } from './opportunities/verifyService';
 import { MockOddsProvider } from './providers/MockOddsProvider';
 import type { OddsProvider } from './providers/OddsProvider';
 import { TheOddsApiProvider } from './providers/TheOddsApiProvider';
@@ -64,11 +65,20 @@ const opportunityService = new OpportunityService(
 
 const snapshotStore = new SnapshotStore(path.join(serverRoot, LAST_SNAPSHOT_FILE));
 
+// Where WhatsApp deep links point. Default matches the Vite dev client;
+// set APP_URL when the client lives anywhere else.
+const appUrl = process.env.APP_URL?.trim() || 'http://localhost:5173';
+
 const app = express();
 app.use(express.json());
 app.use('/api/whatsapp', createWhatsAppRouter({ store: whatsappStore, sender: whatsappSender }));
 app.use('/api/bookmakers', createBookmakersRouter(bookmakerService));
-app.use('/api/opportunities', createOpportunitiesRouter(opportunityService));
+app.use(
+  '/api/opportunities',
+  createOpportunitiesRouter(opportunityService, (id) =>
+    verifyOpportunity({ provider, opportunities: opportunityService }, id),
+  ),
+);
 app.use(
   '/api',
   createApiRouter({
@@ -81,7 +91,7 @@ app.use(
     // dispatch; whatever actually sent gets flagged on its stored record.
     notifier: async (opportunities) => {
       const { sentFingerprints } = await notifyNewOpportunities(
-        { store: whatsappStore, sender: whatsappSender },
+        { store: whatsappStore, sender: whatsappSender, appUrl },
         await bookmakerService.filterAlertable(opportunities),
       );
       await opportunityService.markAlerted(sentFingerprints);

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import type { ArbOpportunity, BookmakerStatusValue } from '../../../shared/types';
 
 /**
@@ -43,6 +44,11 @@ export function OpportunityCard({
         <div className="card-profit">
           <span className="profit-pct">+{arb.profitPct.toFixed(2)}%</span>
           <span className="micro-label">index {arb.arbIndex.toFixed(4)}</span>
+          {arb.id && (
+            <Link className="card-cockpit-link micro-label" to={`/opportunity/${arb.id}`}>
+              Cockpit →
+            </Link>
+          )}
         </div>
       </header>
 
