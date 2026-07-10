@@ -54,9 +54,9 @@ export function createOpportunitiesRouter(service: OpportunityService, verify: V
     try {
       const outcome = await verify(req.params.id);
       if (!outcome.ok) {
-        res
-          .status(outcome.reason === 'not_found' ? 404 : 409)
-          .json(errorBody(outcome.reason, outcome.message));
+        const httpStatus =
+          outcome.reason === 'not_found' ? 404 : outcome.reason === 'conflict' ? 409 : 400;
+        res.status(httpStatus).json(errorBody(outcome.reason, outcome.message));
         return;
       }
       const { record, legOdds, creditsCharged } = outcome;
@@ -68,18 +68,28 @@ export function createOpportunitiesRouter(service: OpportunityService, verify: V
 
   router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const status = (req.body ?? {}).status;
-      if (!COCKPIT_STATUSES.includes(status)) {
+      const { status, filledLegs } = (req.body ?? {}) as { status?: unknown; filledLegs?: unknown };
+      if (!COCKPIT_STATUSES.includes(status as CockpitStatus)) {
         res
           .status(400)
           .json(errorBody('bad_request', `status must be one of: ${COCKPIT_STATUSES.join(', ')}`));
         return;
       }
-      const outcome = await service.updateStatus(req.params.id, status);
-      if (!outcome.ok) {
+      if (filledLegs !== undefined && !isFilledLegs(filledLegs)) {
         res
-          .status(outcome.reason === 'not_found' ? 404 : 409)
-          .json(errorBody(outcome.reason, outcome.message));
+          .status(400)
+          .json(errorBody('bad_request', 'filledLegs must be [{ odds > 1, stake ≥ 0 }, …]'));
+        return;
+      }
+      const outcome = await service.updateStatus(
+        req.params.id,
+        status as CockpitStatus,
+        filledLegs,
+      );
+      if (!outcome.ok) {
+        const httpStatus =
+          outcome.reason === 'not_found' ? 404 : outcome.reason === 'conflict' ? 409 : 400;
+        res.status(httpStatus).json(errorBody(outcome.reason, outcome.message));
         return;
       }
       res.json(outcome.record);
@@ -89,4 +99,20 @@ export function createOpportunitiesRouter(service: OpportunityService, verify: V
   });
 
   return router;
+}
+
+function isFilledLegs(value: unknown): value is Array<{ odds: number; stake: number }> {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (leg) =>
+        leg != null &&
+        typeof leg === 'object' &&
+        typeof (leg as { odds?: unknown }).odds === 'number' &&
+        (leg as { odds: number }).odds > 1 &&
+        typeof (leg as { stake?: unknown }).stake === 'number' &&
+        (leg as { stake: number }).stake >= 0 &&
+        Number.isFinite((leg as { stake: number }).stake),
+    )
+  );
 }

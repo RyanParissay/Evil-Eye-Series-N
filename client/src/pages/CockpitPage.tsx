@@ -84,12 +84,12 @@ export function CockpitPage() {
     }
   }
 
-  async function handleComplete() {
+  async function handleComplete(filledLegs: Array<{ odds: number; stake: number }>) {
     if (busy || page.status !== 'ready') return;
     setBusy('complete');
     setNote(null);
     try {
-      const record = await completeOpportunity(id);
+      const record = await completeOpportunity(id, filledLegs);
       setPage({ status: 'ready', record });
     } catch (err) {
       const isApi = err instanceof ApiError;
@@ -148,7 +148,7 @@ export function CockpitPage() {
           busy={busy}
           note={note}
           onVerify={() => void handleVerify()}
-          onComplete={() => void handleComplete()}
+          onComplete={(filledLegs) => void handleComplete(filledLegs)}
         />
       )}
     </div>
@@ -170,11 +170,21 @@ function Cockpit({
   busy: 'verify' | 'complete' | null;
   note: VerifyNote | null;
   onVerify: () => void;
-  onComplete: () => void;
+  onComplete: (filledLegs: Array<{ odds: number; stake: number }>) => void;
 }) {
   const settled = record.status === 'dead' || record.status === 'completed';
   const { stakes, totalStaked, guaranteedProfit } = scaleLegStakes(record.legs, bankroll);
   const reduced = record.profitPct < record.profitPctAtDetection;
+
+  // Completion books ACTUAL numbers: the form opens prefilled with the
+  // record's odds and the current bankroll split — confirm or correct.
+  const [fills, setFills] = useState<Array<{ odds: string; stake: string }> | null>(null);
+  const parsedFills = (fills ?? []).map((f) => ({ odds: Number(f.odds), stake: Number(f.stake) }));
+  const fillsValid =
+    fills != null &&
+    parsedFills.every(
+      (f) => Number.isFinite(f.odds) && f.odds > 1 && Number.isFinite(f.stake) && f.stake >= 0,
+    );
 
   return (
     <main className={`cockpit-body cockpit-${record.status}`}>
@@ -217,7 +227,12 @@ function Cockpit({
       {record.status === 'completed' && (
         <div className="cockpit-stamp" role="status">
           <span className="cockpit-stamp-title">Completed</span>
-          <span>Legs placed {relativeTime(record.statusChangedAt)}. This record is history.</span>
+          <span>
+            Legs placed {relativeTime(record.statusChangedAt)}.{' '}
+            {record.execution
+              ? `Locked ${record.execution.lockedProfit >= 0 ? '+' : '−'}$${Math.abs(record.execution.lockedProfit).toFixed(2)} on $${record.execution.totalStaked.toFixed(2)} staked.`
+              : 'No filled numbers were recorded, so it counts as captured but adds nothing to P&L.'}
+          </span>
         </div>
       )}
 
@@ -302,7 +317,7 @@ function Cockpit({
         </div>
       )}
 
-      {record.status !== 'completed' && (
+      {record.status !== 'completed' && fills == null && (
         <section className="cockpit-actions">
           {record.status !== 'dead' && (
             <button
@@ -318,12 +333,74 @@ function Cockpit({
           <button
             type="button"
             className="cockpit-action cockpit-action-complete"
-            onClick={onComplete}
+            onClick={() =>
+              setFills(
+                record.legs.map((leg, i) => ({
+                  odds: leg.odds.toFixed(2),
+                  stake: stakes[i].toFixed(2),
+                })),
+              )
+            }
             disabled={busy !== null}
-            aria-busy={busy === 'complete'}
           >
-            {busy === 'complete' ? 'Recording…' : 'Both legs placed — mark completed'}
+            Both legs placed — record the fills
           </button>
+        </section>
+      )}
+
+      {record.status !== 'completed' && fills != null && (
+        <section className="cockpit-fill" aria-label="Record filled legs">
+          <p className="micro-label">What actually got placed — this becomes realized P&L</p>
+          {record.legs.map((leg, i) => (
+            <div className="cockpit-fill-row" key={`${leg.bookmakerKey}-${leg.outcome}`}>
+              <span className="cockpit-fill-book">{leg.bookmakerTitle} · {leg.outcome}</span>
+              <label className="micro-label">
+                odds
+                <input
+                  type="number"
+                  step="0.01"
+                  min="1.01"
+                  inputMode="decimal"
+                  value={fills[i]?.odds ?? ''}
+                  onChange={(e) =>
+                    setFills(fills.map((f, j) => (j === i ? { ...f, odds: e.target.value } : f)))
+                  }
+                />
+              </label>
+              <label className="micro-label">
+                stake $
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  inputMode="decimal"
+                  value={fills[i]?.stake ?? ''}
+                  onChange={(e) =>
+                    setFills(fills.map((f, j) => (j === i ? { ...f, stake: e.target.value } : f)))
+                  }
+                />
+              </label>
+            </div>
+          ))}
+          <div className="cockpit-fill-actions">
+            <button
+              type="button"
+              className="cockpit-action cockpit-action-complete"
+              onClick={() => onComplete(parsedFills)}
+              disabled={busy !== null || !fillsValid}
+              aria-busy={busy === 'complete'}
+            >
+              {busy === 'complete' ? 'Booking…' : 'Book it — mark completed'}
+            </button>
+            <button
+              type="button"
+              className="cockpit-action cockpit-action-verify"
+              onClick={() => setFills(null)}
+              disabled={busy !== null}
+            >
+              Cancel
+            </button>
+          </div>
         </section>
       )}
 

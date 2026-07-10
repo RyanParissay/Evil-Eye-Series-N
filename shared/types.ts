@@ -118,10 +118,28 @@ export type OpportunityStatus = 'active' | 'degraded' | 'dead' | 'completed';
  * fingerprint (event + market + legs, profit excluded), so re-detections
  * update the same record instead of duplicating it.
  */
+/**
+ * Which detection strategy produced a record. Only 'arb' exists today;
+ * the discriminator is here so future strategies (+EV, middles) can share
+ * the persistence and alert rails without a migration.
+ */
+export type OpportunityStrategy = 'arb';
+
+/** Actual filled numbers captured when the user completes an opportunity. */
+export interface OpportunityExecution {
+  /** Aligned with the record's legs. */
+  filledLegs: Array<{ odds: number; stake: number }>;
+  totalStaked: number;
+  /** Worst-leg payout minus everything staked — locked at placement. */
+  lockedProfit: number;
+  recordedAt: string;
+}
+
 export interface OpportunityRecord {
   /** First 16 hex chars of the fingerprint — stable and URL-safe. */
   id: string;
   fingerprint: string;
+  strategy: OpportunityStrategy;
   eventId: string;
   sportKey: string;
   sportTitle: string;
@@ -145,6 +163,42 @@ export interface OpportunityRecord {
   /** Whether a WhatsApp alert was actually sent for it. */
   alerted: boolean;
   alertedAt: string | null;
+  /** Present once the user completed it with actual filled numbers. */
+  execution?: OpportunityExecution;
+}
+
+/* ————— Ledger (Phase 5) ————— */
+
+export interface DecayStat {
+  samples: number;
+  /** Mean detection-profit minus latest-evidence-profit, in percentage points. */
+  avgDropPp: number | null;
+}
+
+/** Server-computed P&L aggregates; the client does zero money arithmetic. */
+export interface LedgerSummary {
+  realized: {
+    totalLockedProfit: number;
+    completions: number;
+    /** Completions recorded without filled numbers — counted, never summed. */
+    unpricedCompletions: number;
+  };
+  equity: Array<{ at: string; cumulativeProfit: number }>;
+  monthly: Array<{ month: string; lockedProfit: number; completions: number }>;
+  /** Stake-weighted attribution — an arb's profit is not truly per-book. */
+  byBook: Array<{
+    bookmakerKey: string;
+    title: string;
+    staked: number;
+    lockedProfitShare: number;
+    legs: number;
+  }>;
+  bySport: Array<{ sportKey: string; title: string; lockedProfit: number; completions: number }>;
+  captureRate: { alerted: number; completed: number; rate: number | null };
+  decay: {
+    overall: DecayStat;
+    byBook: Array<{ bookmakerKey: string; title: string } & DecayStat>;
+  };
 }
 
 /** Credit/cost accounting for a scan. */

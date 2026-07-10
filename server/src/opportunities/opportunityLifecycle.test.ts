@@ -38,6 +38,7 @@ function recordFor(arb: ArbOpportunity, overrides: Partial<OpportunityRecord> = 
   return {
     id: opportunityIdFromFingerprint(fingerprint),
     fingerprint,
+    strategy: 'arb',
     eventId: arb.eventId,
     sportKey: arb.sportKey,
     sportTitle: arb.sportTitle,

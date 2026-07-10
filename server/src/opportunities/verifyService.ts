@@ -23,7 +23,7 @@ export type VerifyOutcome =
       legOdds: Array<number | null>;
       creditsCharged: number;
     }
-  | { ok: false; reason: 'not_found' | 'conflict'; message: string };
+  | { ok: false; reason: 'not_found' | 'conflict' | 'bad_request'; message: string };
 
 export async function verifyOpportunity(deps: VerifyDeps, id: string): Promise<VerifyOutcome> {
   const now = (deps.now ?? (() => new Date()))();

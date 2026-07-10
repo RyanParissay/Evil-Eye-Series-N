@@ -10,6 +10,7 @@ import type {
   BookPreset,
   BookmakerConfig,
   BookmakerStatusValue,
+  LedgerSummary,
   OpportunityRecord,
   ScanMeta,
   ScanResponse,
@@ -131,12 +132,22 @@ export async function verifyOpportunity(id: string): Promise<VerifyResponse> {
   });
 }
 
-export async function completeOpportunity(id: string): Promise<OpportunityRecord> {
+/** Completion books the ACTUAL filled numbers — they become realized P&L. */
+export async function completeOpportunity(
+  id: string,
+  filledLegs: Array<{ odds: number; stake: number }>,
+): Promise<OpportunityRecord> {
   return request<OpportunityRecord>(`/api/opportunities/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ status: 'completed' }),
+    body: JSON.stringify({ status: 'completed', filledLegs }),
   });
+}
+
+/* ————— Ledger ————— */
+
+export async function fetchLedgerSummary(): Promise<LedgerSummary> {
+  return request<LedgerSummary>('/api/ledger/summary');
 }
 
 /* ————— WhatsApp alerts ————— */

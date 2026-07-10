@@ -1417,3 +1417,209 @@ select.bm-input {
 .card-profit .card-cockpit-link {
   margin-top: 8px;
 }
+
+/* ————————————————————————————————————————————————
+   LEDGER — /ledger. Namespace: .ledger-*
+   The proof layer: one line, honest tables, tabular figures.
+   ———————————————————————————————————————————————— */
+
+.ledger {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding-top: 24px;
+}
+
+.ledger-heads {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+}
+
+.ledger-stat {
+  border: 1px solid var(--hairline);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ledger-stat strong {
+  font-size: 28px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.ledger-stat strong.is-up {
+  color: var(--red);
+}
+
+.ledger-stat strong.is-down {
+  color: var(--grey);
+}
+
+.ledger-note {
+  border-left: 2px solid var(--red);
+  padding-left: 10px;
+}
+
+.ledger-section {
+  padding-bottom: 8px;
+}
+
+.ledger-chart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.ledger-line {
+  fill: none;
+  stroke: var(--red);
+  stroke-width: 2;
+}
+
+.ledger-dot {
+  fill: var(--red);
+  stroke: var(--black);
+  stroke-width: 2;
+}
+
+.ledger-grid-zero {
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+
+.ledger-crosshair {
+  stroke: var(--hairline);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.ledger-axis {
+  fill: var(--grey);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ledger-tooltip {
+  padding-top: 6px;
+  color: var(--white);
+}
+
+.ledger-chart-empty {
+  padding: 24px 0;
+}
+
+.ledger-tables {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 28px;
+}
+
+@media (min-width: 720px) {
+  .ledger-tables {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.ledger-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.ledger-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--grey);
+  padding: 6px 8px 6px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.ledger-table td {
+  padding: 8px 8px 8px 0;
+  border-bottom: 1px solid var(--hairline-faint);
+}
+
+.ledger-table .num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.ledger-table th:not(:first-child) {
+  text-align: right;
+}
+
+.ledger-empty {
+  padding: 12px 0;
+}
+
+/* ————— Cockpit completion fills ————— */
+
+.cockpit-fill {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 0 8px;
+  border-top: 1px solid var(--hairline);
+}
+
+.cockpit-fill-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cockpit-fill-book {
+  flex: 1 1 100%;
+  font-weight: 700;
+}
+
+.cockpit-fill-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cockpit-fill-row input {
+  background: var(--black);
+  border: 1px solid var(--hairline);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 8px 10px;
+  width: 110px;
+  border-radius: 0;
+}
+
+.cockpit-fill-row input:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
+}
+
+.cockpit-fill-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@media (min-width: 640px) {
+  .cockpit-fill-book {
+    flex: 1 1 auto;
+  }
+
+  .cockpit-fill-actions {
+    flex-direction: row;
+  }
+
+  .cockpit-fill-actions .cockpit-action {
+    flex: 1;
+  }
+}

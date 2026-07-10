@@ -29,7 +29,11 @@ export class OpportunityStore extends JsonStore<OpportunityData> implements Oppo
       filePath,
       () => ({ records: [] }),
       (parsed) => ({
-        records: ((parsed ?? {}) as Partial<OpportunityData>).records ?? [],
+        // Pre-Phase-5 files lack the strategy discriminator; they were all arbs.
+        records: (((parsed ?? {}) as Partial<OpportunityData>).records ?? []).map((r) => ({
+          ...r,
+          strategy: r.strategy ?? ('arb' as const),
+        })),
       }),
     );
   }

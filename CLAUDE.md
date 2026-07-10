@@ -46,6 +46,10 @@ server/src/
                  opportunityService.ts, verifyService.ts (cockpit re-verify:
                  cheap legs-only live fetch → re-price → persist),
                  opportunityStore.ts (active JSON + monthly JSONL archive).
+  ledger/        ledgerService.ts — the P&L read model: streams the active
+                 file + JSONL archives line-by-line (never whole-file reads)
+                 into server-computed aggregates; CSV export is Excel-safe
+                 (quoted, formula-defanged). The client does ZERO money math.
   presets/       Advanced-mode book presets. presetStore.ts (JsonStore),
                  presetService.ts (CRUD + seeding + pure resolvePresetKeys —
                  dynamic presets resolve all_enabled/funded against the
@@ -161,6 +165,12 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
 - 404s use ApiErrorCode 'not_found' (stale cockpit deep link ≠ validation
   error) and invalid transitions use 'conflict' (409). Don't collapse them
   back into 'bad_request'.
+- Realized P&L comes ONLY from completions that carry filled numbers
+  (execution.lockedProfit = worst-leg payout − total staked, computed by
+  engine lockedProfit()). Unpriced completions count for capture rate but
+  are excluded from every dollar figure — never estimate money.
+- OpportunityRecord.strategy ('arb' today) is the future-strategies
+  discriminator; stores normalize it in for pre-Phase-5 files.
 - last-snapshot.json stores the RAW pre-filter feed on purpose — Advanced
   Mode presets must be able to recompute with books outside the current
   allowlist filter. Don't "fix" it to store filtered events.

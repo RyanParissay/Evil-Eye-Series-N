@@ -153,6 +153,37 @@ describe('opportunities routes', () => {
     expect(res.body.error.code).toBe('quota_exhausted');
   });
 
+  it('PATCH /:id completes with filled legs and returns the booked execution', async () => {
+    const { app, record } = await appWithOneRecord();
+    const res = await request(app)
+      .patch(`/api/opportunities/${record.id}`)
+      .send({
+        status: 'completed',
+        filledLegs: [
+          { odds: 2.1, stake: 243.9 },
+          { odds: 2.05, stake: 256.1 },
+        ],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.execution).toMatchObject({ totalStaked: 500 });
+    expect(res.body.execution.lockedProfit).toBeCloseTo(243.9 * 2.1 - 500, 2);
+  });
+
+  it('PATCH /:id rejects malformed filled legs with 400', async () => {
+    const { app, record } = await appWithOneRecord();
+    for (const filledLegs of [
+      [{ odds: 0.9, stake: 100 }, { odds: 2, stake: 100 }], // odds must exceed 1
+      [{ odds: 2, stake: -5 }, { odds: 2, stake: 100 }], // no negative stakes
+      [{ odds: 2, stake: 100 }], // must align with record legs
+      'nope',
+    ]) {
+      const res = await request(app)
+        .patch(`/api/opportunities/${record.id}`)
+        .send({ status: 'completed', filledLegs });
+      expect(res.status).toBe(400);
+    }
+  });
+
   it('PATCH /:id maps an invalid transition to 409 conflict', async () => {
     const { app, service, record } = await appWithOneRecord();
     await service.recordScan([], SCOPE); // sport rescanned, fingerprint gone → dead

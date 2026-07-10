@@ -24,9 +24,11 @@ import { senderFromEnv } from './notifications/whatsappSender';
 import { OpportunityService } from './opportunities/opportunityService';
 import { OpportunityArchive, OpportunityStore } from './opportunities/opportunityStore';
 import { verifyOpportunity } from './opportunities/verifyService';
+import { LedgerService } from './ledger/ledgerService';
 import { PresetService } from './presets/presetService';
 import { PresetStore } from './presets/presetStore';
 import { createAdvancedRouter } from './routes/advanced';
+import { createLedgerRouter } from './routes/ledger';
 import { MockOddsProvider } from './providers/MockOddsProvider';
 import type { OddsProvider } from './providers/OddsProvider';
 import { TheOddsApiProvider } from './providers/TheOddsApiProvider';
@@ -62,9 +64,14 @@ const bookmakerService = new BookmakerService(
   new BookmakerStore(path.join(serverRoot, BOOKMAKERS_FILE)),
 );
 
+const opportunityStore = new OpportunityStore(path.join(serverRoot, OPPORTUNITIES_FILE));
 const opportunityService = new OpportunityService(
-  new OpportunityStore(path.join(serverRoot, OPPORTUNITIES_FILE)),
+  opportunityStore,
   new OpportunityArchive(path.join(serverRoot, OPPORTUNITY_ARCHIVE_DIR)),
+);
+const ledgerService = new LedgerService(
+  opportunityStore,
+  path.join(serverRoot, OPPORTUNITY_ARCHIVE_DIR),
 );
 
 const snapshotStore = new SnapshotStore(path.join(serverRoot, LAST_SNAPSHOT_FILE));
@@ -77,6 +84,7 @@ const app = express();
 app.use(express.json());
 app.use('/api/whatsapp', createWhatsAppRouter({ store: whatsappStore, sender: whatsappSender }));
 app.use('/api/bookmakers', createBookmakersRouter(bookmakerService));
+app.use('/api/ledger', createLedgerRouter(ledgerService));
 app.use(
   '/api',
   createAdvancedRouter({

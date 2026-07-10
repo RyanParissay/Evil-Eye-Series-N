@@ -1,6 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import type { OddsEvent } from '@shared/types';
-import { findArbitrageOpportunities, priceLegs } from './arbitrage';
+import { findArbitrageOpportunities, lockedProfit, priceLegs } from './arbitrage';
+
+describe('lockedProfit', () => {
+  it('is the worst-leg payout minus everything staked', () => {
+    // Ideal split at 2.1/2.05: payouts ~102.44 / ~105.00 → worst ≈ 102.44.
+    const profit = lockedProfit([
+      { odds: 2.1, stake: 48.78 },
+      { odds: 2.05, stake: 51.22 },
+    ]);
+    expect(profit).toBeCloseTo(48.78 * 2.1 - 100, 2);
+  });
+
+  it('stays honest when filled stakes deviate from the ideal split', () => {
+    // Overweight one leg: if the other leg wins, you lose money — say so.
+    const profit = lockedProfit([
+      { odds: 2.1, stake: 90 },
+      { odds: 2.05, stake: 10 },
+    ]);
+    expect(profit).toBeCloseTo(10 * 2.05 - 100, 2);
+    expect(profit).toBeLessThan(0);
+  });
+});
 
 describe('priceLegs', () => {
   it('prices a leg set: arb index, profit, per-$100 stake split', () => {

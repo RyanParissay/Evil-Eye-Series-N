@@ -55,6 +55,17 @@ export interface LegPricing {
 }
 
 /**
+ * Realized money for a set of actually-placed legs: the worst leg's payout
+ * minus everything staked. For an ideal split this equals the arb profit;
+ * for a lopsided fill it honestly reports the downside outcome.
+ */
+export function lockedProfit(legs: Array<{ odds: number; stake: number }>): number {
+  const totalStaked = legs.reduce((sum, leg) => sum + leg.stake, 0);
+  const worstPayout = Math.min(...legs.map((leg) => leg.stake * leg.odds));
+  return worstPayout - totalStaked;
+}
+
+/**
  * The one place the stake-split math lives: detection prices candidate leg
  * sets through it, and the cockpit's re-verify re-prices stored legs with
  * fresh odds. Callers decide what S ≥ 1 means for them.

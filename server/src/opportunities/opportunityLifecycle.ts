@@ -6,7 +6,7 @@
  */
 import type { ArbOpportunity, OpportunityRecord } from '@shared/types';
 import { OPPORTUNITY_ARCHIVE_AFTER_MS, VERIFY_PROFIT_TOLERANCE_PP } from '../config/constants';
-import { priceLegs } from '../engine/arbitrage';
+import { lockedProfit, priceLegs } from '../engine/arbitrage';
 import { opportunityFingerprint, opportunityIdFromFingerprint } from './opportunityId';
 
 export interface ScanScope {
@@ -55,6 +55,7 @@ export function applyScanToRecords(
       byFingerprint.set(fingerprint, {
         id: opportunityIdFromFingerprint(fingerprint),
         fingerprint,
+        strategy: 'arb',
         eventId: arb.eventId,
         sportKey: arb.sportKey,
         sportTitle: arb.sportTitle,
@@ -145,6 +146,27 @@ export function applyVerification(
 
 /** Statuses the cockpit may set by hand; scans own active/dead. */
 export type CockpitStatus = 'degraded' | 'completed';
+
+/**
+ * Book the actual filled numbers onto a record being completed. Pure;
+ * callers validate alignment first. The money math is the engine's.
+ */
+export function applyExecution(
+  record: OpportunityRecord,
+  filledLegs: Array<{ odds: number; stake: number }>,
+  now: Date,
+): void {
+  record.execution = {
+    filledLegs: filledLegs.map((leg) => ({ odds: leg.odds, stake: leg.stake })),
+    totalStaked: round2(filledLegs.reduce((sum, leg) => sum + leg.stake, 0)),
+    lockedProfit: round2(lockedProfit(filledLegs)),
+    recordedAt: now.toISOString(),
+  };
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
 
 export type StatusChange = { ok: true } | { ok: false; message: string };
 

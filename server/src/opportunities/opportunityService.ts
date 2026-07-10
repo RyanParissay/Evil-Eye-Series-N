@@ -4,6 +4,7 @@
  */
 import type { ArbOpportunity, OpportunityRecord, OpportunityStatus } from '@shared/types';
 import {
+  applyExecution,
   applyScanToRecords,
   applyStatusChange,
   applyVerification,
@@ -15,7 +16,7 @@ import type { OpportunityArchiveWriter, OpportunityDataStore } from './opportuni
 
 export type UpdateStatusOutcome =
   | { ok: true; record: OpportunityRecord }
-  | { ok: false; reason: 'not_found' | 'conflict'; message: string };
+  | { ok: false; reason: 'not_found' | 'conflict' | 'bad_request'; message: string };
 
 export class OpportunityService {
   constructor(
@@ -59,25 +60,37 @@ export class OpportunityService {
     });
   }
 
-  /** Cockpit-driven transition (degraded/completed) on one record. */
-  async updateStatus(id: string, target: CockpitStatus): Promise<UpdateStatusOutcome> {
+  /**
+   * Cockpit-driven transition (degraded/completed) on one record.
+   * Completing may carry the actual filled legs; they must align with the
+   * record's legs and are booked as the execution (realized P&L source).
+   */
+  async updateStatus(
+    id: string,
+    target: CockpitStatus,
+    filledLegs?: Array<{ odds: number; stake: number }>,
+  ): Promise<UpdateStatusOutcome> {
     const at = this.now();
     return this.store.update((data) => {
       const record = data.records.find((r) => r.id === id);
+      let result: UpdateStatusOutcome;
       if (!record) {
-        return {
-          data,
-          result: {
-            ok: false as const,
-            reason: 'not_found' as const,
-            message: `Unknown opportunity: ${id}`,
-          },
+        result = { ok: false, reason: 'not_found', message: `Unknown opportunity: ${id}` };
+      } else if (filledLegs && (target !== 'completed' || filledLegs.length !== record.legs.length)) {
+        result = {
+          ok: false,
+          reason: 'bad_request',
+          message: `filledLegs must accompany completion and align with the record's ${record.legs.length} legs`,
         };
+      } else {
+        const change = applyStatusChange(record, target, at);
+        if (change.ok) {
+          if (filledLegs) applyExecution(record, filledLegs, at);
+          result = { ok: true, record };
+        } else {
+          result = { ok: false, reason: 'conflict', message: change.message };
+        }
       }
-      const change = applyStatusChange(record, target, at);
-      const result: UpdateStatusOutcome = change.ok
-        ? { ok: true, record }
-        : { ok: false, reason: 'conflict', message: change.message };
       return { data, result };
     });
   }

@@ -114,6 +114,43 @@ describe('OpportunityService', () => {
     expect((await service.get(record.id))?.status).toBe('dead');
   });
 
+  it('stamps new records with the arb strategy discriminator', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    await service.recordScan([makeArb()], SCOPE);
+    expect((await service.list())[0].strategy).toBe('arb');
+  });
+
+  it('completing with filled legs books the execution money', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    await service.recordScan([makeArb()], SCOPE);
+    const [record] = await service.list();
+
+    const outcome = await service.updateStatus(record.id, 'completed', [
+      { odds: 2.08, stake: 240 },
+      { odds: 2.05, stake: 260 },
+    ]);
+    expect(outcome.ok).toBe(true);
+    const stored = await service.get(record.id);
+    expect(stored?.execution).toMatchObject({
+      totalStaked: 500,
+      recordedAt: NOW.toISOString(),
+    });
+    // Worst payout: min(240×2.08, 260×2.05) = min(499.2, 533) → −0.80.
+    expect(stored?.execution?.lockedProfit).toBeCloseTo(-0.8, 2);
+  });
+
+  it('rejects filled legs that do not align with the record legs', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    await service.recordScan([makeArb()], SCOPE);
+    const [record] = await service.list();
+    const outcome = await service.updateStatus(record.id, 'completed', [{ odds: 2.1, stake: 100 }]);
+    expect(outcome).toMatchObject({ ok: false, reason: 'bad_request' });
+    expect((await service.get(record.id))?.status).toBe('active');
+  });
+
   it('ages settled records into the archive and drops them from the active file', async () => {
     const store = new FakeStore();
     const archive = new FakeArchive();

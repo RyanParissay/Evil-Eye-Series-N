@@ -148,7 +148,8 @@ export function ScanPage() {
         </h1>
         <p className="tagline micro-label">
           Cross-book odds surveillance · guaranteed-profit finder ·{' '}
-          <Link to="/advanced" className="adv-back">Advanced →</Link>
+          <Link to="/advanced" className="adv-back">Advanced →</Link> ·{' '}
+          <Link to="/ledger" className="adv-back">Ledger →</Link>
         </p>
       </header>
 
