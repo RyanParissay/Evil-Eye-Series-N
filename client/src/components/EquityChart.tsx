@@ -10,46 +10,56 @@ const H = 220;
 const PAD = { top: 12, right: 16, bottom: 26, left: 56 };
 
 /**
- * Cumulative realized profit as a step-after line (profit jumps at each
- * completion; interpolating between events would invent money). Single
- * series — the heading names it, no legend. Hand-rolled SVG, no deps.
+ * Cumulative profit as a step-after line (profit jumps at events;
+ * interpolating between them would invent money). Optionally a second,
+ * dashed series (the paper fund's haircut curve) — with a legend, since
+ * two series must never be color-alone. Hand-rolled SVG, no deps.
  */
-export function EquityChart({ points }: { points: Point[] }) {
+export function EquityChart({
+  points,
+  secondary,
+  labels,
+  emptyText = 'No priced completions yet — the curve starts with the first one.',
+}: {
+  points: Point[];
+  secondary?: Point[];
+  labels?: { primary: string; secondary: string };
+  emptyText?: string;
+}) {
   const [hover, setHover] = useState<number | null>(null);
 
   const geometry = useMemo(() => {
     if (points.length === 0) return null;
-    const t0 = Date.parse(points[0].at);
-    const t1 = Date.parse(points[points.length - 1].at);
+    const all = [...points, ...(secondary ?? [])];
+    const times = all.map((p) => Date.parse(p.at));
+    const t0 = Math.min(...times);
+    const t1 = Math.max(...times);
     const span = Math.max(t1 - t0, 1);
-    const values = points.map((p) => p.cumulativeProfit);
+    const values = all.map((p) => p.cumulativeProfit);
     const lo = Math.min(0, ...values);
     const hi = Math.max(0, ...values);
     const range = Math.max(hi - lo, 1);
     const x = (at: string) =>
       PAD.left + ((Date.parse(at) - t0) / span) * (W - PAD.left - PAD.right);
     const y = (v: number) => PAD.top + ((hi - v) / range) * (H - PAD.top - PAD.bottom);
-    const path = points
-      .map((p, i) => {
-        const px = x(p.at).toFixed(1);
-        const py = y(p.cumulativeProfit).toFixed(1);
-        if (i === 0) return `M ${px} ${py}`;
-        const prevY = y(points[i - 1].cumulativeProfit).toFixed(1);
-        return `L ${px} ${prevY} L ${px} ${py}`; // step-after
-      })
-      .join(' ');
-    return { x, y, path, lo, hi };
-  }, [points]);
+    const stepPath = (series: Point[]) =>
+      series
+        .map((p, i) => {
+          const px = x(p.at).toFixed(1);
+          const py = y(p.cumulativeProfit).toFixed(1);
+          if (i === 0) return `M ${px} ${py}`;
+          const prevY = y(series[i - 1].cumulativeProfit).toFixed(1);
+          return `L ${px} ${prevY} L ${px} ${py}`; // step-after
+        })
+        .join(' ');
+    return { x, y, path: stepPath(points), path2: secondary?.length ? stepPath(secondary) : null, lo, hi };
+  }, [points, secondary]);
 
   if (!geometry) {
-    return (
-      <p className="ledger-chart-empty micro-label">
-        No priced completions yet — the curve starts with the first one.
-      </p>
-    );
+    return <p className="ledger-chart-empty micro-label">{emptyText}</p>;
   }
 
-  const { x, y, path, lo, hi } = geometry;
+  const { x, y, path, path2, lo, hi } = geometry;
   const zeroY = y(0);
   const hovered = hover != null ? points[hover] : null;
 
@@ -97,6 +107,7 @@ export function EquityChart({ points }: { points: Point[] }) {
           {day(points[points.length - 1].at)}
         </text>
 
+        {path2 && <path d={path2} className="ledger-line-secondary" />}
         <path d={path} className="ledger-line" />
         {/* Markers when sparse, so single completions are visible. */}
         {points.length <= 40 &&
@@ -119,6 +130,16 @@ export function EquityChart({ points }: { points: Point[] }) {
           />
         )}
       </svg>
+      {labels && path2 && (
+        <div className="ledger-legend micro-label">
+          <span>
+            <span className="ledger-legend-swatch is-primary" /> {labels.primary}
+          </span>
+          <span>
+            <span className="ledger-legend-swatch is-secondary" /> {labels.secondary}
+          </span>
+        </div>
+      )}
       {hovered && (
         <div className="ledger-tooltip micro-label" role="status">
           {day(hovered.at)} · cumulative {dollars(hovered.cumulativeProfit)}

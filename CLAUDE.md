@@ -57,10 +57,17 @@ server/src/
   lib/           jsonStore.ts — generic crash-safe serialized JSON store; every
                  file store (scan/whatsapp/bookmakers) is or should be one.
   notifications/ WhatsApp alerts: whatsappSender.ts (Twilio via fetch OR console
-                 dev mode), alertService.ts (threshold match, fingerprint dedup,
-                 rate limit, failure deactivation), verification.ts (hashed
-                 6-digit codes), subscriptionStore.ts (JSON persistence,
-                 serialized update()), whatsappRequests.ts (validation, E.164).
+                 dev mode), alertService.ts (alertWorthy — THE strategy-agnostic
+                 selection core: threshold, non-suspicious, non-same-book,
+                 fingerprint dedup; WhatsApp AND the paper fund both call it —
+                 plus per-subscription rate limit, failure deactivation),
+                 verification.ts (hashed 6-digit codes), subscriptionStore.ts,
+                 whatsappRequests.ts (validation, E.164).
+  paper/         The SIMULATED shadow fund. paperStore.ts (own JsonStore,
+                 facts only), paperMath.ts (pure deterministic settlement:
+                 lazy at commence time, %-staking compounds off the settled
+                 bankroll at entry, expectation-style haircut), paperService.ts
+                 (entry via alertWorthy on the post-filterAlertable stream).
   routes/        Express boundary: parse → runScan → JSON; ProviderError → HTTP status.
                  api.ts (/api/scan, /api/last-scan) + whatsapp.ts (/api/whatsapp/*).
   config/        constants.ts (every tunable) + bookmakerLinks.ts (homepage fallbacks)
@@ -171,6 +178,12 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   are excluded from every dollar figure — never estimate money.
 - OpportunityRecord.strategy ('arb' today) is the future-strategies
   discriminator; stores normalize it in for pre-Phase-5 files.
+- Everything paper-fund is SIMULATED and says so: `simulated: true` in
+  every API payload, badges in the UI. Paper state lives in its own store
+  and never touches balances, alerts, opportunity records, or credits; a
+  paper failure in the notifier is a console.warn, never a dropped alert.
+- Alert selection rules exist exactly once (alertWorthy). Adding a
+  strategy or channel must reuse it, not restate it.
 - last-snapshot.json stores the RAW pre-filter feed on purpose — Advanced
   Mode presets must be able to recompute with books outside the current
   allowlist filter. Don't "fix" it to store filtered events.

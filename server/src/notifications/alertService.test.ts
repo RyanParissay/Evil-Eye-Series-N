@@ -6,6 +6,7 @@ import {
   WHATSAPP_SENT_ALERT_RETENTION_MS,
 } from '../config/constants';
 import {
+  alertWorthy,
   formatAlertMessage,
   notifyNewOpportunities,
   opportunityFingerprint,
@@ -199,6 +200,25 @@ describe('selectAlerts', () => {
       ],
     });
     expect(selectAlerts([makeArb()], data, NOW).planned).toHaveLength(1);
+  });
+});
+
+describe('alertWorthy (the strategy-agnostic selection core)', () => {
+  it('applies threshold, flags, and dedup in one place', () => {
+    const seen = new Set([opportunityFingerprint(makeArb())]);
+    const picks = alertWorthy(
+      [
+        makeArb(), // already seen → skipped
+        makeArb({ eventId: 'evt-sus', suspicious: true }),
+        makeArb({ eventId: 'evt-same', sameBookmaker: true }),
+        makeArb({ eventId: 'evt-low', profitPct: 1.5 }),
+        makeArb({ eventId: 'evt-good' }),
+      ],
+      2,
+      (fp) => seen.has(fp),
+    );
+    expect(picks.map((p) => p.opportunity.eventId)).toEqual(['evt-good']);
+    expect(picks[0].fingerprint).toBe(opportunityFingerprint(makeArb({ eventId: 'evt-good' })));
   });
 });
 

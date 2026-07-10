@@ -4,6 +4,7 @@ import type { ApiErrorCode, LedgerSummary } from '../../../shared/types';
 import { ApiError, fetchLedgerSummary } from '../api';
 import { EquityChart } from '../components/EquityChart';
 import { EyeGlyph } from '../components/EyeGlyph';
+import { PaperPanel } from '../components/PaperPanel';
 import { errorHint, errorTitle } from '../errorCopy';
 
 /**
@@ -109,6 +110,8 @@ export function LedgerPage() {
             <h2 className="ledger-section micro-label">Equity — cumulative realized profit</h2>
             <EquityChart points={summary.equity} />
           </section>
+
+          <PaperPanel realMonthly={summary.monthly} />
 
           <div className="ledger-tables">
             <section>

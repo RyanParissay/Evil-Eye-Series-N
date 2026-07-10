@@ -37,6 +37,30 @@ export interface AlertSelection {
   droppedByRateLimit: number;
 }
 
+/**
+ * The strategy-agnostic selection core: which opportunities deserve acting
+ * on, given a threshold and a memory of what was already acted on. The
+ * WhatsApp path AND the paper-trading book both go through this — the
+ * rules (non-suspicious, non-same-book, threshold, fingerprint dedup)
+ * exist exactly once.
+ */
+export function alertWorthy(
+  opportunities: ArbOpportunity[],
+  thresholdPercent: number,
+  alreadySeen: (fingerprint: string) => boolean,
+): Array<{ opportunity: ArbOpportunity; fingerprint: string }> {
+  const picks: Array<{ opportunity: ArbOpportunity; fingerprint: string }> = [];
+  for (const opportunity of opportunities) {
+    // Flagged arbs stay visible in the UI but don't page anyone's phone.
+    if (opportunity.suspicious || opportunity.sameBookmaker) continue;
+    if (opportunity.profitPct < thresholdPercent) continue;
+    const fingerprint = opportunityFingerprint(opportunity);
+    if (alreadySeen(fingerprint)) continue;
+    picks.push({ opportunity, fingerprint });
+  }
+  return picks;
+}
+
 export function selectAlerts(
   opportunities: ArbOpportunity[],
   data: WhatsAppData,
@@ -52,12 +76,10 @@ export function selectAlerts(
     let budget =
       WHATSAPP_MAX_ALERTS_PER_HOUR -
       subscription.sendTimestamps.filter((t) => Date.parse(t) > rateCutoff).length;
-    for (const opportunity of opportunities) {
-      // Flagged arbs stay visible in the UI but don't page anyone's phone.
-      if (opportunity.suspicious || opportunity.sameBookmaker) continue;
-      if (opportunity.profitPct < subscription.thresholdPercent) continue;
-      const fingerprint = opportunityFingerprint(opportunity);
-      if (alreadySent.has(`${subscription.phoneE164}|${fingerprint}`)) continue;
+    const worthy = alertWorthy(opportunities, subscription.thresholdPercent, (fingerprint) =>
+      alreadySent.has(`${subscription.phoneE164}|${fingerprint}`),
+    );
+    for (const { opportunity, fingerprint } of worthy) {
       if (budget <= 0) {
         droppedByRateLimit += 1;
         continue;

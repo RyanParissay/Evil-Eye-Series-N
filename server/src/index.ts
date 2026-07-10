@@ -15,6 +15,7 @@ import {
   LAST_SNAPSHOT_FILE,
   OPPORTUNITIES_FILE,
   OPPORTUNITY_ARCHIVE_DIR,
+  PAPER_FILE,
   PRESETS_FILE,
   WHATSAPP_DATA_FILE,
 } from './config/constants';
@@ -25,6 +26,9 @@ import { OpportunityService } from './opportunities/opportunityService';
 import { OpportunityArchive, OpportunityStore } from './opportunities/opportunityStore';
 import { verifyOpportunity } from './opportunities/verifyService';
 import { LedgerService } from './ledger/ledgerService';
+import { PaperService } from './paper/paperService';
+import { PaperStore } from './paper/paperStore';
+import { createPaperRouter } from './routes/paper';
 import { PresetService } from './presets/presetService';
 import { PresetStore } from './presets/presetStore';
 import { createAdvancedRouter } from './routes/advanced';
@@ -85,6 +89,8 @@ app.use(express.json());
 app.use('/api/whatsapp', createWhatsAppRouter({ store: whatsappStore, sender: whatsappSender }));
 app.use('/api/bookmakers', createBookmakersRouter(bookmakerService));
 app.use('/api/ledger', createLedgerRouter(ledgerService));
+const paperService = new PaperService(new PaperStore(path.join(serverRoot, PAPER_FILE)));
+app.use('/api/paper', createPaperRouter(paperService));
 app.use(
   '/api',
   createAdvancedRouter({
@@ -111,9 +117,17 @@ app.use(
     // Limited/dead/disabled books never page the phone — filter before
     // dispatch; whatever actually sent gets flagged on its stored record.
     notifier: async (opportunities) => {
+      const alertable = await bookmakerService.filterAlertable(opportunities);
+      // The paper fund watches the SAME alertable stream a phone would —
+      // its failure must never dent the real alert path.
+      try {
+        await paperService.considerEntries(alertable);
+      } catch (err) {
+        console.warn('Paper fund entry failed:', err);
+      }
       const { sentFingerprints } = await notifyNewOpportunities(
         { store: whatsappStore, sender: whatsappSender, appUrl },
-        await bookmakerService.filterAlertable(opportunities),
+        alertable,
       );
       await opportunityService.markAlerted(sentFingerprints);
     },

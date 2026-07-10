@@ -297,6 +297,72 @@ export interface WhatsAppStatus {
   devMode: boolean;
 }
 
+/* ————— Paper trading (Phase 6) — everything here is SIMULATED ————— */
+
+export interface PaperStakeRule {
+  kind: 'flat' | 'percent';
+  /** Dollars for flat, percent of paper bankroll for percent. */
+  value: number;
+}
+
+export interface PaperSettings {
+  enabled: boolean;
+  /** Clearly fake money. */
+  startingBankroll: number;
+  stakeRule: PaperStakeRule;
+  /** Expectation-style slippage on the secondary curve, in percent of profit. */
+  haircutPercent: number;
+  /** Entry threshold — independent of any WhatsApp subscription. */
+  thresholdPercent: number;
+}
+
+/** Stored facts of one simulated entry; all money derives on read. */
+export interface PaperEntry {
+  id: string;
+  fingerprint: string;
+  eventId: string;
+  eventName: string;
+  sportKey: string;
+  sportTitle: string;
+  marketKey: string;
+  /** Profit % at alert time — entry uses alert-time odds. */
+  profitPct: number;
+  arbIndex: number;
+  legs: ArbLeg[];
+  enteredAt: string;
+  commenceTime: string;
+}
+
+export interface SettledPaperEntry extends PaperEntry {
+  stake: number;
+  idealProfit: number;
+  haircutProfit: number;
+  /** True once the event commenced — outcome-independent profit realizes. */
+  settled: boolean;
+}
+
+export interface PaperBook {
+  entries: SettledPaperEntry[];
+  equityIdeal: Array<{ at: string; cumulativeProfit: number }>;
+  equityHaircut: Array<{ at: string; cumulativeProfit: number }>;
+  monthly: Array<{ month: string; ideal: number; haircut: number }>;
+  bankrollIdeal: number;
+  bankrollHaircut: number;
+  /** Stake tied up in not-yet-commenced entries. */
+  openStake: number;
+}
+
+export interface PaperData {
+  settings: PaperSettings;
+  entries: PaperEntry[];
+}
+
+export interface PaperView {
+  simulated: true;
+  settings: PaperSettings;
+  book: PaperBook;
+}
+
 /** Machine-readable error codes surfaced to the UI. */
 export type ApiErrorCode =
   | 'invalid_api_key'

@@ -12,6 +12,8 @@ import type {
   BookmakerStatusValue,
   LedgerSummary,
   OpportunityRecord,
+  PaperSettings,
+  PaperView,
   ScanMeta,
   ScanResponse,
   WhatsAppStatus,
@@ -148,6 +150,24 @@ export async function completeOpportunity(
 
 export async function fetchLedgerSummary(): Promise<LedgerSummary> {
   return request<LedgerSummary>('/api/ledger/summary');
+}
+
+/* ————— Paper fund (SIMULATED) ————— */
+
+export async function fetchPaper(): Promise<PaperView> {
+  return request<PaperView>('/api/paper');
+}
+
+export async function patchPaperSettings(patch: Partial<PaperSettings>): Promise<PaperView> {
+  return request<PaperView>('/api/paper/settings', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function resetPaper(): Promise<PaperView> {
+  return request<PaperView>('/api/paper/reset', { method: 'POST' });
 }
 
 /* ————— WhatsApp alerts ————— */

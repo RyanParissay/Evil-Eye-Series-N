@@ -1623,3 +1623,135 @@ select.bm-input {
     flex: 1;
   }
 }
+
+/* ————— Paper fund (SIMULATED) ————— */
+
+.paper {
+  border: 1px dashed var(--hairline);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.paper-badge {
+  border: 1px solid var(--red);
+  color: var(--red);
+  padding: 2px 8px;
+  margin-left: 10px;
+  letter-spacing: 0.18em;
+}
+
+.paper-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+}
+
+.paper-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.paper-controls input,
+.paper-controls select {
+  background: var(--black);
+  border: 1px solid var(--hairline);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  padding: 7px 9px;
+  width: 96px;
+  border-radius: 0;
+}
+
+.paper-controls input:focus-visible,
+.paper-controls select:focus-visible,
+.paper-toggle:focus-visible,
+.paper-reset:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
+}
+
+.paper-toggle {
+  background: var(--black);
+  border: 1px solid var(--white);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+/* Green means "surveillance live" app-wide; paper ON borrows the same
+   meaning: the shadow fund is watching every scan. */
+.paper-toggle.is-on {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.paper-reset {
+  background: none;
+  border: none;
+  color: var(--grey);
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 11px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--hairline);
+  padding: 2px 0;
+  margin-left: auto;
+}
+
+.paper-reset:hover {
+  color: var(--red);
+}
+
+.paper-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+}
+
+.paper-off-note,
+.paper-error {
+  padding: 4px 0;
+}
+
+.paper-error {
+  color: var(--red);
+}
+
+.ledger-line-secondary {
+  fill: none;
+  stroke: var(--white);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+}
+
+.ledger-legend {
+  display: flex;
+  gap: 18px;
+  padding-top: 6px;
+}
+
+.ledger-legend-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 0;
+  border-top: 2px solid var(--red);
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+.ledger-legend-swatch.is-secondary {
+  border-top-style: dashed;
+  border-top-color: var(--white);
+}
