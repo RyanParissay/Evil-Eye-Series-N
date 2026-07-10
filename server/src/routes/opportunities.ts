@@ -6,6 +6,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import type { OpportunityStatus } from '@shared/types';
 import type { CockpitStatus } from '../opportunities/opportunityLifecycle';
 import type { OpportunityService } from '../opportunities/opportunityService';
+import type { ReconcileOutcome } from '../opportunities/reconcileBalances';
 import type { VerifyOutcome } from '../opportunities/verifyService';
 import { errorBody } from './api';
 
@@ -15,7 +16,17 @@ const COCKPIT_STATUSES: readonly CockpitStatus[] = ['degraded', 'completed'];
 /** verifyOpportunity with its deps already bound (wired in index.ts). */
 export type VerifyRunner = (id: string) => Promise<VerifyOutcome>;
 
-export function createOpportunitiesRouter(service: OpportunityService, verify: VerifyRunner): Router {
+/** applyToBalances/revertBalances with deps bound (wired in index.ts). */
+export interface ReconcileRunners {
+  apply: (id: string, winningLegIndex: number) => Promise<ReconcileOutcome>;
+  revert: (id: string) => Promise<ReconcileOutcome>;
+}
+
+export function createOpportunitiesRouter(
+  service: OpportunityService,
+  verify: VerifyRunner,
+  reconcile?: ReconcileRunners,
+): Router {
   const router = Router();
 
   router.get('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -66,6 +77,29 @@ export function createOpportunitiesRouter(service: OpportunityService, verify: V
     }
   });
 
+  if (reconcile) {
+    router.post('/:id/apply-balances', async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const winningLegIndex = (req.body ?? {}).winningLegIndex;
+        if (!Number.isInteger(winningLegIndex) || winningLegIndex < 0) {
+          res.status(400).json(errorBody('bad_request', 'winningLegIndex (integer) required'));
+          return;
+        }
+        respondReconcile(res, await reconcile.apply(req.params.id, winningLegIndex));
+      } catch (err) {
+        next(err);
+      }
+    });
+
+    router.post('/:id/revert-balances', async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        respondReconcile(res, await reconcile.revert(req.params.id));
+      } catch (err) {
+        next(err);
+      }
+    });
+  }
+
   router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { status, filledLegs } = (req.body ?? {}) as { status?: unknown; filledLegs?: unknown };
@@ -99,6 +133,16 @@ export function createOpportunitiesRouter(service: OpportunityService, verify: V
   });
 
   return router;
+}
+
+function respondReconcile(res: Response, outcome: ReconcileOutcome): void {
+  if (!outcome.ok) {
+    const httpStatus =
+      outcome.reason === 'not_found' ? 404 : outcome.reason === 'conflict' ? 409 : 400;
+    res.status(httpStatus).json(errorBody(outcome.reason, outcome.message));
+    return;
+  }
+  res.json(outcome.record);
 }
 
 function isFilledLegs(value: unknown): value is Array<{ odds: number; stake: number }> {

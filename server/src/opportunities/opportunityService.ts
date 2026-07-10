@@ -119,6 +119,26 @@ export class OpportunityService {
     });
   }
 
+  /** Marks (or clears, with null) the applied-to-balances state. */
+  async markBalancesApplied(
+    id: string,
+    winningLegIndex: number | null,
+  ): Promise<UpdateStatusOutcome> {
+    const at = this.now().toISOString();
+    return this.store.update((data) => {
+      const record = data.records.find((r) => r.id === id);
+      let result: UpdateStatusOutcome;
+      if (!record || !record.execution) {
+        result = { ok: false, reason: 'not_found', message: `No priced execution: ${id}` };
+      } else {
+        record.execution.balancesAppliedAt = winningLegIndex == null ? null : at;
+        record.execution.winningLegIndex = winningLegIndex;
+        result = { ok: true, record };
+      }
+      return { data, result };
+    });
+  }
+
   async get(id: string): Promise<OpportunityRecord | null> {
     const { records } = await this.store.read();
     return records.find((r) => r.id === id) ?? null;

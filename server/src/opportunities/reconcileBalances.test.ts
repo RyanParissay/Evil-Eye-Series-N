@@ -1,0 +1,134 @@
+import { describe, expect, it } from 'vitest';
+import type { ArbOpportunity, BookmakerConfig } from '@shared/types';
+import { BookmakerService } from '../bookmakers/bookmakerService';
+import type { BookmakerData, BookmakerDataStore } from '../bookmakers/bookmakerStore';
+import { OpportunityService } from './opportunityService';
+import type { OpportunityData, OpportunityDataStore } from './opportunityStore';
+import { applyToBalances, revertBalances } from './reconcileBalances';
+
+const NOW = new Date('2026-07-10T12:00:00Z');
+
+class MemStore<T> {
+  constructor(public data: T) {}
+  async read(): Promise<T> {
+    return this.data;
+  }
+  async update<R>(
+    mutate: (data: T) => { data: T; result: R } | Promise<{ data: T; result: R }>,
+  ): Promise<R> {
+    const { data, result } = await mutate(this.data);
+    this.data = data;
+    return result;
+  }
+}
+
+class FakeArchive {
+  async append(): Promise<void> {}
+}
+
+function makeArb(): ArbOpportunity {
+  return {
+    eventId: 'evt-1',
+    sportKey: 'basketball_nba',
+    sportTitle: 'NBA',
+    eventName: 'Lakers @ Celtics',
+    commenceTime: '2026-07-09T00:00:00Z',
+    marketKey: 'h2h',
+    arbIndex: 0.977,
+    profitPct: 2.34,
+    legs: [
+      { outcome: 'Lakers', bookmakerKey: 'bet365', bookmakerTitle: 'Bet365', odds: 2.1, stake: 48.78, link: null },
+      { outcome: 'Celtics', bookmakerKey: 'pinnacle', bookmakerTitle: 'Pinnacle', odds: 2.05, stake: 51.22, link: null },
+    ],
+    sameBookmaker: false,
+    suspicious: false,
+  };
+}
+
+function book(key: string, balance: number): BookmakerConfig {
+  return {
+    key,
+    title: key,
+    enabled: true,
+    balance,
+    status: 'active',
+    notes: '',
+    firstSeenAt: NOW.toISOString(),
+    lastSeenAt: NOW.toISOString(),
+  };
+}
+
+async function harness() {
+  const oppStore = new MemStore<OpportunityData>({ records: [] });
+  const bookStore = new MemStore<BookmakerData>({
+    bookmakers: [book('bet365', 1000), book('pinnacle', 1000)],
+  });
+  const opportunities = new OpportunityService(
+    oppStore as unknown as OpportunityDataStore,
+    new FakeArchive(),
+    () => NOW,
+  );
+  const books = new BookmakerService(bookStore as unknown as BookmakerDataStore, () => NOW);
+  await opportunities.recordScan([makeArb()], { sportsScanned: ['basketball_nba'], regionTab: 'ca' });
+  const [record] = await opportunities.list();
+  // Completed with filled numbers: bet365 $240 @2.08, pinnacle $260 @2.05.
+  await opportunities.updateStatus(record.id, 'completed', [
+    { odds: 2.08, stake: 240 },
+    { odds: 2.05, stake: 260 },
+  ]);
+  return { opportunities, books, bookStore, record };
+}
+
+describe('apply-to-balances / revert', () => {
+  it('moves exactly the filled amounts and reverts byte-identically', async () => {
+    const { opportunities, books, bookStore, record } = await harness();
+    const deps = { opportunities, books };
+
+    // Winner = leg 1 (pinnacle): bet365 loses its stake, pinnacle nets payout − stake.
+    const applied = await applyToBalances(deps, record.id, 1);
+    expect(applied.ok).toBe(true);
+    const after = Object.fromEntries(bookStore.data.bookmakers.map((b) => [b.key, b.balance]));
+    expect(after.bet365).toBeCloseTo(1000 - 240, 2);
+    expect(after.pinnacle).toBeCloseTo(1000 - 260 + 260 * 2.05, 2);
+    expect((await opportunities.get(record.id))?.execution?.balancesAppliedAt).toBe(
+      NOW.toISOString(),
+    );
+
+    // Double-apply refuses.
+    expect(await applyToBalances(deps, record.id, 1)).toMatchObject({
+      ok: false,
+      reason: 'conflict',
+    });
+
+    // Revert restores the exact starting balances and clears the marker.
+    const reverted = await revertBalances(deps, record.id);
+    expect(reverted.ok).toBe(true);
+    const restored = Object.fromEntries(bookStore.data.bookmakers.map((b) => [b.key, b.balance]));
+    expect(restored.bet365).toBeCloseTo(1000, 2);
+    expect(restored.pinnacle).toBeCloseTo(1000, 2);
+    expect((await opportunities.get(record.id))?.execution?.balancesAppliedAt).toBeNull();
+    expect(await revertBalances(deps, record.id)).toMatchObject({ ok: false, reason: 'conflict' });
+  });
+
+  it('guards: unknown id, not completed, no execution, bad winner index', async () => {
+    const { opportunities, books } = await harness();
+    const deps = { opportunities, books };
+    expect(await applyToBalances(deps, 'nope', 0)).toMatchObject({ ok: false, reason: 'not_found' });
+
+    await opportunities.recordScan(
+      [{ ...makeArb(), eventId: 'evt-2', commenceTime: '2026-07-11T00:00:00Z' }],
+      { sportsScanned: ['basketball_nba'], regionTab: 'ca' },
+    );
+    const active = (await opportunities.list()).find((r) => r.status === 'active')!;
+    expect(await applyToBalances(deps, active.id, 0)).toMatchObject({
+      ok: false,
+      reason: 'conflict',
+    });
+
+    const [completed] = (await opportunities.list()).filter((r) => r.status === 'completed');
+    expect(await applyToBalances(deps, completed.id, 5)).toMatchObject({
+      ok: false,
+      reason: 'bad_request',
+    });
+  });
+});

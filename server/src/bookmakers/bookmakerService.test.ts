@@ -87,6 +87,33 @@ describe('BookmakerService', () => {
     expect(await service.patch('nope', { enabled: false })).toBeNull();
   });
 
+  it('patching the balance stamps balanceUpdatedAt; other edits do not', async () => {
+    const store = new FakeStore();
+    const service = new BookmakerService(store, () => NOW);
+    await service.recordSeen([makeEvent([['bet365', 'Bet365']])]);
+
+    await service.patch('bet365', { notes: 'no stamp' });
+    expect(store.data.bookmakers[0].balanceUpdatedAt).toBeUndefined();
+
+    await service.patch('bet365', { balance: 500 });
+    expect(store.data.bookmakers[0].balanceUpdatedAt).toBe(NOW.toISOString());
+  });
+
+  it('adjustBalances applies exact deltas atomically, treating null as zero', async () => {
+    const store = new FakeStore();
+    const service = new BookmakerService(store, () => NOW);
+    await service.recordSeen([makeEvent([['bet365', 'Bet365'], ['pinnacle', 'Pinnacle']])]);
+    await service.patch('bet365', { balance: 100 });
+
+    await service.adjustBalances([
+      { key: 'bet365', delta: -40 },
+      { key: 'pinnacle', delta: 250 },
+    ]);
+    const byKey = Object.fromEntries(store.data.bookmakers.map((b) => [b.key, b.balance]));
+    expect(byKey.bet365).toBeCloseTo(60, 2);
+    expect(byKey.pinnacle).toBeCloseTo(250, 2);
+  });
+
   it('filterAlertable drops arbs with any leg at a non-alertable book', async () => {
     const store = new FakeStore();
     const service = new BookmakerService(store, () => NOW);

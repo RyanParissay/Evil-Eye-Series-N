@@ -28,8 +28,29 @@ export class BookmakerService {
   async patch(key: string, patch: BookmakerPatch): Promise<BookmakerConfig | null> {
     return this.store.update((data) => {
       const config = data.bookmakers.find((c) => c.key === key);
-      if (config) Object.assign(config, patch);
+      if (config) {
+        Object.assign(config, patch);
+        // Balance edits feed the stale-balance nudge; other fields don't.
+        if ('balance' in patch) config.balanceUpdatedAt = this.now().toISOString();
+      }
       return { data, result: config ?? null };
+    });
+  }
+
+  /**
+   * Exact balance deltas in one serialized update (apply-to-balances /
+   * revert). An untracked (null) balance starts from zero.
+   */
+  async adjustBalances(deltas: Array<{ key: string; delta: number }>): Promise<void> {
+    const at = this.now().toISOString();
+    await this.store.update((data) => {
+      for (const { key, delta } of deltas) {
+        const config = data.bookmakers.find((c) => c.key === key);
+        if (!config) continue;
+        config.balance = Math.round(((config.balance ?? 0) + delta) * 100) / 100;
+        config.balanceUpdatedAt = at;
+      }
+      return { data, result: undefined };
     });
   }
 

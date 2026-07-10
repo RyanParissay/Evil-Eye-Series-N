@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { ApiErrorCode, OpportunityRecord } from '../../../shared/types';
+import { planStakes } from '../../../shared/stakePlanning';
 import {
   ApiError,
+  applyBalances,
   completeOpportunity,
+  fetchBookmakers,
+  fetchFundPosition,
   fetchOpportunity,
+  revertBalances,
   verifyOpportunity,
 } from '../api';
-import { loadBankroll, saveBankroll, scaleLegStakes } from '../cockpit';
+import { loadBankroll, saveBankroll } from '../cockpit';
 import { EyeGlyph } from '../components/EyeGlyph';
 import { errorHint, errorTitle } from '../errorCopy';
 
@@ -31,8 +36,30 @@ export function CockpitPage() {
   const { id = '' } = useParams();
   const [page, setPage] = useState<PageState>({ status: 'loading' });
   const [bankroll, setBankroll] = useState(() => loadBankroll(window.localStorage));
-  const [busy, setBusy] = useState<'verify' | 'complete' | null>(null);
+  const [bankrollTouched, setBankrollTouched] = useState(false);
+  const [balances, setBalances] = useState<Map<string, number | null>>(new Map());
+  const [busy, setBusy] = useState<'verify' | 'complete' | 'reconcile' | null>(null);
   const [note, setNote] = useState<VerifyNote | null>(null);
+
+  // Book balances cap the suggested stakes; fund settings supply the
+  // default stake (a hand-edited bankroll always wins for this visit).
+  useEffect(() => {
+    fetchBookmakers()
+      .then((books) => setBalances(new Map(books.map((b) => [b.key, b.balance ?? null]))))
+      .catch(() => {
+        // No registry — stakes simply go uncapped.
+      });
+    fetchFundPosition()
+      .then((position) => {
+        if (position.settings.defaultStake > 0) {
+          setBankroll((current) => (bankrollTouched ? current : position.settings.defaultStake));
+        }
+      })
+      .catch(() => {
+        // No fund settings yet — localStorage default stands.
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,7 +88,27 @@ export function CockpitPage() {
 
   function updateBankroll(next: number) {
     setBankroll(next);
+    setBankrollTouched(true);
     if (Number.isFinite(next) && next > 0) saveBankroll(window.localStorage, next);
+  }
+
+  async function handleReconcile(action: () => Promise<OpportunityRecord>) {
+    if (busy) return;
+    setBusy('reconcile');
+    setNote(null);
+    try {
+      const record = await action();
+      setPage({ status: 'ready', record });
+    } catch (err) {
+      const isApi = err instanceof ApiError;
+      setNote({
+        kind: 'error',
+        code: isApi ? err.code : 'internal',
+        message: isApi ? err.message : 'Something unexpected broke. Check the server logs.',
+      });
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function handleVerify() {
@@ -144,11 +191,14 @@ export function CockpitPage() {
         <Cockpit
           record={page.record}
           bankroll={bankroll}
+          balances={balances}
           onBankroll={updateBankroll}
           busy={busy}
           note={note}
           onVerify={() => void handleVerify()}
           onComplete={(filledLegs) => void handleComplete(filledLegs)}
+          onApply={(winner) => void handleReconcile(() => applyBalances(id, winner))}
+          onRevert={() => void handleReconcile(() => revertBalances(id))}
         />
       )}
     </div>
@@ -158,23 +208,36 @@ export function CockpitPage() {
 function Cockpit({
   record,
   bankroll,
+  balances,
   onBankroll,
   busy,
   note,
   onVerify,
   onComplete,
+  onApply,
+  onRevert,
 }: {
   record: OpportunityRecord;
   bankroll: number;
+  balances: Map<string, number | null>;
   onBankroll: (next: number) => void;
-  busy: 'verify' | 'complete' | null;
+  busy: 'verify' | 'complete' | 'reconcile' | null;
   note: VerifyNote | null;
   onVerify: () => void;
   onComplete: (filledLegs: Array<{ odds: number; stake: number }>) => void;
+  onApply: (winningLegIndex: number) => void;
+  onRevert: () => void;
 }) {
   const settled = record.status === 'dead' || record.status === 'completed';
-  const { stakes, totalStaked, guaranteedProfit } = scaleLegStakes(record.legs, bankroll);
+  // The same planStakes the alert path runs: ideal shares, whole-position
+  // rescale when a book's recorded balance would be exceeded.
+  const { stakes, totalStaked, guaranteedProfit, capped, cappedBy } = planStakes(
+    record.legs,
+    bankroll,
+    balances,
+  );
   const reduced = record.profitPct < record.profitPctAtDetection;
+  const [winner, setWinner] = useState<number | null>(null);
 
   // Completion books ACTUAL numbers: the form opens prefilled with the
   // record's odds and the current bankroll split — confirm or correct.
@@ -236,6 +299,56 @@ function Cockpit({
         </div>
       )}
 
+      {record.status === 'completed' && record.execution && (
+        <section className="cockpit-reconcile" aria-label="Apply to balances">
+          {record.execution.balancesAppliedAt ? (
+            <div className="cockpit-reconcile-done">
+              <span className="micro-label">
+                applied to balances {relativeTime(record.execution.balancesAppliedAt)} · winner:{' '}
+                {record.legs[record.execution.winningLegIndex ?? 0]?.outcome}
+              </span>
+              <button
+                type="button"
+                className="cockpit-action cockpit-action-verify"
+                onClick={onRevert}
+                disabled={busy !== null}
+                aria-busy={busy === 'reconcile'}
+              >
+                {busy === 'reconcile' ? 'Reverting…' : 'Revert balance changes'}
+              </button>
+            </div>
+          ) : (
+            <>
+              <p className="micro-label">
+                Event settled? Pick the winning leg and fold the money into your book balances.
+              </p>
+              <div className="cockpit-reconcile-picks" role="radiogroup" aria-label="Winning leg">
+                {record.legs.map((leg, i) => (
+                  <label key={`${leg.bookmakerKey}-${leg.outcome}`} className="cockpit-reconcile-pick">
+                    <input
+                      type="radio"
+                      name="winner"
+                      checked={winner === i}
+                      onChange={() => setWinner(i)}
+                    />
+                    {leg.outcome} won ({leg.bookmakerTitle})
+                  </label>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="cockpit-action cockpit-action-verify"
+                onClick={() => winner != null && onApply(winner)}
+                disabled={busy !== null || winner == null}
+                aria-busy={busy === 'reconcile'}
+              >
+                {busy === 'reconcile' ? 'Applying…' : 'Apply to balances'}
+              </button>
+            </>
+          )}
+        </section>
+      )}
+
       {record.status === 'dead' && (
         <div className="cockpit-dead-note" role="status">
           The edge is gone — prices moved or the event started. Numbers below are the last seen.
@@ -267,6 +380,12 @@ function Cockpit({
         <p className="micro-label">
           split of ${totalStaked.toFixed(2)} across {record.legs.length} legs
         </p>
+        {capped && (
+          <p className="micro-label cockpit-capped" role="status">
+            ⚠ position rescaled — {cappedBy}'s recorded balance is the ceiling. Top it up or
+            update its balance in the scanner's bookmaker panel.
+          </p>
+        )}
       </section>
 
       <section className="cockpit-tickets">

@@ -1755,3 +1755,115 @@ select.bm-input {
   border-top-style: dashed;
   border-top-color: var(--white);
 }
+
+/* ————— Fund position panel ————— */
+
+.fund {
+  border-bottom: 1px solid var(--hairline);
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fund-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.fund-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-end;
+}
+
+.fund-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fund-stat strong {
+  font-size: 22px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.fund-stat strong.is-up {
+  color: var(--red);
+}
+
+.fund-stat strong.is-down {
+  color: var(--grey);
+}
+
+.fund-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fund-field input {
+  background: var(--black);
+  border: 1px solid var(--hairline);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 7px 9px;
+  width: 110px;
+  border-radius: 0;
+}
+
+.fund-field input:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
+}
+
+.fund-error {
+  color: var(--red);
+}
+
+/* ————— Cockpit: caps + reconciliation ————— */
+
+.cockpit-capped {
+  color: var(--red);
+}
+
+.cockpit-reconcile {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 0 8px;
+  border-top: 1px solid var(--hairline);
+}
+
+.cockpit-reconcile-picks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cockpit-reconcile-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.cockpit-reconcile-pick input {
+  accent-color: var(--red);
+  width: 18px;
+  height: 18px;
+}
+
+.cockpit-reconcile-done {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}

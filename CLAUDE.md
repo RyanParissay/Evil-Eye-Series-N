@@ -25,7 +25,9 @@ curl -X POST localhost:8788/api/scan -H 'content-type: application/json' \
 ## Layering (dependency rules, strictly one-way)
 
 ```
-shared/          domain types + region-tab config. Zero imports. Both sides use it.
+shared/          domain types + region-tab config + stakePlanning.ts (the ONE
+                 planStakes implementation both sides run — alert dollars and
+                 cockpit display must never compute caps separately). Zero imports.
 server/src/
   engine/        PURE functions: arb math, filters, slider mapping, credit math.
                  No Express, no Node built-ins, no provider imports. Fully tested.
@@ -63,6 +65,9 @@ server/src/
                  plus per-subscription rate limit, failure deactivation),
                  verification.ts (hashed 6-digit codes), subscriptionStore.ts,
                  whatsappRequests.ts (validation, E.164).
+  fund/          Fund settings (real bankroll, default stake, unallocated
+                 cash) + position assembly (float, warnings: low-balance,
+                 stale-balance at 14d). Balance edits stamp balanceUpdatedAt.
   paper/         The SIMULATED shadow fund. paperStore.ts (own JsonStore,
                  facts only), paperMath.ts (pure deterministic settlement:
                  lazy at commence time, %-staking compounds off the settled
@@ -184,6 +189,14 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   paper failure in the notifier is a console.warn, never a dropped alert.
 - Alert selection rules exist exactly once (alertWorthy). Adding a
   strategy or channel must reuse it, not restate it.
+- Stake/cap math exists exactly once (shared/stakePlanning.ts planStakes):
+  a leg never exceeds its book's recorded balance — the WHOLE position
+  rescales to the binding book so the guarantee survives. The client
+  running this shared function is the deliberate exception to "client
+  computes no arb math".
+- Apply-to-balances is bookkeeping assistance with an exact stored
+  inverse (revert); balances stay manual-entry and the app never touches
+  bookmaker accounts.
 - last-snapshot.json stores the RAW pre-filter feed on purpose — Advanced
   Mode presets must be able to recompute with books outside the current
   allowlist filter. Don't "fix" it to store filtered events.

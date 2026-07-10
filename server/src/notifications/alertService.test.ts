@@ -241,6 +241,30 @@ describe('formatAlertMessage', () => {
     expect(formatAlertMessage(arb)).not.toContain('/opportunity/');
   });
 
+  it('renders exact dollar stakes when a plan is supplied, flagging caps', () => {
+    const plan = {
+      stakes: [246.99, 253.01],
+      totalStaked: 500,
+      guaranteedProfit: 18.68,
+      capped: false,
+      cappedBy: null,
+    };
+    const message = formatAlertMessage(makeArb(), undefined, plan);
+    expect(message).toContain('Bet365: Los Angeles Lakers @2.1 → $246.99');
+    expect(message).toContain('Pinnacle: Boston Celtics @2.05 → $253.01');
+    expect(message).toContain('Stake $500.00 for +$18.68 guaranteed');
+
+    const capped = formatAlertMessage(makeArb(), undefined, {
+      ...plan,
+      stakes: [98.79, 101.21],
+      totalStaked: 200,
+      guaranteedProfit: 7.47,
+      capped: true,
+      cappedBy: 'pinnacle',
+    });
+    expect(capped).toContain('capped by pinnacle balance');
+  });
+
   it('shows signed lines for point-based legs', () => {
     const arb = makeArb({
       marketKey: 'spreads',

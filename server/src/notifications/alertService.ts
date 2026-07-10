@@ -5,6 +5,7 @@
  * orchestrator runScan fires and forgets — it must never fail a scan.
  */
 import type { ArbOpportunity } from '@shared/types';
+import type { StakePlan } from '@shared/stakePlanning';
 import {
   WHATSAPP_MAX_ALERTS_PER_HOUR,
   WHATSAPP_MAX_CONSECUTIVE_FAILURES,
@@ -91,13 +92,23 @@ export function selectAlerts(
   return { planned, droppedByRateLimit };
 }
 
-export function formatAlertMessage(arb: ArbOpportunity, appUrl?: string): string {
+export function formatAlertMessage(
+  arb: ArbOpportunity,
+  appUrl?: string,
+  plan?: StakePlan | null,
+): string {
   const legs = arb.legs
     .map(
-      (leg) =>
-        `${leg.bookmakerTitle}: ${leg.outcome}${leg.point != null ? ` ${formatPoint(leg.point)}` : ''} @${leg.odds}`,
+      (leg, i) =>
+        `${leg.bookmakerTitle}: ${leg.outcome}${leg.point != null ? ` ${formatPoint(leg.point)}` : ''} @${leg.odds}` +
+        (plan ? ` → $${plan.stakes[i].toFixed(2)}` : ''),
     )
     .join(' / ');
+  const money = plan
+    ? ` Stake $${plan.totalStaked.toFixed(2)} for +$${plan.guaranteedProfit.toFixed(2)} guaranteed${
+        plan.capped ? ` (capped by ${plan.cappedBy} balance)` : ''
+      }.`
+    : '';
   const starts = new Date(arb.commenceTime).toLocaleString('en-CA', {
     month: 'short',
     day: 'numeric',
@@ -109,7 +120,7 @@ export function formatAlertMessage(arb: ArbOpportunity, appUrl?: string): string
   const link = appUrl
     ? ` ${appUrl.replace(/\/$/, '')}/opportunity/${opportunityIdFromFingerprint(opportunityFingerprint(arb))}`
     : '';
-  return `🔔 New arb: ${arb.eventName} (${arb.marketKey}) — ${arb.profitPct.toFixed(2)}% return. ${legs}. Starts ${starts}.${link}`;
+  return `🔔 New arb: ${arb.eventName} (${arb.marketKey}) — ${arb.profitPct.toFixed(2)}% return. ${legs}.${money} Starts ${starts}.${link}`;
 }
 
 function formatPoint(point: number): string {
@@ -122,6 +133,8 @@ export interface AlertDeps {
   now?: () => Date;
   /** Public base URL of the client; when set, alerts carry a cockpit deep link. */
   appUrl?: string;
+  /** Exact-dollar stake plan per opportunity (fund settings + balances). */
+  planStakes?: (arb: ArbOpportunity) => StakePlan | null;
 }
 
 export interface NotifyResult {
@@ -146,7 +159,10 @@ export async function notifyNewOpportunities(
       // An earlier failure in this batch may have deactivated it.
       if (!subscription.active) continue;
       try {
-        await deps.sender.send(subscription.phoneE164, formatAlertMessage(opportunity, deps.appUrl));
+        await deps.sender.send(
+          subscription.phoneE164,
+          formatAlertMessage(opportunity, deps.appUrl, deps.planStakes?.(opportunity)),
+        );
         subscription.failedSendCount = 0;
         subscription.sendTimestamps.push(now.toISOString());
         sent.add(fingerprint);

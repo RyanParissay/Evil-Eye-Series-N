@@ -10,6 +10,8 @@ import type {
   BookPreset,
   BookmakerConfig,
   BookmakerStatusValue,
+  FundPosition,
+  FundSettings,
   LedgerSummary,
   OpportunityRecord,
   PaperSettings,
@@ -150,6 +152,42 @@ export async function completeOpportunity(
 
 export async function fetchLedgerSummary(): Promise<LedgerSummary> {
   return request<LedgerSummary>('/api/ledger/summary');
+}
+
+/* ————— Fund position ————— */
+
+export async function fetchFundPosition(): Promise<FundPosition> {
+  return request<FundPosition>('/api/fund/position');
+}
+
+export async function patchFundSettings(patch: Partial<FundSettings>): Promise<FundPosition> {
+  return request<FundPosition>('/api/fund/settings', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+/** After the event: fold the filled numbers into recorded book balances. */
+export async function applyBalances(
+  id: string,
+  winningLegIndex: number,
+): Promise<OpportunityRecord> {
+  return request<OpportunityRecord>(
+    `/api/opportunities/${encodeURIComponent(id)}/apply-balances`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ winningLegIndex }),
+    },
+  );
+}
+
+export async function revertBalances(id: string): Promise<OpportunityRecord> {
+  return request<OpportunityRecord>(
+    `/api/opportunities/${encodeURIComponent(id)}/revert-balances`,
+    { method: 'POST' },
+  );
 }
 
 /* ————— Paper fund (SIMULATED) ————— */

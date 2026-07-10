@@ -133,6 +133,9 @@ export interface OpportunityExecution {
   /** Worst-leg payout minus everything staked — locked at placement. */
   lockedProfit: number;
   recordedAt: string;
+  /** Set when the user applied this execution to book balances (revertible). */
+  balancesAppliedAt?: string | null;
+  winningLegIndex?: number | null;
 }
 
 export interface OpportunityRecord {
@@ -278,6 +281,35 @@ export interface BookmakerConfig {
   notes: string;
   firstSeenAt: string;
   lastSeenAt: string;
+  /** When the balance value itself last changed — drives the stale nudge. */
+  balanceUpdatedAt?: string | null;
+}
+
+/* ————— Fund position (Phase 7) ————— */
+
+/** Manual-entry dollars; the app never touches bookmaker accounts. */
+export interface FundSettings {
+  /** Real total bankroll across everything. */
+  totalBankroll: number;
+  /** Default per-opportunity stake — drives alert dollars and the cockpit. */
+  defaultStake: number;
+  /** Cash not sitting at any book. */
+  unallocatedCash: number;
+}
+
+export interface FundPosition {
+  settings: FundSettings;
+  /** Σ recorded balances across the registry. */
+  totalFloat: number;
+  /** Cumulative realized P&L from the ledger (priced completions only). */
+  realProfit: number;
+  paper: { simulated: true; bankrollIdeal: number; bankrollHaircut: number } | null;
+  warnings: {
+    /** Enabled books whose balance sits below the default stake. */
+    lowBalance: string[];
+    /** Books whose balance hasn't been touched in 14+ days. */
+    staleBalance: string[];
+  };
 }
 
 /**

@@ -13,6 +13,7 @@ import {
   DEFAULT_PORT,
   LAST_SCAN_FILE,
   LAST_SNAPSHOT_FILE,
+  FUND_FILE,
   OPPORTUNITIES_FILE,
   OPPORTUNITY_ARCHIVE_DIR,
   PAPER_FILE,
@@ -25,9 +26,14 @@ import { senderFromEnv } from './notifications/whatsappSender';
 import { OpportunityService } from './opportunities/opportunityService';
 import { OpportunityArchive, OpportunityStore } from './opportunities/opportunityStore';
 import { verifyOpportunity } from './opportunities/verifyService';
+import { applyToBalances, revertBalances } from './opportunities/reconcileBalances';
 import { LedgerService } from './ledger/ledgerService';
+import { FundService } from './fund/fundService';
+import { FundStore } from './fund/fundStore';
 import { PaperService } from './paper/paperService';
 import { PaperStore } from './paper/paperStore';
+import { planStakes } from '@shared/stakePlanning';
+import { createFundRouter } from './routes/fund';
 import { createPaperRouter } from './routes/paper';
 import { PresetService } from './presets/presetService';
 import { PresetStore } from './presets/presetStore';
@@ -91,6 +97,27 @@ app.use('/api/bookmakers', createBookmakersRouter(bookmakerService));
 app.use('/api/ledger', createLedgerRouter(ledgerService));
 const paperService = new PaperService(new PaperStore(path.join(serverRoot, PAPER_FILE)));
 app.use('/api/paper', createPaperRouter(paperService));
+
+const fundService = new FundService(new FundStore(path.join(serverRoot, FUND_FILE)));
+app.use(
+  '/api/fund',
+  createFundRouter({
+    fund: fundService,
+    assemblePosition: async () => {
+      const [books, summary, paper] = await Promise.all([
+        bookmakerService.list(),
+        ledgerService.summarize(),
+        paperService.book(),
+      ]);
+      return fundService.position(
+        books,
+        summary.realized.totalLockedProfit,
+        paper.book.entries.length > 0 || paper.settings.enabled ? paper.book : null,
+      );
+    },
+  }),
+);
+
 app.use(
   '/api',
   createAdvancedRouter({
@@ -100,10 +127,16 @@ app.use(
     books: bookmakerService,
   }),
 );
+const reconcileDeps = { opportunities: opportunityService, books: bookmakerService };
 app.use(
   '/api/opportunities',
-  createOpportunitiesRouter(opportunityService, (id) =>
-    verifyOpportunity({ provider, opportunities: opportunityService }, id),
+  createOpportunitiesRouter(
+    opportunityService,
+    (id) => verifyOpportunity({ provider, opportunities: opportunityService }, id),
+    {
+      apply: (id, winningLegIndex) => applyToBalances(reconcileDeps, id, winningLegIndex),
+      revert: (id) => revertBalances(reconcileDeps, id),
+    },
   ),
 );
 app.use(
@@ -125,8 +158,22 @@ app.use(
       } catch (err) {
         console.warn('Paper fund entry failed:', err);
       }
+      // Exact-dollar stakes from persisted fund settings + current balances.
+      const [fundSettings, books] = await Promise.all([
+        fundService.settings(),
+        bookmakerService.list(),
+      ]);
+      const balances = new Map(books.map((b) => [b.key, b.balance ?? null]));
       const { sentFingerprints } = await notifyNewOpportunities(
-        { store: whatsappStore, sender: whatsappSender, appUrl },
+        {
+          store: whatsappStore,
+          sender: whatsappSender,
+          appUrl,
+          planStakes:
+            fundSettings.defaultStake > 0
+              ? (arb) => planStakes(arb.legs, fundSettings.defaultStake, balances)
+              : undefined,
+        },
         alertable,
       );
       await opportunityService.markAlerted(sentFingerprints);

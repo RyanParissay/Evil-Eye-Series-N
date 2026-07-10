@@ -1,39 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { loadBankroll, saveBankroll, scaleLegStakes } from './cockpit';
-
-const LEGS = [
-  { odds: 2.1, stake: 48.78 },
-  { odds: 2.05, stake: 51.22 },
-];
-
-describe('scaleLegStakes', () => {
-  it('scales the per-$100 stakes to the bankroll and reports the guaranteed outcome', () => {
-    const scaled = scaleLegStakes(LEGS, 500);
-    expect(scaled.stakes).toEqual([243.9, 256.1]);
-    expect(scaled.totalStaked).toBeCloseTo(500, 2);
-    // Each leg's payout, minus everything staked; guaranteed = the worst one.
-    const payouts = [243.9 * 2.1, 256.1 * 2.05];
-    expect(scaled.guaranteedProfit).toBeCloseTo(Math.min(...payouts) - 500, 2);
-    expect(scaled.guaranteedProfit).toBeGreaterThan(0);
-  });
-
-  it('handles a non-arb honestly: negative guaranteed profit', () => {
-    const scaled = scaleLegStakes(
-      [
-        { odds: 1.9, stake: 50 },
-        { odds: 1.9, stake: 50 },
-      ],
-      100,
-    );
-    expect(scaled.guaranteedProfit).toBeLessThan(0);
-  });
-
-  it('rejects nonsense bankrolls by falling back to $100', () => {
-    expect(scaleLegStakes(LEGS, 0).totalStaked).toBeCloseTo(100, 2);
-    expect(scaleLegStakes(LEGS, -5).totalStaked).toBeCloseTo(100, 2);
-    expect(scaleLegStakes(LEGS, Number.NaN).totalStaked).toBeCloseTo(100, 2);
-  });
-});
+import { planStakes } from '../../shared/stakePlanning';
+import { loadBankroll, saveBankroll } from './cockpit';
 
 describe('bankroll persistence', () => {
   function fakeStorage(): Storage {
@@ -55,5 +22,22 @@ describe('bankroll persistence', () => {
     expect(loadBankroll(storage)).toBe(750);
     storage.setItem('evil-eye:bankroll', 'lots');
     expect(loadBankroll(storage)).toBe(100);
+  });
+});
+
+describe('shared stake planning (the client runs the same function the server does)', () => {
+  it('scales and caps identically to the alert path', () => {
+    const legs = [
+      { odds: 2.1, bookmakerKey: 'bet365' },
+      { odds: 2.05, bookmakerKey: 'pinnacle' },
+    ];
+    const uncapped = planStakes(legs, 500, new Map());
+    expect(uncapped.totalStaked).toBeCloseTo(500, 1);
+    expect(uncapped.guaranteedProfit).toBeGreaterThan(0);
+
+    const capped = planStakes(legs, 500, new Map([['pinnacle', 100]]));
+    expect(capped.capped).toBe(true);
+    expect(capped.cappedBy).toBe('pinnacle');
+    expect(capped.stakes[1]).toBeLessThanOrEqual(100);
   });
 });
