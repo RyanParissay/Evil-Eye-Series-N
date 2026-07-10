@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { OddsEvent } from '../../../shared/types';
+import type { OddsEvent } from '@shared/types';
 import { findArbitrageOpportunities } from './arbitrage';
 
 /** Reference "now" for all tests; events default to 2h in the future. */
@@ -260,6 +260,171 @@ describe('filtering, flagging, sorting', () => {
 
     const top1 = findArbitrageOpportunities([small, big], { now: NOW, topN: 1 });
     expect(top1.map((a) => a.eventId)).toEqual(['ev-big']);
+  });
+});
+
+describe('point-based markets (totals / spreads)', () => {
+  /** Build an event with one market of arbitrary key and pointed outcomes. */
+  function pointEvent(
+    id: string,
+    marketKey: string,
+    books: Array<{ key: string; outcomes: Array<{ name: string; price: number; point?: number }> }>,
+  ): OddsEvent {
+    return {
+      id,
+      sportKey: 'basketball_nba',
+      sportTitle: 'NBA',
+      commenceTime: FUTURE,
+      homeTeam: 'Los Angeles Lakers',
+      awayTeam: 'Boston Celtics',
+      bookmakers: books.map((b) => ({
+        key: b.key,
+        title: b.key.toUpperCase(),
+        lastUpdate: NOW.toISOString(),
+        markets: [{ key: marketKey, outcomes: b.outcomes }],
+      })),
+    };
+  }
+
+  it('detects a totals arb when both legs sit on the same line', () => {
+    const events = [
+      pointEvent('ev-totals', 'totals', [
+        {
+          key: 'fanduel',
+          outcomes: [
+            { name: 'Over', price: 2.1, point: 220.5 },
+            { name: 'Under', price: 1.8, point: 220.5 },
+          ],
+        },
+        {
+          key: 'draftkings',
+          outcomes: [
+            { name: 'Over', price: 1.85, point: 220.5 },
+            { name: 'Under', price: 2.12, point: 220.5 },
+          ],
+        },
+      ]),
+    ];
+
+    const arbs = findArbitrageOpportunities(events, { now: NOW, marketKeys: ['totals'] });
+    expect(arbs).toHaveLength(1);
+    expect(arbs[0].marketKey).toBe('totals');
+    const over = arbs[0].legs.find((l) => l.outcome === 'Over')!;
+    const under = arbs[0].legs.find((l) => l.outcome === 'Under')!;
+    expect(over.bookmakerKey).toBe('fanduel');
+    expect(under.bookmakerKey).toBe('draftkings');
+    // Legs carry their line so the UI can render "Over 220.5".
+    expect(over.point).toBe(220.5);
+    expect(under.point).toBe(220.5);
+  });
+
+  it('never combines outcomes from different lines into one "arb"', () => {
+    // Over 219.5 @ 2.10 + Under 221.5 @ 2.12 gives S < 1 numerically, but if
+    // the total lands on 220 or 221 BOTH bets lose — it is not an arbitrage.
+    const events = [
+      pointEvent('ev-totals-mixed', 'totals', [
+        { key: 'fanduel', outcomes: [{ name: 'Over', price: 2.1, point: 219.5 }] },
+        { key: 'draftkings', outcomes: [{ name: 'Under', price: 2.12, point: 221.5 }] },
+      ]),
+    ];
+    expect(
+      findArbitrageOpportunities(events, { now: NOW, marketKeys: ['totals'] }),
+    ).toHaveLength(0);
+  });
+
+  it('matches spread legs by mirrored points (−3.5 pairs with +3.5)', () => {
+    const events = [
+      pointEvent('ev-spreads', 'spreads', [
+        {
+          key: 'fanduel',
+          outcomes: [
+            { name: 'Los Angeles Lakers', price: 2.1, point: -3.5 },
+            { name: 'Boston Celtics', price: 1.8, point: 3.5 },
+          ],
+        },
+        {
+          key: 'draftkings',
+          outcomes: [
+            { name: 'Los Angeles Lakers', price: 1.85, point: -3.5 },
+            { name: 'Boston Celtics', price: 2.12, point: 3.5 },
+          ],
+        },
+      ]),
+    ];
+
+    const arbs = findArbitrageOpportunities(events, { now: NOW, marketKeys: ['spreads'] });
+    expect(arbs).toHaveLength(1);
+    const lakers = arbs[0].legs.find((l) => l.outcome === 'Los Angeles Lakers')!;
+    expect(lakers.point).toBe(-3.5);
+    expect(lakers.odds).toBe(2.1);
+  });
+
+  it('does not pair spread legs across different lines (−3.5 vs +4.5)', () => {
+    const events = [
+      pointEvent('ev-spreads-mixed', 'spreads', [
+        { key: 'fanduel', outcomes: [{ name: 'Los Angeles Lakers', price: 2.1, point: -3.5 }] },
+        { key: 'draftkings', outcomes: [{ name: 'Boston Celtics', price: 2.12, point: 4.5 }] },
+      ]),
+    ];
+    expect(
+      findArbitrageOpportunities(events, { now: NOW, marketKeys: ['spreads'] }),
+    ).toHaveLength(0);
+  });
+
+  it('evaluates each line independently and can find arbs on two lines at once', () => {
+    const arbBooks = (point: number) => [
+      {
+        key: 'fanduel',
+        outcomes: [
+          { name: 'Over', price: 2.1, point },
+          { name: 'Under', price: 1.8, point },
+        ],
+      },
+      {
+        key: 'draftkings',
+        outcomes: [
+          { name: 'Over', price: 1.85, point },
+          { name: 'Under', price: 2.12, point },
+        ],
+      },
+    ];
+    // One event whose totals market quotes two lines, both arbitrageable.
+    const both = pointEvent('ev-two-lines', 'totals', [
+      { key: 'fanduel', outcomes: [...arbBooks(219.5)[0].outcomes, ...arbBooks(221.5)[0].outcomes] },
+      { key: 'draftkings', outcomes: [...arbBooks(219.5)[1].outcomes, ...arbBooks(221.5)[1].outcomes] },
+    ]);
+    const arbs = findArbitrageOpportunities([both], { now: NOW, marketKeys: ['totals'] });
+    expect(arbs).toHaveLength(2);
+    const lines = arbs.flatMap((a) => a.legs.map((l) => Math.abs(l.point!))).sort();
+    expect(new Set(lines)).toEqual(new Set([219.5, 221.5]));
+  });
+
+  it('keeps scanning h2h and totals side by side when both are requested', () => {
+    const h2h = event('ev-h2h', [
+      { key: 'fanduel', prices: { 'Los Angeles Lakers': 2.1, 'Boston Celtics': 1.8 } },
+      { key: 'draftkings', prices: { 'Los Angeles Lakers': 1.85, 'Boston Celtics': 2.12 } },
+    ]);
+    const totals = pointEvent('ev-totals', 'totals', [
+      {
+        key: 'fanduel',
+        outcomes: [
+          { name: 'Over', price: 2.1, point: 220.5 },
+          { name: 'Under', price: 1.8, point: 220.5 },
+        ],
+      },
+      {
+        key: 'draftkings',
+        outcomes: [
+          { name: 'Over', price: 1.85, point: 220.5 },
+          { name: 'Under', price: 2.12, point: 220.5 },
+        ],
+      },
+    ]);
+    const arbs = findArbitrageOpportunities([h2h, totals], {
+      now: NOW,
+      marketKeys: ['h2h', 'totals'],
+    });
+    expect(arbs.map((a) => a.marketKey).sort()).toEqual(['h2h', 'totals']);
   });
 });
 

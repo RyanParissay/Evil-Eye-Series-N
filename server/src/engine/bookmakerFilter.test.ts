@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { OddsEvent } from '../../../shared/types';
+import type { OddsEvent } from '@shared/types';
 import { filterEventsToBookmakers } from './bookmakerFilter';
 
 function event(id: string, bookKeys: string[]): OddsEvent {

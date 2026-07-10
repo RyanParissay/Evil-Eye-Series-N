@@ -12,7 +12,7 @@
  * Simulates the credit meter: starts with some usage and burns
  * (markets × regions) credits per odds call, like the real API.
  */
-import type { OddsEvent, SportInfo } from '../../../shared/types';
+import type { OddsEvent, SportInfo } from '@shared/types';
 import { creditsForOddsCall } from '../engine/creditCost';
 import type {
   FetchOddsParams,

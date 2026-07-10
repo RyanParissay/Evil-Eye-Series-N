@@ -3,7 +3,7 @@
  * BEFORE arbitrage detection, so best-odds selection never considers an
  * inaccessible book. Pure module — no framework imports.
  */
-import type { OddsEvent } from '../../../shared/types';
+import type { OddsEvent } from '@shared/types';
 
 /**
  * Returns new events containing only allowlisted bookmakers; events left

@@ -8,6 +8,8 @@
   --black: #000;
   --white: #fff;
   --red: #ff2b2b;
+  /* Green means exactly one thing in this app: auto-surveillance is live. */
+  --green: #2ee56b;
   --grey: rgba(255, 255, 255, 0.55);
   --hairline: rgba(255, 255, 255, 0.22);
   --hairline-faint: rgba(255, 255, 255, 0.12);

@@ -9,7 +9,7 @@
  * The stake split makes every leg pay out the same amount (100/S), which is
  * what makes the profit guaranteed regardless of the result.
  */
-import type { ArbLeg, ArbOpportunity, OddsEvent } from '../../../shared/types';
+import type { ArbLeg, ArbOpportunity, OddsEvent } from '@shared/types';
 
 export interface ArbEngineOptions {
   /** Drop opportunities below this profit percentage. Default 0. */
@@ -30,6 +30,17 @@ interface Offer {
   bookmakerTitle: string;
   price: number;
   link: string | null;
+}
+
+/**
+ * One side of a line group: a distinct (outcome name, signed point) pair,
+ * with every bookmaker's offer on it. For h2h, point is undefined and the
+ * name alone identifies the side.
+ */
+interface OutcomeSide {
+  name: string;
+  point: number | undefined;
+  offers: Offer[];
 }
 
 const NOMINAL_TOTAL_STAKE = 100;
@@ -54,8 +65,9 @@ export function findArbitrageOpportunities(
     if (new Date(event.commenceTime).getTime() <= now.getTime()) continue;
 
     for (const marketKey of marketKeys) {
-      const arb = evaluateMarket(event, marketKey, suspiciousProfitPct);
-      if (arb && arb.profitPct >= minProfitPct) opportunities.push(arb);
+      for (const arb of evaluateMarket(event, marketKey, suspiciousProfitPct)) {
+        if (arb.profitPct >= minProfitPct) opportunities.push(arb);
+      }
     }
   }
 
@@ -63,59 +75,101 @@ export function findArbitrageOpportunities(
   return Number.isFinite(topN) ? opportunities.slice(0, Math.max(0, topN)) : opportunities;
 }
 
+/**
+ * Evaluates one market of one event and returns every arb found in it.
+ *
+ * An arb is only valid across outcomes that jointly cover the event, so the
+ * market is first split into LINE GROUPS and each group is priced
+ * independently:
+ *
+ *  - h2h: no points — the whole market is one group keyed by outcome names.
+ *  - totals: Over 220.5 / Under 220.5 share point 220.5 → one group per line.
+ *    Over 219.5 + Under 221.5 has S < 1 numerically but BOTH bets lose when
+ *    the total lands between the lines, so lines must never be mixed.
+ *  - spreads: Lakers −3.5 / Celtics +3.5 mirror each other → grouped by
+ *    |point|. A −3.5 leg never pairs with a +4.5 leg.
+ *
+ * Within a group, a side is a distinct (name, signed point) pair. This also
+ * defuses alternate-line markets: flipped pairs (Lakers +3.5 / Celtics −3.5)
+ * land in the same |point| group as four distinct sides, pushing S ≥ 1 —
+ * they are skipped rather than mispriced. (Supporting alternates properly
+ * means pairing sides within a group; see README "How to extend".)
+ */
 function evaluateMarket(
   event: OddsEvent,
   marketKey: string,
   suspiciousProfitPct: number,
-): ArbOpportunity | null {
-  // Collect every offer per outcome name, across all bookmakers. The outcome
-  // set is the union — a book missing one side still contributes the sides
+): ArbOpportunity[] {
+  // Group offers by line, then by side within the line. The side set is the
+  // union across books — a book missing one side still contributes the sides
   // it does price.
-  const offersByOutcome = new Map<string, Offer[]>();
+  const lineGroups = new Map<string, Map<string, OutcomeSide>>();
 
   for (const book of event.bookmakers) {
     const market = book.markets.find((m) => m.key === marketKey);
     if (!market) continue;
     for (const outcome of market.outcomes) {
       if (!Number.isFinite(outcome.price) || outcome.price <= 1) continue;
-      const offers = offersByOutcome.get(outcome.name) ?? [];
-      offers.push({
+
+      const lineKey = outcome.point == null ? '' : String(Math.abs(outcome.point));
+      const sideKey = outcome.point == null ? outcome.name : `${outcome.name}@${outcome.point}`;
+
+      const sides = lineGroups.get(lineKey) ?? new Map<string, OutcomeSide>();
+      const side = sides.get(sideKey) ?? { name: outcome.name, point: outcome.point, offers: [] };
+      side.offers.push({
         bookmakerKey: book.key,
         bookmakerTitle: book.title,
         price: outcome.price,
         link: outcome.link ?? market.link ?? book.link ?? null,
       });
-      offersByOutcome.set(outcome.name, offers);
+      sides.set(sideKey, side);
+      lineGroups.set(lineKey, sides);
     }
   }
 
-  // A market needs at least two distinct outcomes; a single-outcome market
-  // would trivially "arb" at S = 1/odds, which is meaningless.
-  if (offersByOutcome.size < 2) return null;
+  const arbs: ArbOpportunity[] = [];
+  for (const sides of lineGroups.values()) {
+    const arb = evaluateLineGroup(event, marketKey, [...sides.values()], suspiciousProfitPct);
+    if (arb) arbs.push(arb);
+  }
+  return arbs;
+}
 
-  // Best price per outcome, keeping every bookmaker tied at that price so
+/** Prices one line group: best odds per side → arb index → stake split. */
+function evaluateLineGroup(
+  event: OddsEvent,
+  marketKey: string,
+  sides: OutcomeSide[],
+  suspiciousProfitPct: number,
+): ArbOpportunity | null {
+  // A group needs at least two distinct sides; a single-sided group would
+  // trivially "arb" at S = 1/odds, which is meaningless.
+  if (sides.length < 2) return null;
+
+  // Best price per side, keeping every bookmaker tied at that price so
   // tie-breaking below can spread legs across distinct books.
-  const bestByOutcome = [...offersByOutcome.entries()].map(([name, offers]) => {
-    const bestPrice = Math.max(...offers.map((o) => o.price));
-    const tied = offers
+  const bestBySide = sides.map((side) => {
+    const bestPrice = Math.max(...side.offers.map((o) => o.price));
+    const tied = side.offers
       .filter((o) => o.price === bestPrice)
       .sort((a, b) => a.bookmakerKey.localeCompare(b.bookmakerKey));
-    return { name, bestPrice, tied };
+    return { side, bestPrice, tied };
   });
 
-  const arbIndex = bestByOutcome.reduce((sum, o) => sum + 1 / o.bestPrice, 0);
+  const arbIndex = bestBySide.reduce((sum, o) => sum + 1 / o.bestPrice, 0);
   if (arbIndex >= 1) return null;
 
   // Tie-break: greedily prefer a bookmaker not already used by another leg.
   // Same-book "arbs" are usually data quirks, so when identical odds are
   // available elsewhere, take the executable combination.
   const usedBooks = new Set<string>();
-  const legs: ArbLeg[] = bestByOutcome.map(({ name, bestPrice, tied }) => {
+  const legs: ArbLeg[] = bestBySide.map(({ side, bestPrice, tied }) => {
     const offer = tied.find((o) => !usedBooks.has(o.bookmakerKey)) ?? tied[0];
     usedBooks.add(offer.bookmakerKey);
     const rawStake = (NOMINAL_TOTAL_STAKE * (1 / bestPrice)) / arbIndex;
     return {
-      outcome: name,
+      outcome: side.name,
+      point: side.point,
       bookmakerKey: offer.bookmakerKey,
       bookmakerTitle: offer.bookmakerTitle,
       odds: bestPrice,

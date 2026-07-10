@@ -8,7 +8,12 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["node"]
+    "types": ["node"],
+    // "@shared/*" also lives in vitest.config.ts (vitest ignores tsconfig
+    // paths); tsc and tsx both read this one.
+    "paths": {
+      "@shared/*": ["../shared/*"]
+    }
   },
   "include": ["src", "../shared"]
 }

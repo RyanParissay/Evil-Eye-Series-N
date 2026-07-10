@@ -107,6 +107,12 @@ framework imports, fully unit-tested):
 4. Stake split for $100: `stake_i = 100 × (1/odds_i) / S` — every leg then
    pays out the same `100/S` regardless of result
 
+Point-based markets (spreads/totals) are handled by **line grouping**: the
+engine only combines outcomes whose lines mirror each other (Over/Under 220.5
+together, −3.5 with +3.5 — grouped by |point|). Over 219.5 + Under 221.5 has
+S < 1 numerically but both bets lose when the total lands between the lines,
+so lines are never mixed. Each line of a market is priced independently.
+
 Edge handling: events already commenced are dropped as stale; single-outcome
 markets can't fake an arb; ties at the best price prefer distinct bookmakers;
 arbs where one book holds every best price get a **same book** warning badge;
@@ -118,9 +124,9 @@ errored odds) rather than presented uncritically.
 ```
 shared/types.ts                     domain types used by both sides
 shared/regionTabs.ts                region tabs: API regions + CA-accessible books
-server/src/
+server/src/                         (imports shared/ via the @shared alias)
   engine/                           pure logic — no Express imports
-    arbitrage.ts                    the arb detector (+ tests)
+    arbitrage.ts                    the arb detector, line-group aware (+ tests)
     bookmakerFilter.ts              post-call accessibility filter (+ tests)
     creditCost.ts                   credit → dollar math (+ tests)
     sportSelection.ts               slider → breadth mapping (+ tests)
@@ -129,7 +135,8 @@ server/src/
     TheOddsApiProvider.ts           live adapter (headers, links, error mapping)
     MockOddsProvider.ts             fixture adapter for keyless demos
   scan/
-    scanService.ts                  orchestrates catalogue → odds → engine → usage
+    scanRequest.ts                  request validation — new scan options start here (+ tests)
+    scanService.ts                  orchestrates catalogue → odds → engine → usage (+ tests)
     scanStore.ts                    file persistence for last-scan metadata
   routes/api.ts                     POST /api/scan, GET /api/last-scan
   config/constants.ts               every tunable knob
@@ -137,27 +144,37 @@ server/src/
 client/src/                         React + Vite, plain CSS, no UI framework
 ```
 
-Run the tests: `npm test` (31 Vitest cases covering 2-way/3-way arbs, no-arb
-markets, stake splits, same-book and suspicious flags, stale filtering, ties,
-credit math, the slider mapping, and the bookmaker accessibility filter).
+The `@shared/*` alias is declared twice — `server/tsconfig.json` (tsc + tsx)
+and `server/vitest.config.ts` (vitest doesn't read tsconfig paths). Keep them
+in sync.
+
+Run the tests: `npm test` (47 Vitest cases covering 2-way/3-way arbs, totals
+and spreads line grouping, no-arb markets, stake splits, same-book and
+suspicious flags, stale filtering, ties, credit math, the slider mapping, the
+bookmaker accessibility filter, request validation, and scan orchestration
+including partial-failure handling).
 
 ## How to extend
 
 **Add a market (spreads/totals):** add the key to `MARKETS` in
-`constants.ts`. The engine already iterates `marketKeys` and prices any
-outcome set; point-based markets need matching by point value too — extend
-`evaluateMarket` to group outcomes by `(marketKey, point)` before comparing.
+`constants.ts` — done. The scan service threads the market list to both the
+provider fetch and the engine, the provider maps each outcome's `point`, and
+the engine groups outcomes by line before pricing (see "line grouping"
+above). Exception: alternate-line markets (`alternate_spreads`, …) need real
+pairing logic — flipped pairs currently land in one |point| group and are
+safely skipped rather than priced.
+
+**Add a scan option (min profit, market picker, …):** validate it in
+`server/src/scan/scanRequest.ts`, consume it in `scanService.ts`, send it
+from `client/src/api.ts`. Routes and the engine need no structural changes —
+`findArbitrageOpportunities` already takes `minProfitPct`,
+`suspiciousProfitPct`, `topN`, and `marketKeys` options.
 
 **Add a provider:** implement `OddsProvider` (two methods:
 `listSports`, `fetchOdds`) in `server/src/providers/`, map your source's wire
 format to the shared types, throw `ProviderError` with the right code for
 auth/quota/network failures, and swap it in at `server/src/index.ts`. Engine
 and UI need no changes.
-
-**Add a filter:** `findArbitrageOpportunities` takes options
-(`minProfitPct`, `suspiciousProfitPct`, `topN`, `marketKeys`) — thread a new
-option from `scanService.ts`, or filter the returned list there and expose it
-in the request body of `POST /api/scan`.
 
 ## API errors surfaced in the UI
 

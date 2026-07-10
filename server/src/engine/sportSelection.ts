@@ -14,7 +14,7 @@
  * The final result list is *also* sliced to N, so the slider controls both
  * spend and output length.
  */
-import type { SportInfo } from '../../../shared/types';
+import type { SportInfo } from '@shared/types';
 
 const MIN_BREADTH = 3;
 const SLIDER_MAX = 10;

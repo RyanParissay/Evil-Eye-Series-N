@@ -11,6 +11,12 @@ export interface MarketOutcome {
   name: string;
   /** Decimal odds (e.g. 2.05). All arbitrage math assumes decimal format. */
   price: number;
+  /**
+   * The line for point-based markets: 220.5 for totals, −3.5/+3.5 for
+   * spreads. Absent for h2h. The engine only ever combines outcomes whose
+   * lines mirror each other (same |point|) — see arbitrage.ts.
+   */
+  point?: number;
   /** Deep link to this outcome at the bookmaker, when the API plan provides it. */
   link?: string;
 }
@@ -56,6 +62,8 @@ export interface SportInfo {
 /** One leg of an arbitrage: the bet to place at one bookmaker. */
 export interface ArbLeg {
   outcome: string;
+  /** The line this leg is on (e.g. −3.5, 220.5); absent for h2h legs. */
+  point?: number;
   bookmakerKey: string;
   bookmakerTitle: string;
   /** Decimal odds for this leg — the best price found across all bookmakers. */

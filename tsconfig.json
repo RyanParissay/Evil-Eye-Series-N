@@ -1,0 +1,18 @@
+{
+  // tsx resolves tsconfig "paths" from the LAUNCH directory, so the @shared
+  // alias must exist here too or `npx tsx server/src/index.ts` from the repo
+  // root fails to resolve imports. Keep in sync with server/tsconfig.json
+  // and server/vitest.config.ts.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "paths": {
+      "@shared/*": ["./shared/*"]
+    }
+  },
+  "include": ["shared"]
+}

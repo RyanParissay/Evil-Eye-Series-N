@@ -4,7 +4,7 @@
  */
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import type { ScanMeta } from '../../../shared/types';
+import type { ScanMeta } from '@shared/types';
 
 export class ScanStore {
   constructor(private readonly filePath: string) {}

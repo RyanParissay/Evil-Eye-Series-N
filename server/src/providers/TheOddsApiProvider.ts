@@ -9,7 +9,7 @@
  *
  * Uses global fetch (Node 18+). No Express imports.
  */
-import type { OddsEvent, SportInfo } from '../../../shared/types';
+import type { OddsEvent, SportInfo } from '@shared/types';
 import { creditsForOddsCall } from '../engine/creditCost';
 import type {
   FetchOddsParams,
@@ -34,6 +34,8 @@ interface ApiSport {
 interface ApiOutcome {
   name: string;
   price: number;
+  /** Line for spreads/totals outcomes (e.g. -3.5, 220.5); absent for h2h. */
+  point?: number;
   link?: string;
 }
 
@@ -111,6 +113,7 @@ export class TheOddsApiProvider implements OddsProvider {
           outcomes: (m.outcomes ?? []).map((o) => ({
             name: o.name,
             price: o.price,
+            point: o.point,
             link: o.link,
           })),
         })),

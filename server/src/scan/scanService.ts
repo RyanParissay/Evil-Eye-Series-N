@@ -3,8 +3,7 @@
  * → arbitrage engine → usage report. This is the only place the provider,
  * engine, and persistence meet.
  */
-import { regionTabByKey, type RegionTabKey } from '../../../shared/regionTabs';
-import type { ArbOpportunity, ScanMeta, ScanResponse, UsageReport } from '../../../shared/types';
+import type { ArbOpportunity, ScanMeta, ScanResponse, UsageReport } from '@shared/types';
 import { bookmakerHomepage } from '../config/bookmakerLinks';
 import {
   MARKETS,
@@ -19,29 +18,26 @@ import { filterEventsToBookmakers } from '../engine/bookmakerFilter';
 import { estimateDollarCost } from '../engine/creditCost';
 import { sportsForScan } from '../engine/sportSelection';
 import type { OddsProvider, OddsResult } from '../providers/OddsProvider';
+import type { ScanRequest } from './scanRequest';
 import type { ScanStore } from './scanStore';
 
 export interface ScanDeps {
   provider: OddsProvider;
   store: ScanStore;
+  /** Markets to fetch AND evaluate. Defaults to the MARKETS constant. */
+  markets?: readonly string[];
   now?: () => Date;
-}
-
-export interface ScanRequest {
-  topN: number;
-  regionTab: RegionTabKey;
 }
 
 export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<ScanResponse> {
   const now = deps.now ?? (() => new Date());
-  const { provider, store } = deps;
-  const { topN } = request;
+  const { provider, store, markets = MARKETS } = deps;
+  const { topN, tab } = request;
 
-  // Pre-call credit efficiency: the tab decides which API regions we pay
-  // for. Post-call correctness: the tab's allowlist filters bookmakers
-  // before arb detection (step 4).
-  const tab = regionTabByKey(request.regionTab);
-  if (!tab) throw new Error(`Unknown region tab: ${request.regionTab}`);
+  // The request arrives validated (scanRequest.ts). The tab plays two roles:
+  // pre-call credit efficiency — it decides which API regions we pay for —
+  // and post-call correctness — its allowlist filters bookmakers before arb
+  // detection (step 4).
   const regions = tab.apiRegions;
 
   // 1. Free catalogue call. Its headers give us the pre-scan usage baseline.
@@ -55,7 +51,7 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
   //    (e.g. temporarily unavailable market) shouldn't sink the whole scan.
   const settled = await Promise.allSettled(
     targets.map((sport) =>
-      provider.fetchOdds(sport.key, { regions, markets: MARKETS }),
+      provider.fetchOdds(sport.key, { regions, markets }),
     ),
   );
 
@@ -68,6 +64,8 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
     } else {
       sportsFailed.push(targets[i].key);
       firstFailure ??= outcome.reason;
+      // The scan proceeds without this sport; leave the why in the server log.
+      console.warn(`Odds fetch failed for ${targets[i].key}:`, outcome.reason);
     }
   });
 
@@ -83,11 +81,15 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
     results.flatMap((r) => r.events),
     tab.allowedBookmakers,
   );
+  // The engine must evaluate exactly the markets we paid to fetch — without
+  // this, adding a market to MARKETS would spend credits on odds the engine
+  // then ignores.
   const opportunities = findArbitrageOpportunities(events, {
     minProfitPct: MIN_PROFIT_PCT,
     suspiciousProfitPct: SUSPICIOUS_PROFIT_PCT,
     topN,
     now: now(),
+    marketKeys: [...markets],
   });
   fillLinkFallbacks(opportunities);
 

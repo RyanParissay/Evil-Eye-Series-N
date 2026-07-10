@@ -3,10 +3,9 @@
  * statuses, and never leaks the API key.
  */
 import { Router, type NextFunction, type Request, type Response } from 'express';
-import { DEFAULT_REGION_TAB, regionTabByKey } from '../../../shared/regionTabs';
-import type { ApiErrorBody, ApiErrorCode } from '../../../shared/types';
-import { MAX_TOP_N } from '../config/constants';
+import type { ApiErrorBody, ApiErrorCode } from '@shared/types';
 import { ProviderError } from '../providers/OddsProvider';
+import { parseScanRequest } from '../scan/scanRequest';
 import { runScan, type ScanDeps } from '../scan/scanService';
 
 export function createApiRouter(deps: ScanDeps): Router {
@@ -14,17 +13,14 @@ export function createApiRouter(deps: ScanDeps): Router {
 
   router.post('/scan', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const topN = Number(req.body?.topN);
-      if (!Number.isInteger(topN) || topN < 1 || topN > MAX_TOP_N) {
-        res.status(400).json(errorBody('bad_request', `topN must be an integer from 1 to ${MAX_TOP_N}`));
+      // All body validation lives in parseScanRequest — new scan options are
+      // added there, not here.
+      const parsed = parseScanRequest(req.body);
+      if (!parsed.ok) {
+        res.status(400).json(errorBody('bad_request', parsed.message));
         return;
       }
-      const tab = regionTabByKey(req.body?.regionTab ?? DEFAULT_REGION_TAB);
-      if (!tab) {
-        res.status(400).json(errorBody('bad_request', `Unknown regionTab: ${req.body?.regionTab}`));
-        return;
-      }
-      res.json(await runScan(deps, { topN, regionTab: tab.key }));
+      res.json(await runScan(deps, parsed.request));
     } catch (err) {
       next(err);
     }

@@ -3,7 +3,7 @@
  * interface — swap in a different odds source by implementing it. No
  * Express/React imports allowed here.
  */
-import type { ApiErrorCode, OddsEvent, SportInfo } from '../../../shared/types';
+import type { ApiErrorCode, OddsEvent, SportInfo } from '@shared/types';
 
 /** Usage accounting attached to every provider response. */
 export interface UsageInfo {

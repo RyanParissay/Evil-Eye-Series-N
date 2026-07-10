@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SportInfo } from '../../../shared/types';
+import type { SportInfo } from '@shared/types';
 import { breadthForSlider, rankSports, sportsForScan } from './sportSelection';
 
 function sport(key: string, overrides: Partial<SportInfo> = {}): SportInfo {

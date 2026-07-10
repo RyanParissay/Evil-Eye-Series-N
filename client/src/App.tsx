@@ -2,6 +2,13 @@ import { useEffect, useState } from 'react';
 import { DEFAULT_REGION_TAB, type RegionTabKey } from '../../shared/regionTabs';
 import type { ApiErrorCode, ScanMeta, ScanResponse } from '../../shared/types';
 import { ApiError, fetchLastScan, runScan } from './api';
+import {
+  loadAutoScanSettings,
+  msUntilNextScan,
+  saveAutoScanSettings,
+  shouldDisableAutoScan,
+  type AutoScanSettings,
+} from './autoScan';
 import { ControlBar } from './components/ControlBar';
 import { EyeGlyph } from './components/EyeGlyph';
 import { OpportunityCard } from './components/OpportunityCard';
@@ -10,7 +17,7 @@ type ScanState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'success'; data: ScanResponse }
-  | { status: 'error'; code: ApiErrorCode; message: string };
+  | { status: 'error'; code: ApiErrorCode; message: string; autoDisabled?: boolean };
 
 export function App() {
   const [topN, setTopN] = useState(5);
@@ -18,16 +25,37 @@ export function App() {
   const [scan, setScan] = useState<ScanState>({ status: 'idle' });
   const [lastMeta, setLastMeta] = useState<ScanMeta | null>(null);
 
-  // Hydrate the usage panel from the server's persisted last-scan record.
+  // Auto-update: persisted so the switch "stays on" across refreshes.
+  const [autoScan, setAutoScan] = useState<AutoScanSettings>(() =>
+    loadAutoScanSettings(window.localStorage),
+  );
+  // Epoch ms of the last completed scan ATTEMPT (success or error) — the
+  // anchor the auto-update countdown schedules from. Failures count too, so
+  // a failing scan can never turn into a hot retry loop.
+  const [lastScanAt, setLastScanAt] = useState<number | null>(null);
+
+  function updateAutoScan(next: AutoScanSettings) {
+    setAutoScan(next);
+    saveAutoScanSettings(window.localStorage, next);
+  }
+
+  // Hydrate the usage panel from the server's persisted last-scan record,
+  // and anchor the auto-update countdown to it: with a 10-minute interval
+  // and a scan 3 minutes ago, reopening the page waits 7 minutes.
   useEffect(() => {
     fetchLastScan()
-      .then((meta) => setLastMeta((current) => current ?? meta))
+      .then((meta) => {
+        if (!meta) return;
+        setLastMeta((current) => current ?? meta);
+        const at = Date.parse(meta.scannedAt);
+        if (Number.isFinite(at)) setLastScanAt((current) => current ?? at);
+      })
       .catch(() => {
         // No last scan (or server briefly unreachable) — panel shows dashes.
       });
   }, []);
 
-  async function handleScan() {
+  async function handleScan(source: 'manual' | 'auto' = 'manual') {
     if (scan.status === 'loading') return;
     setScan({ status: 'loading' });
     try {
@@ -36,13 +64,41 @@ export function App() {
       setLastMeta(data.meta);
     } catch (err) {
       const isApi = err instanceof ApiError;
+      const code: ApiErrorCode = isApi ? err.code : 'internal';
+      // A bad key or spent quota won't fix itself — switch auto mode off
+      // rather than re-hitting the API every X minutes. Functional update:
+      // the closure's autoScan may predate a mid-scan slider change.
+      const autoDisabled = source === 'auto' && shouldDisableAutoScan(code);
+      if (autoDisabled) {
+        setAutoScan((current) => {
+          const next = { ...current, enabled: false };
+          saveAutoScanSettings(window.localStorage, next);
+          return next;
+        });
+      }
       setScan({
         status: 'error',
-        code: isApi ? err.code : 'internal',
+        code,
         message: isApi ? err.message : 'Something unexpected broke. Check the server logs.',
+        autoDisabled,
       });
+    } finally {
+      setLastScanAt(Date.now());
     }
   }
+
+  // The auto-update loop: while enabled and not already scanning, arm a
+  // timer for when the next scan is due. Completing any scan (manual or
+  // auto) moves lastScanAt, re-arming for a fresh interval. Deliberately no
+  // dependency array: re-arming every render keeps the closure's
+  // topN/regionTab fresh, and the delay is computed from the absolute
+  // lastScanAt, so constant re-arming causes no drift.
+  useEffect(() => {
+    if (!autoScan.enabled || scan.status === 'loading') return;
+    const delay = msUntilNextScan(lastScanAt, autoScan.intervalMins, Date.now());
+    const id = window.setTimeout(() => void handleScan('auto'), delay);
+    return () => window.clearTimeout(id);
+  });
 
   return (
     <div className="page">
@@ -59,9 +115,12 @@ export function App() {
         onTopNChange={setTopN}
         regionTab={regionTab}
         onRegionTabChange={setRegionTab}
-        onScan={handleScan}
+        onScan={() => void handleScan('manual')}
         scanning={scan.status === 'loading'}
         lastMeta={lastMeta}
+        autoScan={autoScan}
+        onAutoScanChange={updateAutoScan}
+        lastScanAt={lastScanAt}
       />
 
       <main className="results">
@@ -89,6 +148,12 @@ export function App() {
             <p className="state-title">{errorTitle(scan.code)}</p>
             <p className="state-detail">{scan.message}</p>
             <p className="state-detail">{errorHint(scan.code)}</p>
+            {scan.autoDisabled && (
+              <p className="state-detail">
+                Auto update turned itself off so it doesn't retry into this error. Fix the cause,
+                then flip the switch back on.
+              </p>
+            )}
           </div>
         )}
 
