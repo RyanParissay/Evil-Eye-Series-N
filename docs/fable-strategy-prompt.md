@@ -1,95 +1,89 @@
-# Prompt: state report + next moves for Evil Eye Arbitrage
+# Prompt: where Evil Eye is at + what to do next
 
 Copy everything below the line into a fresh Claude (Fable) conversation.
-Pair with `docs/claude-onboarding-prompt.md` when the session needs code
-detail; `docs/user-guide.md` is the operating tutorial.
+Companions: `docs/claude-onboarding-prompt.md` (code detail),
+`docs/user-guide.md` (operating tutorial).
 
 ---
 
 You are my strategist on **Evil Eye Arbitrage** (`~/evil-eye-arbitrage`),
-a personal sports-betting operation. The end goal is blunt: **a simple
-app that makes money reliably** — one user (me), real dollars, provable
-edge. Read this report, then do the job at the bottom.
+a personal betting operation. Goal unchanged: **a simple app that makes
+money reliably.** Read this state report, then do the job at the bottom.
 
-## Where the app is (post–Phase 8, July 2026)
+## Where it's at (July 2026, post–Risk Mode)
 
-**All eight phases are built.** 245 tests green. The machine is
-feature-complete for its mission and now *instruments itself*:
+**Ten build phases are done. 276 tests green.** Two complete detection
+strategies now share one set of rails:
 
-1–3. Scan (The Odds API, ~10 credits/scan, $30/20k plan) → strict
-line-group arb detection → WhatsApp alert with exact dollar stakes +
-deep link → mobile cockpit (re-verify ≈1 credit, record actual fills,
-mark completed, apply to balances).
+- **Arbitrage Mode** (red = guaranteed): scan → strict line-group arb
+  detection → WhatsApp alert with exact balance-capped dollar stakes →
+  mobile cockpit (re-verify ~1 credit, record fills, complete, apply to
+  balances) → ledger.
+- **Risk Mode** (yellow = expected value, NOT guaranteed): every scan
+  also de-vigs Pinnacle (dual-role benchmark riding the same fetch at
+  zero extra credits) and surfaces soft-book prices beating fair —
+  edge %, win probability, guards for longshots and benchmark staleness.
+  Single-leg cockpit; **manual WON/LOST/VOID grading is what creates
+  realized P&L**; ungraded bets live on a separate EXPECTED (model)
+  line; EV alerts are per-subscription opt-in with honest copy.
+- **Evidence layer**: peak-hours scan windows with a credit-budget hard
+  stop; per-scan history; funded-book + benchmark-reach coverage audits;
+  arb survival stats feeding a MEASURED paper haircut; reaction-funnel
+  telemetry; the proving-month scoreboard; paper fund (arb-only, by
+  design).
 
-4–7. Advanced mode (zero-credit snapshot replays with book presets) ·
-Ledger (realized P&L from hand-priced fills only, capture rate, edge
-decay, CSV) · Paper fund (SIMULATED shadow book entering exactly what an
-alert would, lazy settlement, ideal + haircut curves) · Fund position
-(persisted bankroll, balance-capped stakes via ONE shared planStakes,
-low/stale-balance warnings, apply-to-balances with exact revert).
+**What it still has none of: data.** Ledger $0.00. Scan history empty.
+Twilio unconfigured (alerts print to server console). Paper mode off.
+No scan window has ever run. Everything left is operation, plus exactly
+one unbuilt phase.
 
-8. **Evidence instrumentation**: per-scan history log; client-only scan
-windows (weekday 18:30–22:30, weekend 12:00–22:30, 5-min in-window
-cadence) with credit-budget projection and a hard auto-scan stop at 95%;
-funded-book feed coverage audit; arb survival-at-next-scan + gone-
-lifetime stats that feed a MEASURED paper haircut (qualified at ≥14 days
-+ ≥50 samples, ASSUMED until then); reaction-funnel telemetry (median
-alert→re-verify is the headline); a proving-month scoreboard.
+## The two candidate next moves
 
-**What it does NOT have: data.** The ledger is $0.00, the scan history
-starts now, Twilio is unconfigured (alerts print to the server console),
-and no scan window has yet run. Every remaining question about this app
-is empirical, and the instruments to answer them are installed.
+**A — Build Phase 11 (the mission's last phase):** ¼-Kelly sizing
+replacing Risk Mode's flat stakes (capped by book balances via the
+shared planner), per-bet volatility (SD, bands), portfolio projections
+inside Risk Mode (exact binomial / normal / seeded Monte Carlo: P(down
+after N), percentiles, drawdown, risk of ruin — all labeled MODEL), and
+the calibration stat: model-predicted win rate vs realized hit rate
+across graded bets. That last number is the eventual proof that the
+benchmark edge is real rather than staleness.
 
-## Architecture verdict (short form)
+**B — Go operational tonight (10 minutes, no code):** add `TWILIO_*` +
+`APP_URL` to `.env`; set fund settings (bankroll, default stake) and
+per-book balances; flip paper mode ON; enable auto-update so the
+18:30–22:30 window runs. From that moment every instrument accrues:
+survival, coverage, reaction time, paper curves — and Risk Mode's board
+starts showing real edges to optionally act on at small flat stakes.
 
-Strengths that held under eight phases of pressure: money math exists
-exactly once per concern (planStakes, lockedProfit, alertWorthy,
-settlePaperBook, survival mapping), all pure and fixture-tested;
-honest-numbers discipline everywhere (unpriced → counted not summed,
-unknown → excluded not zeroed, simulated → labeled); strict layering
-(pure engine, thin routes, crash-safe JSON stores, zero server timers).
+My working recommendation: **B is not optional and shouldn't wait for
+A** — data accrues while anything else happens, and every future
+decision is starved without it. A is worth building before placing EV
+bets at scale, because unsized EV betting (flat stakes, no variance
+model) is how a real edge still ruins a bankroll — but small-stakes
+graded EV bets during the proving month are exactly the calibration
+data Phase 11's headline stat needs.
 
-Standing weaknesses, ranked by threat to "reliably": (1) detection
-latency vs arb lifetime — now *measurable* via survival stats instead of
-speculative; (2) single odds source — no cross-validation of stale odds;
-(3) h2h-only surface — one config line to widen, but it multiplies scan
-cost; (4) capture depends on my discipline (record fills, apply
-balances); (5) book limiting is the unmodeled ceiling. Accepted small
-stuff: markAlerted no-op on persistence failure; survival counts a live
-re-verify as a sighting (slight upward bias, documented).
+## Standing constraints and open risks
 
-## The plan of record — the proving month
-
-Setup (one evening): add `TWILIO_*` + `APP_URL` to `.env` so alerts hit
-my phone with working deep links; set fund settings (bankroll, default
-stake) and per-book balances; flip paper mode ON; enable auto-update and
-let the scan windows run.
-
-Operate (3–4 weeks): act on alerts through the cockpit — re-verify,
-record real fills on anything placed, apply balances after events
-settle. The scoreboard accrues: ideal curve, haircut curve (MEASURED
-once qualified), real capture rate, median arb lifetime, median reaction
-time, credit burn.
-
-Decide (after): if ideal profit is real and capture is the leak → attack
-latency (cadence/windows tuning, spreads/totals on liquid sports, plan
-tier — in credit-economics order). If ideal profit is itself thin → the
-soft-book h2h arb surface is too small; jump to the Pinnacle merge and
-+EV, where the edge is bigger and slower-dying. Roadmap already scoped,
-deliberately unbuilt: Pinnacle MERGE (not a swap) → +EV with fractional
-Kelly → CLV capture → middles.
+No auto bet placement; single user; no server-side schedulers; credits
+real money; honest numbers everywhere. Risks unchanged in kind, now
+measurable: arb lifetime vs reaction latency (survival + telemetry will
+say); benchmark staleness making phantom EV edges (freshness guard +
+calibration will say); book limiting as the ceiling (status field
+tracks it); my own grading/fill discipline as the ledger's weakest link.
 
 ## Your job in this session
 
-1. Audit the proving-month plan for blind spots: what will these
-   instruments still fail to tell me, and what cheap addition (that
-   speeds the loop or sharpens evidence — nothing else qualifies) would
-   close the worst gap?
-2. Pre-commit the decision rules: propose the specific numeric
-   thresholds on the scoreboard (ideal $/mo, capture %, survival %,
-   reaction time) that should trigger each branch — scale up real money /
-   attack latency / pivot to +EV / stop. Make me argue with numbers, not
-   vibes.
-3. Name the failure mode I'm most likely to rationalize away when the
-   data comes in, and the pre-agreed tripwire for it.
+1. Sequence A and B concretely — including whether any slice of A
+   (e.g., Kelly sizing alone, or just the calibration stat) should jump
+   the queue before EV bets are placed even at small stakes.
+2. Define "cleared to bet EV with real sizing" as numeric gates:
+   minimum graded bets, calibration tolerance (predicted vs realized
+   win rate), benchmark-reach floor, and what failing each gate implies
+   (more data / fix the data source / stop).
+3. Write my week-one operating checklist: what to do daily (grade
+   settled bets, apply balances), what to glance at (scoreboard,
+   coverage flags, budget projection), and what to ignore until the
+   sample sizes mean something.
+4. Reject anything — including my framing above — that neither speeds
+   the loop nor sharpens the evidence.
