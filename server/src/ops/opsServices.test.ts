@@ -134,6 +134,30 @@ describe('computeCoverage', () => {
     expect(byKey.disabled).toBeUndefined();
     expect(report.distinctBooksPerScan.map((d) => d.count)).toEqual([3, 2, 1, 2]);
   });
+
+  it('benchmark reach: scan share + per-sport presence from the latest snapshot', () => {
+    const report = computeCoverage(scans, books, 10, {
+      keys: ['pinnacle'],
+      snapshot: {
+        sportsScanned: ['basketball_nba', 'soccer_epl'],
+        events: [
+          // NBA: 1 of 2 events carries the benchmark.
+          { id: 'e1', sportKey: 'basketball_nba', sportTitle: 'NBA', commenceTime: '', homeTeam: '', awayTeam: '', bookmakers: [{ key: 'pinnacle', title: 'Pinnacle', lastUpdate: '', markets: [] }] },
+          { id: 'e2', sportKey: 'basketball_nba', sportTitle: 'NBA', commenceTime: '', homeTeam: '', awayTeam: '', bookmakers: [{ key: 'bet365', title: 'Bet365', lastUpdate: '', markets: [] }] },
+          // EPL: benchmark absent entirely → speculative detection impossible.
+          { id: 'e3', sportKey: 'soccer_epl', sportTitle: 'EPL', commenceTime: '', homeTeam: '', awayTeam: '', bookmakers: [{ key: 'bet365', title: 'Bet365', lastUpdate: '', markets: [] }] },
+        ],
+      },
+    });
+    expect(report.benchmark).toHaveLength(1);
+    const pinnacle = report.benchmark![0];
+    // pinnacle appears in 3 of the 4 fixture scans' distinctBooks.
+    expect(pinnacle.scanShare).toBeCloseTo(0.75, 6);
+    expect(pinnacle.perSport).toEqual([
+      { sportKey: 'basketball_nba', sportTitle: 'NBA', events: 2, eventsWithBenchmark: 1 },
+      { sportKey: 'soccer_epl', sportTitle: 'EPL', events: 1, eventsWithBenchmark: 0 },
+    ]);
+  });
 });
 
 /* ————— survival ————— */

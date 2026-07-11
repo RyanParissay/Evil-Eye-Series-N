@@ -1988,3 +1988,10 @@ select.bm-input {
   flex-wrap: wrap;
   padding-bottom: 8px;
 }
+
+/* Benchmark role badge — informational, not a warning. */
+.bm-benchmark-chip {
+  border: 1px solid var(--hairline);
+  color: var(--grey);
+  margin-left: 8px;
+}

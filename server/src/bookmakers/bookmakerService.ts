@@ -12,6 +12,7 @@ import {
   type FetchPlan,
 } from './effectiveBookmakers';
 import type { BookmakerPatch } from './bookmakerRequests';
+import { BENCHMARK_BOOKS } from '../config/constants';
 
 export class BookmakerService {
   constructor(
@@ -21,7 +22,9 @@ export class BookmakerService {
 
   async list(): Promise<BookmakerConfig[]> {
     const { bookmakers } = await this.store.read();
-    return [...bookmakers].sort((a, b) => a.title.localeCompare(b.title));
+    return [...bookmakers]
+      .map((b) => ({ ...b, benchmark: BENCHMARK_BOOKS.includes(b.key) }))
+      .sort((a, b) => a.title.localeCompare(b.title));
   }
 
   /** Applies a validated patch. Null when the key isn't in the registry. */
@@ -72,7 +75,7 @@ export class BookmakerService {
   }
 
   async fetchPlan(tab: RegionTabConfig): Promise<FetchPlan> {
-    return planFetch((await this.store.read()).bookmakers, tab);
+    return planFetch((await this.store.read()).bookmakers, tab, BENCHMARK_BOOKS);
   }
 
   /** Drops opportunities with any leg at a disabled/limited/dead book. */

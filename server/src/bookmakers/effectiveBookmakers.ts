@@ -61,17 +61,29 @@ export interface FetchPlan {
  * config refines it. Unknown books (not yet in the registry) count as
  * enabled so they can be discovered.
  *
+ * Benchmark keys (Speculative phase 9) ride the fetch even when disabled
+ * for betting — dual-role: the FEED always carries the sharp book, the
+ * DETECTION filter never gains it beyond today's rules. The strictly-
+ * cheaper comparison uses the union count, so a benchmark pushing the
+ * list past a 10-book boundary falls back to regions (same cost as ever)
+ * rather than silently paying more.
+ *
  * Trade-off, on purpose: while bookmakersParam is active the feed only
  * contains those books, so the registry won't discover books outside the
  * allowlist. Fetching by regions (the not-cheaper case) still surfaces them.
  */
-export function planFetch(configs: BookmakerConfig[], tab: RegionTabConfig): FetchPlan {
+export function planFetch(
+  configs: BookmakerConfig[],
+  tab: RegionTabConfig,
+  benchmarkKeys: readonly string[] = [],
+): FetchPlan {
   const byKey = new Map(configs.map((c) => [c.key, c]));
   const allowedKeys = tab.allowedBookmakers.filter((key) => byKey.get(key)?.enabled !== false);
+  const fetchKeys = [...allowedKeys, ...benchmarkKeys.filter((k) => !allowedKeys.includes(k))];
   const strictlyCheaper =
     allowedKeys.length > 0 &&
-    regionEquivalentsForBookmakers(allowedKeys.length) < tab.apiRegions.length;
-  return { bookmakersParam: strictlyCheaper ? allowedKeys : undefined, allowedKeys };
+    regionEquivalentsForBookmakers(fetchKeys.length) < tab.apiRegions.length;
+  return { bookmakersParam: strictlyCheaper ? fetchKeys : undefined, allowedKeys };
 }
 
 /**

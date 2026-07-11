@@ -37,6 +37,13 @@ export const SPORT_PRIORITY: readonly string[] = [
   'boxing_boxing',
 ];
 
+/**
+ * Sharp books carried in every fetch as the fair-price benchmark
+ * (Speculative Mode). Dual-role: being listed here never affects a
+ * book's bettability — only guarantees its odds reach the feed.
+ */
+export const BENCHMARK_BOOKS: readonly string[] = ['pinnacle'];
+
 /** Opportunities below this profit % are dropped. */
 export const MIN_PROFIT_PCT = 0;
 

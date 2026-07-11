@@ -128,6 +128,14 @@ function BookmakerRow({
       </td>
       <td className="bm-book">
         {book.title}
+        {book.benchmark && (
+          <span
+            className="chip bm-benchmark-chip"
+            title="Sharp benchmark for Speculative Mode — always carried in the feed. Betting at it is still governed by the enabled switch."
+          >
+            benchmark
+          </span>
+        )}
         {book.status !== 'active' && (
           <span className="chip chip-warn bm-status-chip">⚠ {book.status}</span>
         )}

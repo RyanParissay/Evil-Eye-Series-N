@@ -29,8 +29,12 @@ shared/          domain types + region-tab config + stakePlanning.ts (the ONE
                  planStakes implementation both sides run — alert dollars and
                  cockpit display must never compute caps separately). Zero imports.
 server/src/
-  engine/        PURE functions: arb math, filters, slider mapping, credit math.
-                 No Express, no Node built-ins, no provider imports. Fully tested.
+  engine/        PURE functions: arb math, filters, slider mapping, credit
+                 math, fairProbability.ts (de-vig: benchmark odds → fair
+                 probabilities, multiplicative behind an enum seam; typed
+                 rejections for missing outcomes / line mismatches — the
+                 line-group invariant extends to benchmark comparison).
+                 No Express, no Node built-ins, no provider imports.
   providers/     OddsProvider interface + adapters (TheOddsApi live, Mock fixtures).
                  Wire-format mapping and ProviderError creation happen ONLY here.
   scan/          scanRequest.ts  — request body validation (THE place for new options)
@@ -208,6 +212,16 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   (manual scans are never blocked). Stop = used ≥ autoStopPct% × budget,
   from the provider's own month counter; it releases when the counter
   resets or the budget moves.
+- Benchmark books (BENCHMARK_BOOKS, currently pinnacle) are DUAL-ROLE:
+  always carried in the fetch (planFetch unions them into the books
+  param; the strictly-cheaper rule uses the union count, so crossing a
+  10-book boundary falls back to regions rather than silently paying
+  more) but bettability is governed ONLY by the enabled flag — arb
+  behavior is untouched by the benchmark role. Ryan confirmed dual-role
+  2026-07-10: Pinnacle is Ontario-licensed and stays bettable.
+- Fair probabilities come only from fairForLineGroup within one |point|
+  group; a benchmark missing a side or quoting a different line is a
+  typed rejection. Never infer fair prices from soft-book consensus.
 - Stake/cap math exists exactly once (shared/stakePlanning.ts planStakes):
   a leg never exceeds its book's recorded balance — the WHOLE position
   rescales to the binding book so the guarantee survives. The client

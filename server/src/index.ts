@@ -130,6 +130,7 @@ app.use(
     settings: opsStore,
     scanHistory: scanHistoryStore,
     books: bookmakerService,
+    snapshots: snapshotStore,
     records: () => ledgerService.allRecordsList(),
     ledger: async () => {
       const summary = await ledgerService.summarize();

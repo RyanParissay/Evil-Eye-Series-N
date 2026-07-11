@@ -70,10 +70,19 @@ each phase (`docs/superpowers/specs/`):
    completed, first-write-wins), and the proving-month scoreboard on the
    Ledger. Everything zero-credit and client-timer-driven.
 
-The governing spec (acceptance criteria + operating rules) is
-**`docs/mission-phases-4-7.md`** plus the Phase 8 design doc in
-`docs/superpowers/specs/`. Roadmap items (Pinnacle merge, +EV, CLV,
-middles) remain deliberately unbuilt.
+9. ✅ Speculative Mode phase 9 — benchmark ingestion + de-vig engine:
+   Pinnacle rides every fetch as a DUAL-ROLE benchmark (bettability
+   unchanged — Ryan's explicit decision; planFetch unions benchmark keys
+   with the strictly-cheaper rule on the union, zero marginal credits at
+   ≤10 books), coverage audit gains benchmark reach (per-sport
+   "speculative detection impossible" flags), and engine/fairProbability
+   lands multiplicative de-vig with typed rejections. Nothing consumes
+   fair probabilities yet — Phase 10 (EV detection + % EDGE tab) does.
+
+The governing specs are **`docs/mission-phases-4-7.md`** (phases 4–7),
+the Phase 8 design doc, and the Phases 9–11 Speculative Mode mission
+(benchmark → EV detection → RISK tab; phase 10 next). Remaining roadmap
+(CLV, auto-grading, power/Shin de-vig, middles) deliberately unbuilt.
 
 Health: **181 tests green** (164 server, 17 client — Vitest), `tsc` clean
 in both workspaces. `.env` has a live `ODDS_API_KEY`; no `TWILIO_*` vars

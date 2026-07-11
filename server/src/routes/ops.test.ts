@@ -43,6 +43,7 @@ function harness(scans: ScanLogEntry[] = []) {
       },
     },
     books: { list: async () => [] },
+    snapshots: { read: async () => null },
     records: async () => [],
     ledger: async () => ({
       realized: { totalLockedProfit: 0, completions: 0, unpricedCompletions: 0 },

@@ -74,6 +74,41 @@ export function EvidencePanel() {
           )}
         </section>
 
+        {coverage?.benchmark && coverage.scansConsidered > 0 && (
+          <section>
+            <h2 className="ledger-section micro-label">Benchmark reach — speculative mode</h2>
+            {coverage.benchmark.map((b) => (
+              <div key={b.key}>
+                <p className="evidence-stat">
+                  <strong>{(b.scanShare * 100).toFixed(0)}%</strong>{' '}
+                  <span className="micro-label">
+                    of scans carried {b.title} — no benchmark, no speculative detection
+                  </span>
+                </p>
+                <table className="ledger-table">
+                  <tbody>
+                    {b.perSport.map((s) => (
+                      <tr key={s.sportKey}>
+                        <td>{s.sportTitle}</td>
+                        <td className="num">
+                          {s.eventsWithBenchmark}/{s.events} events
+                        </td>
+                        <td>
+                          {s.events > 0 && s.eventsWithBenchmark === 0 && (
+                            <span className="chip chip-warn">
+                              ⚠ SPECULATIVE DETECTION IMPOSSIBLE
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </section>
+        )}
+
         <section>
           <h2 className="ledger-section micro-label">Arb survival</h2>
           {!survival || survival.overall.samples === 0 ? (

@@ -116,6 +116,48 @@ describe('planFetch', () => {
   });
 });
 
+describe('planFetch — benchmark union (dual-role, Speculative phase 9)', () => {
+  it('a benchmark key already enabled is a no-op: identical plan, identical cost', () => {
+    const withBenchmark = planFetch([], makeTab(), ['pinnacle']);
+    const without = planFetch([], makeTab());
+    expect(withBenchmark).toEqual(without);
+  });
+
+  it('keeps a DISABLED benchmark book in the fetch but never in detection', () => {
+    const configs = [makeConfig({ key: 'pinnacle', title: 'Pinnacle', enabled: false })];
+    const plan = planFetch(configs, makeTab(), ['pinnacle']);
+    expect(plan.bookmakersParam).toEqual(['bet365', 'coolbet', 'pinnacle']);
+    expect(plan.allowedKeys).toEqual(['bet365', 'coolbet']);
+  });
+
+  it('zero marginal credits while the union stays ≤ 10 books', () => {
+    // 9 enabled + 1 benchmark = 10 → still 1 region-equivalent < 2 regions.
+    const tab = makeTab({
+      allowedBookmakers: Array.from({ length: 9 }, (_, i) => `book${i}`),
+    });
+    const plan = planFetch([], tab, ['pinnacle']);
+    expect(plan.bookmakersParam).toHaveLength(10);
+    expect(plan.bookmakersParam).toContain('pinnacle');
+  });
+
+  it('a union past 10 books is no longer strictly cheaper → regions fallback, never silent extra cost', () => {
+    // 10 enabled + 1 benchmark = 11 → 2 region-equivalents = 2 regions.
+    const tab = makeTab({
+      allowedBookmakers: Array.from({ length: 10 }, (_, i) => `book${i}`),
+    });
+    const plan = planFetch([], tab, ['pinnacle']);
+    expect(plan.bookmakersParam).toBeUndefined();
+    expect(plan.allowedKeys).toHaveLength(10);
+  });
+
+  it('everything disabled still falls back to regions — never a benchmark-only fetch', () => {
+    const configs = makeTab().allowedBookmakers.map((key) => makeConfig({ key, enabled: false }));
+    const plan = planFetch(configs, makeTab(), ['pinnacle']);
+    expect(plan.bookmakersParam).toBeUndefined();
+    expect(plan.allowedKeys).toEqual([]);
+  });
+});
+
 describe('isBookAlertable', () => {
   it('active + enabled books and unknown books are alertable', () => {
     expect(isBookAlertable([makeConfig()], 'bet365')).toBe(true);

@@ -257,6 +257,39 @@ describe('runScan', () => {
     expect(result.opportunities).toHaveLength(1);
   });
 
+  it('benchmark in the fetch changes NOTHING about arb output, and its odds reach the snapshot', async () => {
+    // Feed carries a pinnacle-priced event alongside the arb event.
+    const events = [totalsArbEvent()];
+    const run = (bookmakersParam: string[] | undefined) =>
+      runScan(
+        deps(stubProvider(events), {
+          markets: ['totals'],
+          books: {
+            async fetchPlan() {
+              return { bookmakersParam, allowedKeys: ['bet365'] };
+            },
+            async recordSeen() {},
+          },
+          snapshots: {
+            async save(snapshot) {
+              snapshots.push(snapshot.events);
+            },
+          },
+        }),
+        { topN: 5, tab: CA_TAB },
+      );
+    const snapshots: unknown[][] = [];
+    const withBenchmark = await run(['bet365', 'pinnacle']);
+    const without = await run(['bet365']);
+    // Byte-identical arb output: the detection allowlist is what matters.
+    expect(withBenchmark.opportunities).toEqual(without.opportunities);
+    // The raw snapshot keeps every book in the feed — benchmark included.
+    const books = (snapshots[0] as Array<{ bookmakers: Array<{ key: string }> }>).flatMap((e) =>
+      e.bookmakers.map((b) => b.key),
+    );
+    expect(books).toContain('pinnacle');
+  });
+
   it('appends a scan-history line with the raw feed facts (Phase 8)', async () => {
     const appended: unknown[] = [];
     await runScan(

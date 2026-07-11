@@ -14,10 +14,12 @@ import type {
   ScanWindow,
   Scoreboard,
 } from '@shared/types';
+import { BENCHMARK_BOOKS } from '../config/constants';
 import { computeCoverage } from '../ops/coverageService';
 import { computeSurvival } from '../ops/survivalService';
 import { computeTelemetry } from '../ops/telemetryService';
 import type { OpsSettingsStore } from '../ops/opsStore';
+import type { OddsSnapshot } from '../scan/snapshotStore';
 import { errorBody } from './api';
 
 export interface OpsRouterDeps {
@@ -27,6 +29,8 @@ export interface OpsRouterDeps {
     entries(): AsyncGenerator<ScanLogEntry>;
   };
   books: { list(): Promise<BookmakerConfig[]> };
+  /** Latest raw snapshot — per-sport benchmark reach derives from it. */
+  snapshots: { read(): Promise<OddsSnapshot | null> };
   /** Every record, active + archived (survival and telemetry need history). */
   records: () => Promise<OpportunityRecord[]>;
   ledger: () => Promise<Pick<LedgerSummary, 'realized' | 'captureRate'>>;
@@ -69,8 +73,12 @@ export function createOpsRouter(deps: OpsRouterDeps): Router {
   router.get('/coverage', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const lastN = clampInt(Number(req.query.lastN), 1, 500) ?? DEFAULT_COVERAGE_N;
-      const [scans, books] = await Promise.all([deps.scanHistory.lastN(lastN), deps.books.list()]);
-      res.json(computeCoverage(scans, books, lastN));
+      const [scans, books, snapshot] = await Promise.all([
+        deps.scanHistory.lastN(lastN),
+        deps.books.list(),
+        deps.snapshots.read(),
+      ]);
+      res.json(computeCoverage(scans, books, lastN, { keys: BENCHMARK_BOOKS, snapshot }));
     } catch (err) {
       next(err);
     }

@@ -291,6 +291,11 @@ export interface BookmakerConfig {
   lastSeenAt: string;
   /** When the balance value itself last changed — drives the stale nudge. */
   balanceUpdatedAt?: string | null;
+  /**
+   * Sharp benchmark source (Speculative Mode). Constant-driven, never
+   * user-editable; does NOT affect bettability — the enabled flag does.
+   */
+  benchmark?: boolean;
 }
 
 /* ————— Fund position (Phase 7) ————— */
@@ -453,11 +458,28 @@ export interface BookCoverage {
   flag: 'ok' | 'thin' | 'missing';
 }
 
+/** Where the sharp benchmark actually reaches — Speculative detection is
+ *  silently impossible wherever it doesn't. */
+export interface BenchmarkCoverage {
+  key: string;
+  title: string;
+  /** Share of the considered scans whose feed carried this benchmark. */
+  scanShare: number;
+  /** From the LATEST snapshot: per scanned sport, events carrying it. */
+  perSport: Array<{
+    sportKey: string;
+    sportTitle: string;
+    events: number;
+    eventsWithBenchmark: number;
+  }>;
+}
+
 export interface CoverageReport {
   lastN: number;
   scansConsidered: number;
   books: BookCoverage[];
   distinctBooksPerScan: Array<{ at: string; count: number }>;
+  benchmark?: BenchmarkCoverage[];
 }
 
 export interface RateStat {
