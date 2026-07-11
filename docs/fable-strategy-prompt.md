@@ -1,118 +1,95 @@
-# Prompt: strategy session on Evil Eye Arbitrage
+# Prompt: state report + next moves for Evil Eye Arbitrage
 
 Copy everything below the line into a fresh Claude (Fable) conversation.
-Pair it with `docs/claude-onboarding-prompt.md` if the session needs code
-detail; this brief is about direction.
+Pair with `docs/claude-onboarding-prompt.md` when the session needs code
+detail; `docs/user-guide.md` is the operating tutorial.
 
 ---
 
 You are my strategist on **Evil Eye Arbitrage** (`~/evil-eye-arbitrage`),
-a personal sports-betting arbitrage operation. The end goal is blunt: **a
-simple app that makes money reliably.** Not a product, not a platform —
-one user (me), real dollars, provable edge. Read this whole brief, then
-do the job at the bottom.
+a personal sports-betting operation. The end goal is blunt: **a simple
+app that makes money reliably** — one user (me), real dollars, provable
+edge. Read this report, then do the job at the bottom.
 
-## Where the app is (July 2026)
+## Where the app is (post–Phase 8, July 2026)
 
-Seven phases built, TDD throughout, 226 tests green. The full loop
-exists: scan live odds (The Odds API, ~10 credits/scan on a $30/20k-
-credit plan) → arb detection with strict line-group math → WhatsApp
-alert with exact dollar stakes and a deep link → mobile execution
-cockpit (re-verify ≈1 credit, record actual fills, mark completed) →
-ledger with realized P&L / capture rate / edge decay / CSV → paper fund
-simulating "acted on 100% of alerts" (ideal + haircut curves, labeled
-SIMULATED) → fund position with balance caps and apply-to-balances
-reconciliation. Advanced mode replays the last scan against any book
-subset at zero cost.
+**All eight phases are built.** 245 tests green. The machine is
+feature-complete for its mission and now *instruments itself*:
 
-What it does NOT have: **any real trading history.** The ledger is at
-$0.00 — the proof layer is built but empty. Twilio isn't configured yet
-(alerts print to the server console), so the phone-buzz loop has never
-fired for real. The paper fund was just turned on-able. Everything from
-here is an evidence problem, not a code problem.
+1–3. Scan (The Odds API, ~10 credits/scan, $30/20k plan) → strict
+line-group arb detection → WhatsApp alert with exact dollar stakes +
+deep link → mobile cockpit (re-verify ≈1 credit, record actual fills,
+mark completed, apply to balances).
 
-## Architecture strengths (verified, not aspirational)
+4–7. Advanced mode (zero-credit snapshot replays with book presets) ·
+Ledger (realized P&L from hand-priced fills only, capture rate, edge
+decay, CSV) · Paper fund (SIMULATED shadow book entering exactly what an
+alert would, lazy settlement, ideal + haircut curves) · Fund position
+(persisted bankroll, balance-capped stakes via ONE shared planStakes,
+low/stale-balance warnings, apply-to-balances with exact revert).
 
-- **Money math exists exactly once, pure and tested**: stake/cap
-  planning (`shared/stakePlanning.ts` — same function renders alert
-  dollars and cockpit stakes), realized profit (engine `lockedProfit`),
-  alert selection (`alertWorthy` — WhatsApp and paper share it), paper
-  settlement (deterministic, lazy, no schedulers).
-- **Honest-numbers discipline**: completions without filled numbers are
-  counted but never summed; everything simulated says SIMULATED;
-  unknown decay is excluded, not zeroed; nothing is ever estimated.
-- **Strict layering that held under pressure**: pure engine, swappable
-  provider, crash-safe JSON stores, routes as thin boundaries. The
-  line-group invariant (never combine across |point| lines) is tested at
-  every level — the class of bug that loses both legs is fenced off.
-- **Credit discipline**: every paid call is accounted; snapshot
-  recompute and paper trading are structurally zero-cost.
-- The scan→phone→cockpit loop is short: deep link, prefilled fills,
-  one-tap completion.
+8. **Evidence instrumentation**: per-scan history log; client-only scan
+windows (weekday 18:30–22:30, weekend 12:00–22:30, 5-min in-window
+cadence) with credit-budget projection and a hard auto-scan stop at 95%;
+funded-book feed coverage audit; arb survival-at-next-scan + gone-
+lifetime stats that feed a MEASURED paper haircut (qualified at ≥14 days
++ ≥50 samples, ASSUMED until then); reaction-funnel telemetry (median
+alert→re-verify is the headline); a proving-month scoreboard.
 
-## Architecture weaknesses (ranked by threat to "makes money reliably")
+**What it does NOT have: data.** The ledger is $0.00, the scan history
+starts now, Twilio is unconfigured (alerts print to the server console),
+and no scan window has yet run. Every remaining question about this app
+is empirical, and the instruments to answer them are installed.
 
-1. **Detection latency vs edge lifetime — the existential one.** Arbs on
-   soft books live minutes. Scans are on-demand/client-timer only (a
-   deliberate invariant), and the credit budget allows roughly a scan
-   every ~20 minutes sustained (~2,000 scans/month at 10 credits). If
-   real arbs die faster than the scan cadence + my reaction time, the
-   system finds history, not money. No refactor fixes this — only
-   measurement (the paper fund vs real capture rate) can say whether the
-   loop is fast enough, and only cadence/market/plan changes can speed it.
-2. **Single odds source.** No second feed to cross-validate stale or
-   errored odds — the "suspicious" flag is a heuristic, not a check. A
-   Pinnacle benchmark is roadmap, and it's a MERGE (fan-out + merge in
-   runScan, per-source credit accounting), not the clean provider swap
-   the interface suggests.
-3. **Thin opportunity surface.** h2h only. Adding spreads/totals is
-   literally one config line (`MARKETS`) — the engine already handles
-   lines — but it multiplies the credit cost of every scan, so it's an
-   economics decision, not a code decision.
-4. **The ledger's value depends on my discipline.** Realized P&L only
-   exists if I record fills at completion; capture rate only means
-   something if I complete what I act on. The app can't force this.
-5. **Book limiting is the real-world ceiling** for any winning arber.
-   The bookmaker status field (limited/dead) tracks it, but nothing yet
-   measures profit-per-book-before-limiting or spreads action to delay it.
-6. Accepted small stuff: if record persistence fails but a send
-   succeeds, `markAlerted` silently no-ops; no shared client state layer
-   (pages self-fetch); single-provider coupling in runScan orchestration.
+## Architecture verdict (short form)
 
-## Standing constraints
+Strengths that held under eight phases of pressure: money math exists
+exactly once per concern (planStakes, lockedProfit, alertWorthy,
+settlePaperBook, survival mapping), all pure and fixture-tested;
+honest-numbers discipline everywhere (unpriced → counted not summed,
+unknown → excluded not zeroed, simulated → labeled); strict layering
+(pure engine, thin routes, crash-safe JSON stores, zero server timers).
 
-No auto bet placement, ever. Single user. No server-side schedulers
-(client timers drive repetition). Credits are real money. New
-strategies must ride the existing rails (`strategy` discriminator on
-records, `alertWorthy` selection, shared stake planning). Roadmap items
-already scoped but deliberately unbuilt: Pinnacle merge → +EV with
-fractional Kelly → CLV capture → middles → reply-to-confirm.
+Standing weaknesses, ranked by threat to "reliably": (1) detection
+latency vs arb lifetime — now *measurable* via survival stats instead of
+speculative; (2) single odds source — no cross-validation of stale odds;
+(3) h2h-only surface — one config line to widen, but it multiplies scan
+cost; (4) capture depends on my discipline (record fills, apply
+balances); (5) book limiting is the unmodeled ceiling. Accepted small
+stuff: markAlerted no-op on persistence failure; survival counts a live
+re-verify as a sighting (slight upward bias, documented).
 
-## My working hypothesis for the path to reliable money
+## The plan of record — the proving month
 
-Phase A (now, ~zero effort): configure Twilio + APP_URL, set fund
-settings and per-book balances, enable paper mode, run auto-scan
-during peak sports hours for 3–4 weeks. Decide on the three numbers:
-ideal curve, haircut curve, real capture rate.
+Setup (one evening): add `TWILIO_*` + `APP_URL` to `.env` so alerts hit
+my phone with working deep links; set fund settings (bankroll, default
+stake) and per-book balances; flip paper mode ON; enable auto-update and
+let the scan windows run.
 
-Phase B (data-driven): if ideal profit is real but capture is poor →
-attack latency (peak-hour cadence, spreads/totals on liquid sports,
-plan upgrade — in credit-economics order). If ideal profit is itself
-thin → the h2h/soft-book arb surface is too small; jump to the Pinnacle
-merge and +EV, where the edge is bigger and slower-dying (and doesn't
-get accounts limited as fast as pure arbing).
+Operate (3–4 weeks): act on alerts through the cockpit — re-verify,
+record real fills on anything placed, apply balances after events
+settle. The scoreboard accrues: ideal curve, haircut curve (MEASURED
+once qualified), real capture rate, median arb lifetime, median reaction
+time, credit burn.
 
-Phase C (only if A/B prove the loop): CLV capture to distinguish edge
-from luck, then fractional-Kelly sizing.
+Decide (after): if ideal profit is real and capture is the leak → attack
+latency (cadence/windows tuning, spreads/totals on liquid sports, plan
+tier — in credit-economics order). If ideal profit is itself thin → the
+soft-book h2h arb surface is too small; jump to the Pinnacle merge and
++EV, where the edge is bigger and slower-dying. Roadmap already scoped,
+deliberately unbuilt: Pinnacle MERGE (not a swap) → +EV with fractional
+Kelly → CLV capture → middles.
 
 ## Your job in this session
 
-1. Stress-test the hypothesis above. Where is it wrong or naive —
-   especially the arb-lifetime economics and the book-limiting ceiling?
-2. Give me the sharpest version of the NEXT move (one, not five), with
-   the credit/dollar math spelled out.
-3. Name the single biggest risk to "reliably," and what measurement
-   would expose it earliest.
-4. Keep the simplicity constraint: anything you propose must either
-   speed the loop or sharpen the evidence. Feature ideas that do
-   neither get rejected, including mine.
+1. Audit the proving-month plan for blind spots: what will these
+   instruments still fail to tell me, and what cheap addition (that
+   speeds the loop or sharpens evidence — nothing else qualifies) would
+   close the worst gap?
+2. Pre-commit the decision rules: propose the specific numeric
+   thresholds on the scoreboard (ideal $/mo, capture %, survival %,
+   reaction time) that should trigger each branch — scale up real money /
+   attack latency / pivot to +EV / stop. Make me argue with numbers, not
+   vibes.
+3. Name the failure mode I'm most likely to rationalize away when the
+   data comes in, and the pre-agreed tripwire for it.
