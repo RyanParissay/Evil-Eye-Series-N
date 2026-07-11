@@ -56,6 +56,7 @@ import { PresetService } from './presets/presetService';
 import { PresetStore } from './presets/presetStore';
 import { createAdvancedRouter } from './routes/advanced';
 import { createLedgerRouter } from './routes/ledger';
+import { createPortfolioRouter } from './routes/portfolios';
 import { MockOddsProvider } from './providers/MockOddsProvider';
 import type { OddsProvider } from './providers/OddsProvider';
 import { TheOddsApiProvider } from './providers/TheOddsApiProvider';
@@ -167,6 +168,17 @@ app.use(
     lastUsage: async () => ({
       requestsUsedTotal: (await store.read())?.usage.requestsUsedTotal ?? null,
     }),
+  }),
+);
+
+// Phase 14 paper portfolios — zero provider deps, same evidence inputs
+// as /api/ops (records, scan history, ops settings for gap detection).
+app.use(
+  '/api/portfolios',
+  createPortfolioRouter({
+    records: () => ledgerService.allRecordsList(),
+    scanHistory: scanHistoryStore,
+    opsSettings: opsStore,
   }),
 );
 

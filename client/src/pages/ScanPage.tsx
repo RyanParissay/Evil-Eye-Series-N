@@ -197,6 +197,7 @@ export function ScanPage() {
           Cross-book odds surveillance · guaranteed-profit finder ·{' '}
           <Link to="/advanced" className="adv-back">Advanced →</Link> ·{' '}
           <Link to="/ledger" className="adv-back">Ledger →</Link> ·{' '}
+          <Link to="/portfolios" className="adv-back">Portfolios →</Link> ·{' '}
           <Link to="/risk" className="risk-nav">RISK MODE</Link>
         </p>
       </header>

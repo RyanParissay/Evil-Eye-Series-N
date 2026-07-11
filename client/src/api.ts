@@ -391,6 +391,91 @@ export async function fetchCostEstimate(regionTab: string, topN: number): Promis
   );
 }
 
+/* ————— Portfolios (Phase 14 — SIMULATED paper series + combo optimizer) ————— */
+
+export interface PortfolioBuckets {
+  preV13: number;
+  needsRules: number;
+  stale: number;
+  open: number;
+  excluded: number;
+}
+
+export interface PortfolioSkippedEvent {
+  at: string;
+  recordId: string;
+}
+
+export type PortfolioGroup = 'arb' | 'ev' | 'middle';
+
+export interface PortfolioSeries {
+  key: string;
+  label: string;
+  group: PortfolioGroup;
+  startingBankroll: number;
+  bankroll: number;
+  pnl: number;
+  roiPct: number;
+  records: number;
+  wins: number;
+  losses: number;
+  pushes: number;
+  voids: number;
+  skipped: { count: number; events: PortfolioSkippedEvent[] };
+  buckets: PortfolioBuckets;
+  maxDrawdown: number;
+  equity: Array<{ at: string; bankroll: number }>;
+}
+
+export interface PortfolioScanGap {
+  from: string;
+  to: string;
+  minutes: number;
+}
+
+export interface PortfolioGroupGate {
+  records: { have: number; need: number };
+  days: { have: number; need: number };
+  met: boolean;
+}
+
+export interface PortfolioOptimizerGates {
+  arb: PortfolioGroupGate;
+  ev: PortfolioGroupGate;
+  middle: PortfolioGroupGate;
+  met: boolean;
+}
+
+export interface PortfoliosReport {
+  series: PortfolioSeries[];
+  gaps: PortfolioScanGap[];
+  optimizerGates: PortfolioOptimizerGates;
+}
+
+export interface PortfolioOptimizeResult {
+  weights: number[];
+  expectedReturn: number;
+  volatility: number;
+  sharpe: number;
+  model: true;
+}
+
+export async function fetchPortfolios(): Promise<PortfoliosReport> {
+  return request<PortfoliosReport>('/api/portfolios');
+}
+
+/** Omit `weights` to run the deterministic grid-search optimizer; pass
+ *  [arbPct, evPct, middlePct] (summing to 100) to evaluate a specific mix
+ *  instead. Both paths 400 until every group clears the data-sufficiency
+ *  gate. */
+export async function optimizePortfolio(weights?: number[]): Promise<PortfolioOptimizeResult> {
+  return request<PortfolioOptimizeResult>('/api/portfolios/optimize', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(weights ? { weights } : {}),
+  });
+}
+
 /* ————— Paper fund (SIMULATED) ————— */
 
 export async function fetchPaper(): Promise<PaperView> {

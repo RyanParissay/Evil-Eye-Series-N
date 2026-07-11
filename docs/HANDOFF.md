@@ -1,24 +1,36 @@
-# HANDOFF — 2026-07-11 (Fable session, Ryan away)
+# HANDOFF — 2026-07-11 late (Fable session end — Opus resumes)
 ## For the incoming agent (Codex or Claude): read these first, in order
 1. CLAUDE.md  2. docs/GRADING_RULES.md  3. docs/prompts/phase-13.md  4. this file
 
 ## Where we are
-- Current phase & task: Phase 13 COMPLETE (committed). Next: Phase 14 (delegated to Sonnet subagent)
+- Current phase & task: Phases 13 AND 14 COMPLETE (committed). Next: Phase 15 (docs/prompts/phase-15.md) — NOT started
 - Last commit: see git log | Tests: 319 green (300 prior + 19 golden)
 - Done since last handoff: protocol docs committed; shared types (RecordGrading,
   schemaVersion, homeTeam/awayTeam); config/gradingRules.ts (rules table §1 + poll policy
   constants §4); engine/grading.ts (pure, gradeRecord); 19 golden tests green.
 
 ## In flight RIGHT NOW
-- Phase 14 delegation in flight: scenario engine (13 series) + portfolio views + Markowitz optimizer per docs/prompts/phase-14.md.
+- Nothing in flight. Tree clean, 392 tests green (369 server + 23 client), typecheck green, no server timers.
 
 ## Next actions (exact order)
-1. Verify subagent output: npm test + npm run typecheck green from repo root.
-2. DEV_MODE=true walkthrough: scan → fixture scores → auto-grade → manual override survives.
-3. Commit Phase 13; update docs/PROGRESS.md (13 done, next 14).
-4. Phase 14 per docs/prompts/phase-14.md (scenario engine is pure — good Sonnet delegation).
+1. Phase 15 per docs/prompts/phase-15.md — 7 deliverables. Suggested order: WhatsApp copy
+   spec (#4, small, touches notifications/alertService.ts formatAlertMessage) → delivery
+   failure banner (#5) → credit widget (#7, reads ops scoreboard credits) → backup (#6) →
+   second-sighting toggle (#3, ops settings + notifier gate on record.lastSeenAt>detectedAt)
+   → scan browser (#2, scan-history JSONL) → leaderboards (#1, needs a cached incremental
+   store — snapshot is latest-only, so counts must accrue per scan going forward; historic
+   full-feed re-detection is only possible for the latest snapshot. Design note: accrue a
+   leaderboard store updated per scan from rawEvents, like scanHistoryStore).
+2. Then a DEV_MODE=true browser walkthrough of /portfolios + grading UI (not yet visually
+   verified — API + tests verified only).
+3. Update CLAUDE.md layering for grading/ + portfolios/ modules (not yet done — do it).
 
 ## Decisions made this session (and why)
+- Phase 14 stakes: EV tiers = % of STARTING 10k (flat, §5 no-compounding); arb + middle
+  series flat $200 (2%) — spec was silent, Ryan may want to change.
+- Optimizer groups use representative series (arb_2 / ev_e5_med / middle); grid search 1%
+  steps, 0-70% bounds; gate counts PLACED signals (matches what's optimized).
+- Same-book + suspicious records excluded from all paper series (would never be bet).
 - Signal-level grading (record.grading) is SEPARATE from execution grading (real fills) —
   Phase 14 series need every signal graded regardless of whether Ryan bet it.
 - No server-side scheduler (CLAUDE.md invariant): score polling = server-side due-time

@@ -47,7 +47,8 @@ export function LedgerPage() {
           <a className="adv-back" href="/api/ledger/export.csv" download>
             CSV ↓
           </a>{' '}
-          · <Link to="/risk" className="risk-nav">RISK MODE</Link>
+          · <Link to="/portfolios" className="adv-back">Portfolios →</Link> ·{' '}
+          <Link to="/risk" className="risk-nav">RISK MODE</Link>
         </p>
       </header>
 

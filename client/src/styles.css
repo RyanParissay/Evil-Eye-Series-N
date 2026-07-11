@@ -2170,3 +2170,56 @@ select.bm-input {
   height: 18px;
   accent-color: var(--yellow);
 }
+
+/* ————————————————————————————————————————————————
+   PORTFOLIOS — /portfolios. Namespace: .portfolio-*
+   13 SIMULATED paper series + the combo optimizer. Layout only —
+   every color/table/slider primitive here is reused, not reinvented.
+   ———————————————————————————————————————————————— */
+
+.portfolio-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+}
+
+.portfolio-chart-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.portfolio-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 480px;
+}
+
+.portfolio-result {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.portfolio-gate-progress {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
+
+.portfolio-skip-list {
+  margin-top: 6px;
+  padding-left: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.ledger-table details summary {
+  cursor: pointer;
+}
