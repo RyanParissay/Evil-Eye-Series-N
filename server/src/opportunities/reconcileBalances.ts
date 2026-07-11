@@ -41,6 +41,12 @@ export async function applyToBalances(
       return { ok: false, reason: 'conflict', message: 'Grade the bet before reconciling balances' };
     }
     winningLegIndex = 0;
+  } else if (record.strategy === 'middle') {
+    // Middle money comes from the per-leg grades.
+    if (execution.legGrades == null) {
+      return { ok: false, reason: 'conflict', message: 'Grade both legs before reconciling balances' };
+    }
+    winningLegIndex = 0;
   } else if (!Number.isInteger(winningLegIndex) || !execution.filledLegs[winningLegIndex]) {
     return { ok: false, reason: 'bad_request', message: 'winningLegIndex must address a leg' };
   }
@@ -85,6 +91,15 @@ function deltas(
     const bookKey = record.legs[0].bookmakerKey;
     if (execution.grade === 'won') out.push({ key: bookKey, delta: sign * leg.stake * leg.odds });
     if (execution.grade === 'void') out.push({ key: bookKey, delta: sign * leg.stake });
+    return out;
+  }
+  if (record.strategy === 'middle') {
+    execution.legGrades!.forEach((grade, i) => {
+      const leg = execution.filledLegs[i];
+      const bookKey = record.legs[i].bookmakerKey;
+      if (grade === 'won') out.push({ key: bookKey, delta: sign * leg.stake * leg.odds });
+      if (grade === 'void') out.push({ key: bookKey, delta: sign * leg.stake });
+    });
     return out;
   }
   const winner = execution.filledLegs[winningLegIndex];

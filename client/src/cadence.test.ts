@@ -14,6 +14,7 @@ function settings(overrides: Partial<OpsSettings> = {}): OpsSettings {
     outWindowMins: null,
     monthlyCreditBudget: 20_000,
     autoStopPct: 95,
+    markets: { totals: false, spreads: false },
     ...overrides,
   };
 }

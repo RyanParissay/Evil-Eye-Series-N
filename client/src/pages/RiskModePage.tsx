@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { ApiErrorCode } from '../../../shared/types';
 import { ApiError, fetchEvBoard, patchEvSettings, type EvBoard } from '../api';
 import { EyeGlyph } from '../components/EyeGlyph';
+import { MiddlesBoard } from '../components/MiddlesBoard';
 import { errorHint, errorTitle } from '../errorCopy';
 
 /**
@@ -12,6 +13,7 @@ import { errorHint, errorTitle } from '../errorCopy';
  * scans already persisted.
  */
 export function RiskModePage() {
+  const [segment, setSegment] = useState<'edges' | 'middles'>('edges');
   const [board, setBoard] = useState<EvBoard | null>(null);
   const [error, setError] = useState<{ code: ApiErrorCode; message: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -58,7 +60,24 @@ export function RiskModePage() {
         </p>
       </header>
 
-      {board && (
+      <div className="risk-segments" role="tablist" aria-label="Risk Mode boards">
+        {(['edges', 'middles'] as const).map((key) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={segment === key}
+            className={`risk-segment${segment === key ? ' is-active' : ''}`}
+            onClick={() => setSegment(key)}
+          >
+            {key === 'edges' ? 'EDGES' : 'MIDDLES'}
+          </button>
+        ))}
+      </div>
+
+      {segment === 'middles' && <MiddlesBoard />}
+
+      {segment === 'edges' && board && (
         <section className="risk-controls micro-label">
           <label>
             show edge ≥ %
@@ -131,7 +150,7 @@ export function RiskModePage() {
       )}
 
       <main className="results">
-        {error && (
+        {segment === 'edges' && error && (
           <div className="state-block state-error" role="alert">
             <p className="state-title">{errorTitle(error.code)}</p>
             <p className="state-detail">{error.message}</p>
@@ -139,7 +158,7 @@ export function RiskModePage() {
           </div>
         )}
 
-        {!error && board && board.bets.length === 0 && (
+        {segment === 'edges' && !error && board && board.bets.length === 0 && (
           <div className="state-block">
             <EyeGlyph size={64} state="closed" />
             <p className="state-title">No live edges.</p>
@@ -151,7 +170,7 @@ export function RiskModePage() {
           </div>
         )}
 
-        {!error && board && board.bets.length > 0 && (
+        {segment === 'edges' && !error && board && board.bets.length > 0 && (
           <>
             <div className="results-head micro-label">
               {board.bets.length} live edge{board.bets.length === 1 ? '' : 's'} · sorted by edge ·

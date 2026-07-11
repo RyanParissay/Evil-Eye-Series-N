@@ -179,6 +179,46 @@ export class OpportunityService {
     });
   }
 
+  /**
+   * Per-leg grading for middles: realized P&L = Σ per-leg from actual
+   * fills (won → +stake×(odds−1), lost → −stake, void/push → 0). Both
+   * won = the middle hit. Regrade allowed until balances applied.
+   */
+  async gradeLegs(
+    id: string,
+    legGrades: Array<'won' | 'lost' | 'void'>,
+  ): Promise<UpdateStatusOutcome> {
+    return this.store.update((data) => {
+      const record = data.records.find((r) => r.id === id);
+      let result: UpdateStatusOutcome;
+      if (!record) {
+        result = { ok: false, reason: 'not_found', message: `Unknown opportunity: ${id}` };
+      } else if (record.strategy !== 'middle') {
+        result = { ok: false, reason: 'conflict', message: 'Per-leg grading is for middles only' };
+      } else if (record.status !== 'completed' || !record.execution) {
+        result = { ok: false, reason: 'conflict', message: 'Grade after completing with filled numbers' };
+      } else if (record.execution.balancesAppliedAt) {
+        result = { ok: false, reason: 'conflict', message: 'Balances applied — revert before regrading' };
+      } else if (legGrades.length !== record.execution.filledLegs.length) {
+        result = { ok: false, reason: 'bad_request', message: 'legGrades must align with the filled legs' };
+      } else {
+        const execution = record.execution;
+        execution.legGrades = [...legGrades];
+        execution.lockedProfit =
+          Math.round(
+            execution.filledLegs.reduce((sum, leg, i) => {
+              const grade = legGrades[i];
+              if (grade === 'won') return sum + leg.stake * (leg.odds - 1);
+              if (grade === 'lost') return sum - leg.stake;
+              return sum;
+            }, 0) * 100,
+          ) / 100;
+        result = { ok: true, record };
+      }
+      return { data, result };
+    });
+  }
+
   /** Marks (or clears, with null) the applied-to-balances state. */
   async markBalancesApplied(
     id: string,

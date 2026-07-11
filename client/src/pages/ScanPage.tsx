@@ -211,6 +211,8 @@ export function ScanPage() {
           autoEnabled={autoScan.enabled}
           lastScanAt={lastScanAt}
           now={Date.now()}
+          regionTab={regionTab}
+          topN={topN}
         />
       )}
 

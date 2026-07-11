@@ -205,6 +205,14 @@ export function PaperPanel({ realMonthly }: { realMonthly: LedgerSummary['monthl
             </div>
           </div>
 
+          {book.entries.some((e) => e.floor) && (
+            <p className="micro-label ledger-note">
+              {book.entries.filter((e) => e.floor).length} middle entr
+              {book.entries.filter((e) => e.floor).length === 1 ? 'y' : 'ies'} at worst-case
+              FLOOR — the fund understates them until the same bet is graded for real.
+            </p>
+          )}
+
           <EquityChart
             points={book.equityIdeal}
             secondary={book.equityHaircut}

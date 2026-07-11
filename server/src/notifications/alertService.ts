@@ -285,6 +285,110 @@ export async function notifyEvBets(
   });
 }
 
+/**
+ * Middle alert: cost/payout/breakeven framing. "Guaranteed" is banned —
+ * except free middles, whose worst case genuinely is a locked floor.
+ */
+export function formatMiddleAlertMessage(
+  opportunity: ArbOpportunity,
+  stake?: number,
+  appUrl?: string,
+): string {
+  const middle = opportunity.middle!;
+  const legs = opportunity.legs
+    .map(
+      (leg) =>
+        `${leg.bookmakerTitle}: ${leg.outcome}${leg.point != null ? ` ${formatPoint(leg.point)}` : ''} @${leg.odds}`,
+    )
+    .join(' / ');
+  const link = appUrl
+    ? ` ${appUrl.replace(/\/$/, '')}/opportunity/${opportunityIdFromFingerprint(opportunityFingerprint(opportunity))}`
+    : '';
+  const window = `(${middle.lowLine}–${middle.highLine})`;
+  const keys = middle.keyNumbers.length > 0 ? ` Key number ${middle.keyNumbers.join(', ')} inside.` : '';
+  if (middle.freeMiddle) {
+    const floor = stake != null ? ` guaranteed +$${((stake * -middle.costPct) / 100).toFixed(2)} floor,` : ' guaranteed floor,';
+    const pays = stake != null ? ` pays +$${((stake * middle.payoutPct) / 100).toFixed(2)}` : ' pays more';
+    return `🎯 Free middle: ${opportunity.eventName} (${opportunity.marketKey}) — ${legs}.${floor}${pays} if it lands in ${window}.${keys}${link}`;
+  }
+  const cost = stake != null ? `$${((stake * middle.costPct) / 100).toFixed(2)}` : `${middle.costPct.toFixed(1)}% of stake`;
+  const pays = stake != null ? `$${((stake * middle.payoutPct) / 100).toFixed(2)}` : `${middle.payoutPct.toFixed(0)}% of stake`;
+  return (
+    `🎯 Middle: ${opportunity.eventName} (${opportunity.marketKey}) — ${legs}. ` +
+    `Costs ${cost} if it misses, pays ${pays} if it lands in ${window} — ` +
+    `needs to hit ${middle.breakevenPct.toFixed(1)}% of the time to profit.${keys}${link}`
+  );
+}
+
+export interface MiddleAlertDeps extends AlertDeps {
+  /** Costed middles alert only at/below this breakeven %. */
+  maxBreakevenPct: number;
+  /** Flat stake for the dollar framing, when configured. */
+  stake?: number;
+}
+
+/**
+ * Costed middles are opt-in per subscription (middleEnabled, default
+ * off). FREE middles bypass the opt-in — they are risk-free, so they
+ * ride to everyone like an arb would. Same-book middles never alert.
+ */
+export async function notifyMiddleBets(
+  deps: MiddleAlertDeps,
+  middleOpportunities: ArbOpportunity[],
+): Promise<NotifyResult> {
+  const now = (deps.now ?? (() => new Date()))();
+
+  return deps.store.update(async (data) => {
+    const rateCutoff = now.getTime() - HOUR_MS;
+    const alreadySent = new Set(data.sentAlerts.map((r) => `${r.phoneE164}|${r.fingerprint}`));
+    const sent = new Set<string>();
+
+    for (const subscription of data.subscriptions) {
+      if (!subscription.verified || !subscription.active) continue;
+      let budget =
+        WHATSAPP_MAX_ALERTS_PER_HOUR -
+        subscription.sendTimestamps.filter((t) => Date.parse(t) > rateCutoff).length;
+      for (const opportunity of middleOpportunities) {
+        const middle = opportunity.middle;
+        if (!middle || opportunity.sameBookmaker || opportunity.suspicious) continue;
+        if (!middle.freeMiddle) {
+          if (!subscription.middleEnabled) continue;
+          if (middle.breakevenPct > deps.maxBreakevenPct) continue;
+        }
+        const fingerprint = opportunityFingerprint(opportunity);
+        if (alreadySent.has(`${subscription.phoneE164}|${fingerprint}`)) continue;
+        if (budget <= 0) break;
+        try {
+          await deps.sender.send(
+            subscription.phoneE164,
+            formatMiddleAlertMessage(opportunity, deps.stake, deps.appUrl),
+          );
+          budget -= 1;
+          subscription.failedSendCount = 0;
+          subscription.sendTimestamps.push(now.toISOString());
+          sent.add(fingerprint);
+          data.sentAlerts.push({
+            phoneE164: subscription.phoneE164,
+            fingerprint,
+            profitPct: opportunity.profitPct,
+            sentAt: now.toISOString(),
+          });
+        } catch (err) {
+          subscription.failedSendCount += 1;
+          console.warn(`WhatsApp middle send failed for ${maskPhone(subscription.phoneE164)}:`, err);
+          if (subscription.failedSendCount >= WHATSAPP_MAX_CONSECUTIVE_FAILURES) {
+            subscription.active = false;
+          }
+        }
+        subscription.updatedAt = now.toISOString();
+      }
+    }
+
+    prune(data, now);
+    return { data, result: { sentFingerprints: [...sent] } };
+  });
+}
+
 /** Sent-alert records and rate-limit timestamps both age out. */
 function prune(data: WhatsAppData, now: Date): void {
   const sentCutoff = now.getTime() - WHATSAPP_SENT_ALERT_RETENTION_MS;

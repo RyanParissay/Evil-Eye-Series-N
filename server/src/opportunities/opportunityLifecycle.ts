@@ -43,7 +43,8 @@ export function applyScanToRecords(
       existing.arbIndex = arb.arbIndex;
       existing.suspicious = arb.suspicious;
       existing.sameBookmaker = arb.sameBookmaker;
-      if (arb.ev) existing.ev = arb.ev; // EV context follows the latest sighting
+      if (arb.ev) existing.ev = arb.ev; // strategy context follows the latest sighting
+      if (arb.middle) existing.middle = arb.middle;
       existing.lastSeenAt = at;
       // Re-detection revives dead/degraded records; an executed (completed)
       // opportunity is history and never reopens.
@@ -56,8 +57,9 @@ export function applyScanToRecords(
       byFingerprint.set(fingerprint, {
         id: opportunityIdFromFingerprint(fingerprint),
         fingerprint,
-        strategy: arb.ev ? 'ev' : 'arb',
+        strategy: arb.ev ? 'ev' : arb.middle ? 'middle' : 'arb',
         ...(arb.ev && { ev: arb.ev }),
+        ...(arb.middle && { middle: arb.middle }),
         eventId: arb.eventId,
         sportKey: arb.sportKey,
         sportTitle: arb.sportTitle,
@@ -138,6 +140,22 @@ export function applyVerification(
   record.arbIndex = arbIndex;
   record.profitPct = profitPct;
   record.lastSeenAt = now.toISOString();
+
+  // Middles live as long as both legs are priced: a costed middle is not
+  // "dead" for costing money — that IS a middle. Recompute its economics
+  // (S = arbIndex): cost/payout/breakeven, and the worst-case floor.
+  if (record.strategy === 'middle' && record.middle) {
+    const S = arbIndex;
+    record.middle = {
+      ...record.middle,
+      costPct: (1 - 1 / S) * 100,
+      payoutPct: (2 / S - 1) * 100,
+      breakevenPct: (S - 1) * 100,
+      freeMiddle: (1 - 1 / S) * 100 <= 0,
+    };
+    record.profitPct = -record.middle.costPct;
+    return setStatus('active');
+  }
 
   if (profitPct <= 0) return setStatus('dead');
   if (profitPct < record.profitPctAtDetection - VERIFY_PROFIT_TOLERANCE_PP) {

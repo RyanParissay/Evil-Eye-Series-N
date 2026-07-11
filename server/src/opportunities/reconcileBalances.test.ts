@@ -152,6 +152,61 @@ describe('apply-to-balances / revert', () => {
     expect(bookStore.data.bookmakers[0].balance).toBeCloseTo(1000, 2);
   });
 
+  it('middles reconcile per-leg: hit pays both, single-side pays one, push returns the stake', async () => {
+    const oppStore = new MemStore<OpportunityData>({ records: [] });
+    const bookStore = new MemStore<BookmakerData>({
+      bookmakers: [book('bet365', 1000), book('coolbet', 1000)],
+    });
+    const opportunities = new OpportunityService(
+      oppStore as unknown as OpportunityDataStore,
+      new FakeArchive(),
+      () => NOW,
+    );
+    const books = new BookmakerService(bookStore as unknown as BookmakerDataStore, () => NOW);
+    const deps = { opportunities, books };
+    const middleArb = {
+      ...makeArb(),
+      commenceTime: '2026-07-11T00:00:00Z',
+      legs: [
+        { outcome: 'Over', point: 220.5, bookmakerKey: 'bet365', bookmakerTitle: 'Bet365', odds: 1.95, stake: 50, link: null },
+        { outcome: 'Under', point: 224.5, bookmakerKey: 'coolbet', bookmakerTitle: 'Coolbet', odds: 1.95, stake: 50, link: null },
+      ],
+      profitPct: -2.5,
+      middle: {
+        lowLine: 220.5, highLine: 224.5, windowSize: 4, costPct: 2.5, payoutPct: 95,
+        breakevenPct: 2.56, freeMiddle: false, pushPossible: false, keyNumbers: [],
+      },
+    };
+    await opportunities.recordScan([middleArb], { sportsScanned: ['basketball_nba'], regionTab: 'ca' });
+    const [record] = await opportunities.list();
+    await opportunities.updateStatus(record.id, 'completed', [
+      { odds: 1.95, stake: 250 },
+      { odds: 1.95, stake: 250 },
+    ]);
+
+    // Ungraded refuses.
+    expect(await applyToBalances(deps, record.id, 0)).toMatchObject({ ok: false, reason: 'conflict' });
+
+    // Middle hit: both books net +stake×(odds−1).
+    await opportunities.gradeLegs(record.id, ['won', 'won']);
+    await applyToBalances(deps, record.id, 0);
+    let balances = Object.fromEntries(bookStore.data.bookmakers.map((b) => [b.key, b.balance]));
+    expect(balances.bet365).toBeCloseTo(1000 - 250 + 250 * 1.95, 2);
+    expect(balances.coolbet).toBeCloseTo(1000 - 250 + 250 * 1.95, 2);
+    await revertBalances(deps, record.id);
+
+    // Push on leg A, side B won: A stake returned, B pays out.
+    await opportunities.gradeLegs(record.id, ['void', 'won']);
+    await applyToBalances(deps, record.id, 0);
+    balances = Object.fromEntries(bookStore.data.bookmakers.map((b) => [b.key, b.balance]));
+    expect(balances.bet365).toBeCloseTo(1000, 2);
+    expect(balances.coolbet).toBeCloseTo(1000 - 250 + 250 * 1.95, 2);
+    await revertBalances(deps, record.id);
+    balances = Object.fromEntries(bookStore.data.bookmakers.map((b) => [b.key, b.balance]));
+    expect(balances.bet365).toBeCloseTo(1000, 2);
+    expect(balances.coolbet).toBeCloseTo(1000, 2);
+  });
+
   it('guards: unknown id, not completed, no execution, bad winner index', async () => {
     const { opportunities, books } = await harness();
     const deps = { opportunities, books };

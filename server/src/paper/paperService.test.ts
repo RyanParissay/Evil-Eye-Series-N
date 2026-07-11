@@ -95,6 +95,46 @@ describe('PaperService.considerEntries', () => {
     expect(store.data.settings.startingBankroll).toBe(5000);
   });
 
+  it('middle entries settle at the FLOOR until a real graded record supplies the actual', async () => {
+    const { store, service } = fresh();
+    const middleOpp = makeArb({
+      commenceTime: '2026-07-10T11:30:00Z', // already commenced → settles
+      profitPct: -2.5, // the floor: worst-case −2.5%
+      middle: {
+        lowLine: 220.5, highLine: 224.5, windowSize: 4, costPct: 2.5, payoutPct: 95,
+        breakevenPct: 2.56, freeMiddle: false, pushPossible: false, keyNumbers: [],
+      },
+    });
+    const entered = await service.considerEntries([middleOpp], 4);
+    expect(entered).toBe(1);
+    expect(store.data.entries[0].strategy).toBe('middle');
+
+    // Ungraded: floor contribution, flagged FLOOR: 400 × −2.5% = −10.
+    const floorView = await service.book();
+    expect(floorView.book.entries[0]).toMatchObject({ settled: true, floor: true });
+    expect(floorView.book.entries[0].idealProfit).toBeCloseTo(-10, 2);
+
+    // A real graded record with the same fingerprint flips it to actual.
+    const fp = store.data.entries[0].fingerprint;
+    const actualView = await service.book(new Map([[fp, 1.19]])); // +$1.19 per $1 staked
+    expect(actualView.book.entries[0]).toMatchObject({ settled: true, floor: false });
+    expect(actualView.book.entries[0].idealProfit).toBeCloseTo(400 * 1.19, 2);
+  });
+
+  it('middle entry selection: breakeven cap + dedup; high-breakeven middles never enter', async () => {
+    const { store, service } = fresh();
+    const costly = makeArb({
+      eventId: 'evt-costly',
+      middle: {
+        lowLine: 220.5, highLine: 221.5, windowSize: 1, costPct: 5, payoutPct: 90,
+        breakevenPct: 5.26, freeMiddle: false, pushPossible: false, keyNumbers: [],
+      },
+      profitPct: -5,
+    });
+    expect(await service.considerEntries([costly], 4)).toBe(0);
+    expect(store.data.entries).toHaveLength(0);
+  });
+
   it('book() reports the settled view with the simulated flag', async () => {
     const { service } = fresh();
     await service.considerEntries([makeArb({ commenceTime: '2026-07-10T11:30:00Z' })]);

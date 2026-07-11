@@ -327,6 +327,65 @@ describe('runScan', () => {
     expect(pushed.some((o) => o.ev !== undefined)).toBe(true);
   });
 
+  it('market toggles govern the fetch: OFF is byte-identical to today, ON adds the market', async () => {
+    const fetched: string[][] = [];
+    const provider = stubProvider([totalsArbEvent()]);
+    const spyProvider = {
+      ...provider,
+      fetchOdds: async (sport: string, params: Parameters<typeof provider.fetchOdds>[1]) => {
+        fetched.push([...params.markets]);
+        return provider.fetchOdds(sport, params);
+      },
+    };
+    await runScan(
+      deps(spyProvider, {
+        marketSettings: { read: async () => ({ totals: false, spreads: false }) },
+      }),
+      { topN: 5, tab: CA_TAB },
+    );
+    expect(fetched[0]).toEqual(['h2h']);
+
+    await runScan(
+      deps(spyProvider, {
+        marketSettings: { read: async () => ({ totals: true, spreads: true }) },
+      }),
+      { topN: 5, tab: CA_TAB },
+    );
+    expect(fetched[1]).toEqual(['h2h', 'totals', 'spreads']);
+  });
+
+  it('middles ride the scan when their market is fetched: persisted + notified, never in the response', async () => {
+    // The totals arb event carries bet365 Over 220.5 / pinnacle Under 220.5;
+    // add a gapped Under at another book to create a middle.
+    const event = totalsArbEvent();
+    event.bookmakers.push({
+      key: 'coolbet',
+      title: 'Coolbet',
+      lastUpdate: NOW.toISOString(),
+      markets: [
+        { key: 'totals', outcomes: [{ name: 'Under', price: 1.95, point: 224.5 }] },
+      ],
+    });
+    const recorded: Array<Array<{ middle?: unknown; ev?: unknown }>> = [];
+    const result = await runScan(
+      deps(stubProvider([event]), {
+        marketSettings: { read: async () => ({ totals: true, spreads: false }) },
+        middles: {
+          settings: async () => ({ maxCostPct: 5, minWindow: 0.5, alertMaxBreakevenPct: 4 }),
+        },
+        opportunityLog: {
+          async recordScan(opportunities) {
+            recorded.push(opportunities as never);
+          },
+        },
+      }),
+      { topN: 5, tab: CA_TAB },
+    );
+    expect(result.opportunities.every((o) => o.middle === undefined)).toBe(true);
+    const middles = recorded[0].filter((o) => o.middle !== undefined);
+    expect(middles.length).toBeGreaterThan(0);
+  });
+
   it('appends a scan-history line with the raw feed facts (Phase 8)', async () => {
     const appended: unknown[] = [];
     await runScan(

@@ -96,6 +96,17 @@ export const FUND_FILE = 'data/fund.json';
 /** Risk Mode (EV) settings (gitignored). */
 export const EV_FILE = 'data/ev.json';
 
+/** Middles settings (gitignored). */
+export const MIDDLES_FILE = 'data/middles.json';
+
+/**
+ * Key numbers per sport-key prefix — margins where games land often.
+ * A middle window containing one gets a factual badge, nothing more.
+ */
+export const KEY_NUMBERS: Record<string, readonly number[]> = {
+  americanfootball: [3, 7, 10],
+};
+
 /** Nudge when a book's balance hasn't been touched for this long. */
 export const STALE_BALANCE_AFTER_MS = 14 * 24 * 3_600_000;
 

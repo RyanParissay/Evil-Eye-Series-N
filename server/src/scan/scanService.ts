@@ -6,14 +6,17 @@
 import type {
   ArbOpportunity,
   EvSettings,
+  MiddlesSettings,
   OddsEvent,
   ScanLogEntry,
   ScanMeta,
   ScanResponse,
   UsageReport,
 } from '@shared/types';
-import { BENCHMARK_BOOKS } from '../config/constants';
+import { BENCHMARK_BOOKS, KEY_NUMBERS } from '../config/constants';
 import { findEvBets, type EvBet } from '../engine/evDetection';
+import { priceLegs } from '../engine/arbitrage';
+import { findMiddles, type MiddleBet } from '../engine/middles';
 import { opportunityFingerprint, opportunityIdFromFingerprint } from '../opportunities/opportunityId';
 import type { RegionTabConfig } from '@shared/regionTabs';
 import type { FetchPlan } from '../bookmakers/effectiveBookmakers';
@@ -55,6 +58,13 @@ export interface ScanDeps {
    * arb scan response.
    */
   ev?: { settings(): Promise<EvSettings> };
+  /**
+   * Extra-market toggles (ops settings). Each enabled market multiplies
+   * every odds call's credits — the operator flips these deliberately.
+   */
+  marketSettings?: { read(): Promise<{ totals: boolean; spreads: boolean }> };
+  /** Middles detection (Phase 12) — runs only on markets actually fetched. */
+  middles?: { settings(): Promise<MiddlesSettings> };
 }
 
 /** What runScan needs from ScanHistoryStore — structural, for tests. */
@@ -89,8 +99,20 @@ export interface SnapshotIntegration {
 
 export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<ScanResponse> {
   const now = deps.now ?? (() => new Date());
-  const { provider, store, markets = MARKETS } = deps;
+  const { provider, store } = deps;
   const { topN, tab } = request;
+
+  // Effective markets: the base config plus the operator's toggles.
+  // Every enabled market multiplies every odds call's credits.
+  let markets: readonly string[] = deps.markets ?? MARKETS;
+  if (deps.marketSettings) {
+    const toggles = await deps.marketSettings.read();
+    markets = [
+      ...markets,
+      ...(toggles.totals && !markets.includes('totals') ? ['totals'] : []),
+      ...(toggles.spreads && !markets.includes('spreads') ? ['spreads'] : []),
+    ];
+  }
 
   // The request arrives validated (scanRequest.ts). The tab plays two roles:
   // pre-call credit efficiency — it decides which API regions we pay for —
@@ -176,7 +198,25 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
       console.warn('EV detection failed (arb scan unaffected):', err);
     }
   }
-  const allDetected = [...opportunities, ...evOpportunities];
+  // 4⅖. Middles from the same feed — only on markets actually fetched.
+  let middleOpportunities: ArbOpportunity[] = [];
+  if (deps.middles) {
+    try {
+      const settings = await deps.middles.settings();
+      const allowed = plan ? plan.allowedKeys : tab.allowedBookmakers;
+      middleOpportunities = findMiddles(rawEvents, allowed, {
+        marketKeys: [...markets],
+        maxCostPct: settings.maxCostPct,
+        minWindow: settings.minWindow,
+        keyNumbers: KEY_NUMBERS,
+        now: now(),
+      }).map(middleBetToOpportunity);
+    } catch (err) {
+      console.warn('Middles detection failed (arb scan unaffected):', err);
+    }
+  }
+
+  const allDetected = [...opportunities, ...evOpportunities, ...middleOpportunities];
 
   // 4⅓. Persist: the raw snapshot (offline recomputation) and the
   //      opportunity records (IDs, lifecycle). Neither failure is fatal,
@@ -300,6 +340,39 @@ function evBetToOpportunity(bet: EvBet): ArbOpportunity {
       },
     ],
     sameBookmaker: false,
+    suspicious: false,
+  };
+  opportunity.id = opportunityIdFromFingerprint(opportunityFingerprint(opportunity));
+  return opportunity;
+}
+
+/**
+ * A middle as a two-leg opportunity on the shared rails. Stakes are the
+ * equal-risk 1/odds split (the same shared math); profitPct carries the
+ * WORST-CASE floor (−cost%) — honest, never the hoped-for middle hit.
+ */
+function middleBetToOpportunity(bet: MiddleBet): ArbOpportunity {
+  const { arbIndex, stakes } = priceLegs(bet.legs.map((l) => l.odds));
+  const opportunity: ArbOpportunity = {
+    middle: bet.middle,
+    eventId: bet.eventId,
+    sportKey: bet.sportKey,
+    sportTitle: bet.sportTitle,
+    eventName: bet.eventName,
+    commenceTime: bet.commenceTime,
+    marketKey: bet.marketKey,
+    arbIndex,
+    profitPct: -bet.middle.costPct, // the floor; positive only for free middles
+    legs: bet.legs.map((leg, i) => ({
+      outcome: leg.outcome,
+      point: leg.point,
+      bookmakerKey: leg.bookmakerKey,
+      bookmakerTitle: leg.bookmakerTitle,
+      odds: leg.odds,
+      stake: stakes[i],
+      link: leg.link,
+    })),
+    sameBookmaker: bet.sameBookmaker,
     suspicious: false,
   };
   opportunity.id = opportunityIdFromFingerprint(opportunityFingerprint(opportunity));

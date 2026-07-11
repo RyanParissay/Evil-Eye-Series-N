@@ -236,6 +236,21 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   capture rate but sum $0 (the EXPECTED model line shows Σ stake×edge,
   never mixed into realized). Regrade allowed until balances applied;
   EV apply-to-balances derives from the grade, not a winning leg.
+- Middles (strategy 'middle', engine/middles.ts — a NEW module, never a
+  relaxation of arb line-group discipline): two opposite bets on
+  DIFFERENT lines, both-can-win. Direction rules are smart constructors
+  (Over T₁ + Under T₂ needs T₁ < T₂; spreads need p₁+p₂ > 0) — reversed
+  pairings are unrepresentable. Metrics are arithmetic on S = Σ1/odds:
+  cost% = (1−1/S)·100, payout% = (2/S−1)·100, breakeven = S−1. No hit
+  probabilities anywhere; key numbers are factual badges. Free middles
+  (S ≤ 1) alert without opt-in and may say "guaranteed" — costed middles
+  never do. Per-leg grading (legGrades) is the money; middle re-verify
+  keeps costed middles ALIVE (a middle costing money is not dead).
+- Extra markets (totals/spreads) are ops-settings toggles, default OFF —
+  each multiplies every odds call's credits. /api/ops/cost-estimate is
+  the pre-scan number that must move when a toggle does. The paper fund
+  takes middles at their worst-case FLOOR (labeled), adopting actuals
+  from graded real records by fingerprint.
 - Stake/cap math exists exactly once (shared/stakePlanning.ts planStakes):
   a leg never exceeds its book's recorded balance — the WHOLE position
   rescales to the binding book so the guarantee survives. The client

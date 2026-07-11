@@ -88,10 +88,21 @@ each phase (`docs/superpowers/specs/`):
     apply-to-balances. Yellow = speculative, reserved. Paper stays
     arb-only. Kelly + stochastic models are Phase 11 (next).
 
+12. ✅ Middles (strategy 'middle'): totals/spreads market toggles
+    (default OFF, each multiplies scan credits; /api/ops/cost-estimate
+    shows the number pre-scan; Ryan chose the plan-upgrade path — flip
+    toggles + raise the budget setting when the tier lands), pure
+    middles engine with unconstructable reverse pairings and S−1
+    breakeven math, MIDDLES segment inside Risk Mode, opt-in honest
+    alerts (free middles bypass and may say "guaranteed"), per-leg
+    grading → realized P&L → grade-driven apply-to-balances, paper
+    FLOOR inclusion with actual-adoption by fingerprint.
+
 The governing specs are **`docs/mission-phases-4-7.md`** (phases 4–7),
-the Phase 8 design doc, and the Phases 9–11 Speculative Mode mission
-(phase 11 — RISK models + Kelly — remains). Remaining roadmap (CLV,
-auto-grading, power/Shin de-vig, middles) deliberately unbuilt.
+the Phase 8 design doc, the Phases 9–11 Speculative Mode mission
+(phase 11 — RISK models + Kelly — remains unbuilt), and the Phase 12
+middles design doc. Remaining roadmap (CLV, auto-grading, power/Shin
+de-vig, live middles, props) deliberately unbuilt.
 
 Health: **181 tests green** (164 server, 17 client — Vitest), `tsc` clean
 in both workspaces. `.env` has a live `ODDS_API_KEY`; no `TWILIO_*` vars

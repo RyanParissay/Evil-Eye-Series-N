@@ -28,6 +28,7 @@ const DEFAULTS: OpsSettings = {
   outWindowMins: null,
   monthlyCreditBudget: 20_000,
   autoStopPct: 95,
+  markets: { totals: false, spreads: false },
 };
 
 function harness(scans: ScanLogEntry[] = []) {
@@ -43,6 +44,7 @@ function harness(scans: ScanLogEntry[] = []) {
       },
     },
     books: { list: async () => [] },
+    fetchPlan: async () => ({ bookmakersParam: undefined }),
     snapshots: { read: async () => null },
     records: async () => [],
     ledger: async () => ({
@@ -83,6 +85,17 @@ describe('/api/ops', () => {
       const bad = await request(app).patch('/api/ops/settings').send(body);
       expect(bad.status).toBe(400);
     }
+  });
+
+  it('cost estimate reflects market toggles: OFF = today, each toggle multiplies', async () => {
+    const { app, store } = harness();
+    const off = await request(app).get('/api/ops/cost-estimate?regionTab=ca&topN=5');
+    expect(off.status).toBe(200);
+    expect(off.body).toMatchObject({ marketCount: 1, regionEquivalents: 2, creditsPerScan: 10 });
+
+    store.data.markets = { totals: true, spreads: true };
+    const on = await request(app).get('/api/ops/cost-estimate?regionTab=ca&topN=5');
+    expect(on.body).toMatchObject({ marketCount: 3, creditsPerScan: 30 });
   });
 
   it('GET coverage / telemetry / scoreboard respond from persisted data only', async () => {

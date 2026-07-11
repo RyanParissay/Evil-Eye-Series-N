@@ -88,6 +88,30 @@ export interface EvContext {
   benchmarkLastUpdate: string;
 }
 
+/**
+ * The middle payload (strategy 'middle'): two opposite bets on DIFFERENT
+ * lines, gapped so both can win. Costs money when it misses — pure
+ * arithmetic only, no probability estimates.
+ */
+export interface MiddleContext {
+  /** Window in outcome terms: totals (T₁, T₂); spreads (F, D) margins. */
+  lowLine: number;
+  highLine: number;
+  windowSize: number;
+  /** Worst-case loss as % of total stake. Negative = free middle. */
+  costPct: number;
+  /** Both-legs-win profit as % of total stake. */
+  payoutPct: number;
+  /** Hit rate needed to break even = cost ÷ (cost + payout) = S − 1. */
+  breakevenPct: number;
+  /** Worst case ≥ $0: an arb with a bonus window. */
+  freeMiddle: boolean;
+  /** An integer boundary line can push (stake returned). */
+  pushPossible: boolean;
+  /** Key numbers (per-sport config) strictly inside the window. */
+  keyNumbers: number[];
+}
+
 export interface ArbOpportunity {
   /**
    * The persisted OpportunityRecord id (fingerprint prefix), filled by the
@@ -97,6 +121,8 @@ export interface ArbOpportunity {
   id?: string;
   /** Present on speculative (EV) opportunities; absent on true arbs. */
   ev?: EvContext;
+  /** Present on middle opportunities; absent on true arbs. */
+  middle?: MiddleContext;
   eventId: string;
   sportKey: string;
   sportTitle: string;
@@ -139,7 +165,7 @@ export type OpportunityStatus = 'active' | 'degraded' | 'dead' | 'completed';
  * the discriminator is here so future strategies (+EV, middles) can share
  * the persistence and alert rails without a migration.
  */
-export type OpportunityStrategy = 'arb' | 'ev';
+export type OpportunityStrategy = 'arb' | 'ev' | 'middle';
 
 /** Actual filled numbers captured when the user completes an opportunity. */
 export interface OpportunityExecution {
@@ -157,6 +183,11 @@ export interface OpportunityExecution {
    * completion into realized P&L; ungraded completions sum $0 forever.
    */
   grade?: 'won' | 'lost' | 'void' | null;
+  /**
+   * Middle records only: per-leg grades aligned with filledLegs. Both
+   * won = the middle hit; an integer-line push grades that leg void.
+   */
+  legGrades?: Array<'won' | 'lost' | 'void'> | null;
 }
 
 export interface OpportunityRecord {
@@ -191,6 +222,8 @@ export interface OpportunityRecord {
   execution?: OpportunityExecution;
   /** Present on speculative (EV) records; refreshed each re-detection. */
   ev?: EvContext;
+  /** Present on middle records; refreshed each re-detection. */
+  middle?: MiddleContext;
   /** Reaction-funnel timestamps, first-write-wins; absent steps stay absent. */
   funnel?: {
     cockpitOpenedAt?: string;
@@ -368,6 +401,8 @@ export interface WhatsAppStatus {
   thresholdPercent: number | null;
   /** Risk Mode opt-in — EV alerts are off by default. */
   evEnabled: boolean;
+  /** Middles opt-in — off by default; free middles alert regardless. */
+  middleEnabled: boolean;
   /** True when the server logs messages instead of sending via Twilio. */
   devMode: boolean;
 }
@@ -413,12 +448,17 @@ export interface PaperSettings {
 export interface PaperEntry {
   id: string;
   fingerprint: string;
+  /** 'arb' (deterministic) or 'middle' (settles at FLOOR until graded). */
+  strategy?: OpportunityStrategy;
   eventId: string;
   eventName: string;
   sportKey: string;
   sportTitle: string;
   marketKey: string;
-  /** Profit % at alert time — entry uses alert-time odds. */
+  /**
+   * Profit % at alert time. Arbs: the guaranteed %. Middles: the
+   * WORST-CASE floor (−cost%) — the honest direction to be wrong in.
+   */
   profitPct: number;
   arbIndex: number;
   legs: ArbLeg[];
@@ -432,6 +472,11 @@ export interface SettledPaperEntry extends PaperEntry {
   haircutProfit: number;
   /** True once the event commenced — outcome-independent profit realizes. */
   settled: boolean;
+  /**
+   * Middle entries only: settled at the worst-case FLOOR because no real
+   * graded record exists yet — the paper fund understates these.
+   */
+  floor: boolean;
 }
 
 export interface PaperBook {
@@ -476,6 +521,20 @@ export interface OpsSettings {
   monthlyCreditBudget: number;
   /** Auto-scan hard-stops at this % of budget; manual scans never blocked. */
   autoStopPct: number;
+  /**
+   * Extra markets per scan — each multiplies every odds call's credits.
+   * Default OFF; flip only with the budget to match.
+   */
+  markets: { totals: boolean; spreads: boolean };
+}
+
+export interface MiddlesSettings {
+  /** Candidates costing more than this % of stake never surface. */
+  maxCostPct: number;
+  /** Minimum window size in points. */
+  minWindow: number;
+  /** Alerts (and paper entry) only when breakeven ≤ this %. */
+  alertMaxBreakevenPct: number;
 }
 
 /** One line per completed scan in data/scan-history/YYYY-MM.jsonl. */

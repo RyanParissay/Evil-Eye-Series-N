@@ -14,6 +14,7 @@ import {
   whatsappDisconnect,
   whatsappSendTest,
   whatsappSetEv,
+  whatsappSetMiddles,
   whatsappSetThreshold,
   whatsappVerify,
 } from '../api';
@@ -184,6 +185,29 @@ export function WhatsAppPanel() {
           <div className="wa-field">
             <span className="micro-label">Number</span>
             <span className="wa-value">{status.phoneMasked}</span>
+          </div>
+          <div className="wa-field wa-field-narrow">
+            <span className="micro-label" id="wa-middle-label">
+              Middle alerts <span className="risk-badge wa-ev-badge">costs on miss</span>
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={status.middleEnabled}
+              aria-labelledby="wa-middle-label"
+              className="switch"
+              disabled={busy}
+              onClick={() =>
+                void run(
+                  () => whatsappSetMiddles(!status.middleEnabled),
+                  status.middleEnabled
+                    ? 'Middle alerts off (free middles still alert).'
+                    : 'Middle alerts on — they cost money when they miss.',
+                )
+              }
+            >
+              <span className="switch-thumb" aria-hidden="true" />
+            </button>
           </div>
           <div className="wa-field wa-field-narrow">
             <span className="micro-label" id="wa-ev-label">

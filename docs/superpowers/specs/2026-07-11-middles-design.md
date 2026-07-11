@@ -1,7 +1,11 @@
 # Middles Detection — Design (Phase 12, strategy: 'middle')
 
-Status: **AWAITING RYAN'S APPROVAL** — plan + open questions below; no
-implementation until sign-off. Arbitrage Mode and Risk Mode are frozen:
+Status: **APPROVED 2026-07-11.** Ryan's decisions on the open questions:
+cost path = **plan upgrade** (market toggles ship default OFF; he flips
+them and raises `monthlyCreditBudget` once the higher credit tier is
+active — no book trim required); board = **EDGES | MIDDLES segment
+inside Risk Mode**; paper = **FLOOR inclusion** with the understatement
+caveat surfaced. Arbitrage Mode and Risk Mode are frozen:
 middles is a third strategy on the shared rails (fingerprints,
 lifecycle, cockpit, ledger, alertWorthy, paper selection), built as a
 NEW pure module — not a modification of arb detection. Player props out

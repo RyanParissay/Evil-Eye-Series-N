@@ -15,6 +15,7 @@ import type {
   FundPosition,
   FundSettings,
   LedgerSummary,
+  MiddlesSettings,
   OpportunityRecord,
   OpsSettings,
   PaperSettings,
@@ -275,6 +276,63 @@ export async function whatsappSetEv(enabled: boolean): Promise<WhatsAppStatus> {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ enabled }),
   });
+}
+
+/* ————— Middles (yellow family — costs money when it misses) ————— */
+
+export interface MiddlesBoard {
+  bets: OpportunityRecord[];
+  settings: MiddlesSettings;
+  defaultStake: number;
+}
+
+export async function fetchMiddlesBoard(): Promise<MiddlesBoard> {
+  return request<MiddlesBoard>('/api/middles/board');
+}
+
+export async function patchMiddlesSettings(
+  patch: Partial<MiddlesSettings>,
+): Promise<MiddlesSettings> {
+  return request<MiddlesSettings>('/api/middles/settings', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+/** Per-leg grading (middles): both won = the middle hit. */
+export async function gradeOpportunityLegs(
+  id: string,
+  legGrades: Array<'won' | 'lost' | 'void'>,
+): Promise<OpportunityRecord> {
+  return request<OpportunityRecord>(`/api/opportunities/${encodeURIComponent(id)}/grade`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ legGrades }),
+  });
+}
+
+export async function whatsappSetMiddles(enabled: boolean): Promise<WhatsAppStatus> {
+  return request<WhatsAppStatus>('/api/whatsapp/middles', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export interface CostEstimate {
+  regionTab: string;
+  topN: number;
+  marketCount: number;
+  regionEquivalents: number;
+  creditsPerSport: number;
+  creditsPerScan: number;
+}
+
+export async function fetchCostEstimate(regionTab: string, topN: number): Promise<CostEstimate> {
+  return request<CostEstimate>(
+    `/api/ops/cost-estimate?regionTab=${encodeURIComponent(regionTab)}&topN=${topN}`,
+  );
 }
 
 /* ————— Paper fund (SIMULATED) ————— */

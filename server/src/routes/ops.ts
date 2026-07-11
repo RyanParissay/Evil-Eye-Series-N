@@ -14,6 +14,7 @@ import type {
   ScanWindow,
   Scoreboard,
 } from '@shared/types';
+import { regionTabByKey, type RegionTabConfig } from '@shared/regionTabs';
 import { BENCHMARK_BOOKS } from '../config/constants';
 import { computeCoverage } from '../ops/coverageService';
 import { computeSurvival } from '../ops/survivalService';
@@ -29,6 +30,8 @@ export interface OpsRouterDeps {
     entries(): AsyncGenerator<ScanLogEntry>;
   };
   books: { list(): Promise<BookmakerConfig[]> };
+  /** Live fetch plan for the cost estimate. */
+  fetchPlan: (tab: RegionTabConfig) => Promise<{ bookmakersParam: string[] | undefined }>;
   /** Latest raw snapshot — per-sport benchmark reach derives from it. */
   snapshots: { read(): Promise<OddsSnapshot | null> };
   /** Every record, active + archived (survival and telemetry need history). */
@@ -65,6 +68,39 @@ export function createOpsRouter(deps: OpsRouterDeps): Router {
         return { data: next, result: next };
       });
       res.json(updated);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * Pre-scan cost, computed from the LIVE fetch plan and enabled markets —
+   * "never silently" made concrete: the number moves when a toggle does.
+   */
+  router.get('/cost-estimate', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tab = regionTabByKey(String(req.query.regionTab ?? ''));
+      const topN = clampInt(Number(req.query.topN), 1, 10) ?? 5;
+      if (!tab) {
+        res.status(400).json(errorBody('bad_request', 'regionTab required'));
+        return;
+      }
+      const [settings, plan] = await Promise.all([
+        deps.settings.read(),
+        deps.fetchPlan(tab),
+      ]);
+      const regionEquivalents = plan.bookmakersParam
+        ? Math.ceil(plan.bookmakersParam.length / 10)
+        : tab.apiRegions.length;
+      const marketCount = 1 + Number(settings.markets.totals) + Number(settings.markets.spreads);
+      res.json({
+        regionTab: tab.key,
+        topN,
+        marketCount,
+        regionEquivalents,
+        creditsPerSport: marketCount * regionEquivalents,
+        creditsPerScan: marketCount * regionEquivalents * topN,
+      });
     } catch (err) {
       next(err);
     }
@@ -199,6 +235,13 @@ function parseOpsPatch(
       return { ok: false, message: 'autoStopPct must be 10–100' };
     }
     patch.autoStopPct = raw.autoStopPct as number;
+  }
+  if ('markets' in raw) {
+    const markets = raw.markets as { totals?: unknown; spreads?: unknown };
+    if (typeof markets?.totals !== 'boolean' || typeof markets?.spreads !== 'boolean') {
+      return { ok: false, message: 'markets must be { totals: boolean, spreads: boolean }' };
+    }
+    patch.markets = { totals: markets.totals, spreads: markets.spreads };
   }
   if (Object.keys(patch).length === 0) return { ok: false, message: 'Empty settings patch' };
   return { ok: true, patch };

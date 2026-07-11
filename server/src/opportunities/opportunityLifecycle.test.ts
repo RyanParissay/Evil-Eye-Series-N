@@ -163,6 +163,76 @@ describe('applyScanToRecords — EV records (strategy discriminator)', () => {
   });
 });
 
+describe('applyScanToRecords — middle records', () => {
+  const MIDDLE_BLOCK = {
+    lowLine: 220.5,
+    highLine: 224.5,
+    windowSize: 4,
+    costPct: 2.5,
+    payoutPct: 95,
+    breakevenPct: 2.56,
+    freeMiddle: false,
+    pushPossible: false,
+    keyNumbers: [],
+  };
+  const middleArb = (costPct = 2.5) =>
+    makeArb({
+      profitPct: -costPct,
+      middle: { ...MIDDLE_BLOCK, costPct },
+    });
+
+  it('creates a middle-strategy record carrying and refreshing the context', () => {
+    const first = applyScanToRecords([], [middleArb()], SCOPE, NOW).records;
+    expect(first[0].strategy).toBe('middle');
+    expect(first[0].middle?.windowSize).toBe(4);
+    const { records } = applyScanToRecords(first, [middleArb(3.1)], SCOPE, new Date(NOW.getTime() + 60_000));
+    expect(records).toHaveLength(1);
+    expect(records[0].middle?.costPct).toBe(3.1);
+  });
+});
+
+describe('applyVerification — middle records', () => {
+  const middleRecord = () =>
+    recordFor(
+      makeArb({
+        profitPct: -2.5,
+        legs: [
+          { outcome: 'Over', point: 220.5, bookmakerKey: 'bet365', bookmakerTitle: 'Bet365', odds: 1.95, stake: 50, link: null },
+          { outcome: 'Under', point: 224.5, bookmakerKey: 'coolbet', bookmakerTitle: 'Coolbet', odds: 1.95, stake: 50, link: null },
+        ],
+      }),
+      {
+        strategy: 'middle',
+        middle: {
+          lowLine: 220.5, highLine: 224.5, windowSize: 4, costPct: 2.5, payoutPct: 95,
+          breakevenPct: 2.56, freeMiddle: false, pushPossible: false, keyNumbers: [],
+        },
+      },
+    );
+
+  it('fresh odds keep a costed middle ALIVE and recompute its economics', () => {
+    const record = middleRecord();
+    // Worse odds: 1.9/1.9 → S = 1.0526 → cost 5%, breakeven 5.26%.
+    expect(applyVerification(record, [1.9, 1.9], NOW)).toBe('active');
+    expect(record.status).toBe('active');
+    expect(record.middle?.costPct).toBeCloseTo(5, 1);
+    expect(record.middle?.breakevenPct).toBeCloseTo(5.26, 1);
+    expect(record.profitPct).toBeCloseTo(-5, 1);
+  });
+
+  it('a vanished leg still kills a middle', () => {
+    const record = middleRecord();
+    expect(applyVerification(record, [1.95, null], NOW)).toBe('dead');
+  });
+
+  it('a middle that verifies into S < 1 becomes a flagged free middle', () => {
+    const record = middleRecord();
+    expect(applyVerification(record, [2.1, 2.05], NOW)).toBe('active');
+    expect(record.middle?.freeMiddle).toBe(true);
+    expect(record.profitPct).toBeGreaterThan(0);
+  });
+});
+
 describe('applyStatusChange', () => {
   it('completes an active record', () => {
     const record = recordFor(makeArb());

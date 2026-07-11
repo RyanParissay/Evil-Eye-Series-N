@@ -23,6 +23,8 @@ export interface WhatsAppSubscription {
    * lose by design, so getting paged about them is a choice.
    */
   evEnabled?: boolean;
+  /** Middles opt-in (default off). Free middles bypass — they're risk-free. */
+  middleEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
 }

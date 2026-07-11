@@ -9,7 +9,9 @@ import {
   alertWorthy,
   formatAlertMessage,
   formatEvAlertMessage,
+  formatMiddleAlertMessage,
   notifyEvBets,
+  notifyMiddleBets,
   notifyNewOpportunities,
   opportunityFingerprint,
   selectAlerts,
@@ -359,6 +361,60 @@ describe('notifyNewOpportunities', () => {
       [evOpp],
     );
     expect(again.sentFingerprints).toEqual([]);
+  });
+
+  it('middle alerts: cost/payout/breakeven framing, opt-in gated, free middles bypass', async () => {
+    const middleBlock = {
+      lowLine: 220.5, highLine: 224.5, windowSize: 4, costPct: 2.5, payoutPct: 95,
+      breakevenPct: 2.56, freeMiddle: false, pushPossible: false, keyNumbers: [7],
+    };
+    const middleOpp = makeArb({
+      eventId: 'evt-mid',
+      profitPct: -2.5,
+      legs: [
+        { outcome: 'Over', point: 220.5, bookmakerKey: 'bet365', bookmakerTitle: 'Bet365', odds: 1.95, stake: 50, link: null },
+        { outcome: 'Under', point: 224.5, bookmakerKey: 'coolbet', bookmakerTitle: 'Coolbet', odds: 1.95, stake: 50, link: null },
+      ],
+      middle: middleBlock,
+    });
+
+    const message = formatMiddleAlertMessage(middleOpp, 400);
+    expect(message).toContain('Costs $10.00 if it misses');
+    expect(message).toContain('pays $380.00');
+    expect(message).toContain('(220.5–224.5)');
+    expect(message).toContain('hit 2.6%');
+    expect(message.toLowerCase()).not.toContain('guaranteed');
+
+    // Costed middles need the opt-in; default subscription has none.
+    const store = new FakeStore(makeData());
+    const sender = new FakeSender();
+    const off = await notifyMiddleBets(
+      { store, sender, now: () => NOW, maxBreakevenPct: 4, stake: 400 },
+      [middleOpp],
+    );
+    expect(off.sentFingerprints).toEqual([]);
+
+    store.data.subscriptions[0].middleEnabled = true;
+    const on = await notifyMiddleBets(
+      { store, sender, now: () => NOW, maxBreakevenPct: 4, stake: 400 },
+      [middleOpp],
+    );
+    expect(on.sentFingerprints).toHaveLength(1);
+
+    // Free middles bypass the opt-in and MAY say guaranteed.
+    const freeOpp = makeArb({
+      eventId: 'evt-free',
+      profitPct: 3.74,
+      middle: { ...middleBlock, costPct: -3.74, breakevenPct: -3.6, freeMiddle: true },
+    });
+    store.data.subscriptions[0].middleEnabled = false;
+    const free = await notifyMiddleBets(
+      { store, sender, now: () => NOW, maxBreakevenPct: 4, stake: 400 },
+      [freeOpp],
+    );
+    expect(free.sentFingerprints).toHaveLength(1);
+    expect(sender.sent[sender.sent.length - 1].body.toLowerCase()).toContain('free middle');
+    expect(sender.sent[sender.sent.length - 1].body.toLowerCase()).toContain('guaranteed');
   });
 
   it('sends the deep link when deps carry the app URL', async () => {

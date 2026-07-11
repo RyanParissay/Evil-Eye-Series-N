@@ -216,6 +216,53 @@ describe('OpportunityService', () => {
     expect(await service.grade('nope', 'won')).toMatchObject({ ok: false, reason: 'not_found' });
   });
 
+  it('per-leg grading (middles): hit, single-side, and push reconcile to the cent', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    const middleArb = makeArb({
+      profitPct: -2.5,
+      middle: {
+        lowLine: 220.5, highLine: 224.5, windowSize: 4, costPct: 2.5, payoutPct: 95,
+        breakevenPct: 2.56, freeMiddle: false, pushPossible: false, keyNumbers: [],
+      },
+    });
+    await service.recordScan([middleArb], SCOPE);
+    const [record] = await service.list();
+    await service.updateStatus(record.id, 'completed', [
+      { odds: 1.95, stake: 250 },
+      { odds: 1.95, stake: 250 },
+    ]);
+
+    // Middle hit: both legs won → +237.50 each side = +475.
+    const hit = await service.gradeLegs(record.id, ['won', 'won']);
+    expect(hit.ok).toBe(true);
+    expect((await service.get(record.id))?.execution?.lockedProfit).toBeCloseTo(475, 2);
+
+    // Side A only: +237.50 − 250 = −12.50 (the classic middle cost).
+    await service.gradeLegs(record.id, ['won', 'lost']);
+    expect((await service.get(record.id))?.execution?.lockedProfit).toBeCloseTo(-12.5, 2);
+
+    // Push on leg A (void), side B won: 0 + 237.50.
+    await service.gradeLegs(record.id, ['void', 'won']);
+    expect((await service.get(record.id))?.execution?.lockedProfit).toBeCloseTo(237.5, 2);
+    expect((await service.get(record.id))?.execution?.legGrades).toEqual(['void', 'won']);
+  });
+
+  it('gradeLegs guards: arbs and EV refuse; alignment enforced', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    await service.recordScan([makeArb()], SCOPE);
+    const [arb] = await service.list();
+    await service.updateStatus(arb.id, 'completed', [
+      { odds: 2.1, stake: 240 },
+      { odds: 2.05, stake: 260 },
+    ]);
+    expect(await service.gradeLegs(arb.id, ['won', 'won'])).toMatchObject({
+      ok: false,
+      reason: 'conflict',
+    });
+  });
+
   it('ages settled records into the archive and drops them from the active file', async () => {
     const store = new FakeStore();
     const archive = new FakeArchive();

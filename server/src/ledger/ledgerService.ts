@@ -113,6 +113,9 @@ export class LedgerService {
         evExpectedProfit += (execution.totalStaked * (record.ev?.edgePct ?? 0)) / 100;
         continue;
       }
+      // Ungraded middles: counted as completions, summed as nothing —
+      // their outcome is simply unknown until the legs are graded.
+      if (record.strategy === 'middle' && execution.legGrades == null) continue;
 
       totalLockedProfit += execution.lockedProfit;
       executions.push({ at: execution.recordedAt, profit: execution.lockedProfit });
@@ -245,6 +248,11 @@ export class LedgerService {
         'benchmark_odds',
         'edge_pct',
         'grade',
+        'middle_low_line',
+        'middle_high_line',
+        'middle_cost_pct',
+        'middle_breakeven_pct',
+        'leg_grades',
       ].join(',') + '\n',
     );
 
@@ -285,6 +293,11 @@ export class LedgerService {
         record.ev?.benchmarkOdds ?? '',
         record.ev?.edgePct ?? '',
         record.execution?.grade ?? '',
+        record.middle?.lowLine ?? '',
+        record.middle?.highLine ?? '',
+        record.middle?.costPct ?? '',
+        record.middle?.breakevenPct ?? '',
+        record.execution?.legGrades?.join('|') ?? '',
       ];
       write(row.map(csvEscape).join(',') + '\n');
     }

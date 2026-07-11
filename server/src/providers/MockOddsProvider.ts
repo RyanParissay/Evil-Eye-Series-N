@@ -101,6 +101,24 @@ export class MockOddsProvider implements OddsProvider {
       ],
     });
 
+    // Totals/spreads with LINE VARIETY across books, so Phase-12 middles
+    // have something to find when those markets are toggled on. Attached
+    // to the arb event's books below.
+    const totalsMarket = (line: number, over: number, under: number) => ({
+      key: 'totals',
+      outcomes: [
+        { name: 'Over', price: over, point: line },
+        { name: 'Under', price: under, point: line },
+      ],
+    });
+    const spreadsMarket = (home: string, away: string, homePoint: number, price = 1.91) => ({
+      key: 'spreads',
+      outcomes: [
+        { name: home, price, point: homePoint },
+        { name: away, price, point: -homePoint },
+      ],
+    });
+
     return {
       basketball_nba: [
         {
@@ -113,8 +131,25 @@ export class MockOddsProvider implements OddsProvider {
           homeTeam: 'Los Angeles Lakers',
           awayTeam: 'Boston Celtics',
           bookmakers: [
-            book('fanduel', 'FanDuel', { 'Los Angeles Lakers': 2.1, 'Boston Celtics': 1.78 }, 'https://sportsbook.fanduel.com/basketball/nba'),
-            book('draftkings', 'DraftKings', { 'Los Angeles Lakers': 1.83, 'Boston Celtics': 2.12 }, 'https://sportsbook.draftkings.com/leagues/basketball/nba'),
+            {
+              ...book('fanduel', 'FanDuel', { 'Los Angeles Lakers': 2.1, 'Boston Celtics': 1.78 }, 'https://sportsbook.fanduel.com/basketball/nba'),
+              markets: [
+                book('fanduel', 'x', { 'Los Angeles Lakers': 2.1, 'Boston Celtics': 1.78 }).markets[0],
+                // FanDuel hangs the total at 220.5…
+                totalsMarket(220.5, 1.95, 1.87),
+                spreadsMarket('Los Angeles Lakers', 'Boston Celtics', -2.5),
+              ],
+            },
+            {
+              ...book('draftkings', 'DraftKings', { 'Los Angeles Lakers': 1.83, 'Boston Celtics': 2.12 }, 'https://sportsbook.draftkings.com/leagues/basketball/nba'),
+              markets: [
+                book('draftkings', 'x', { 'Los Angeles Lakers': 1.83, 'Boston Celtics': 2.12 }).markets[0],
+                // …DraftKings at 224.5: Over 220.5 + Under 224.5 = a 4-point
+                // middle at 1.95/1.95 (cost 2.5%, breakeven 2.56%).
+                totalsMarket(224.5, 1.87, 1.95),
+                spreadsMarket('Los Angeles Lakers', 'Boston Celtics', -6.5),
+              ],
+            },
             book('betmgm', 'BetMGM', { 'Los Angeles Lakers': 1.95, 'Boston Celtics': 1.87 }),
             // Never the best price on either side — feed variety only.
             book('betway', 'Betway', { 'Los Angeles Lakers': 1.9, 'Boston Celtics': 1.85 }),

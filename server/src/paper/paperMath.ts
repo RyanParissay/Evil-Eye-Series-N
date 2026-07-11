@@ -14,6 +14,8 @@ export function settlePaperBook(
   entries: PaperEntry[],
   settings: PaperSettings,
   now: Date,
+  /** fingerprint → realized profit per $1 staked, from graded REAL records. */
+  actuals?: Map<string, number>,
 ): PaperBook {
   const ordered = [...entries].sort((a, b) => a.enteredAt.localeCompare(b.enteredAt));
   const nowMs = now.getTime();
@@ -34,8 +36,20 @@ export function settlePaperBook(
       settings.stakeRule.kind === 'flat'
         ? round2(settings.stakeRule.value)
         : round2((bankrollAtEntry * settings.stakeRule.value) / 100);
-    const idealProfit = round2((stake * entry.profitPct) / 100);
-    const haircutProfit = round2(idealProfit * (1 - settings.haircutPercent / 100));
+    // Middles: worst-case FLOOR until a graded real record with the same
+    // fingerprint supplies the actual (profit per $1 staked). Arbs are
+    // outcome-independent, so profitPct IS the truth.
+    const isMiddle = entry.strategy === 'middle';
+    const actualPerDollar = isMiddle ? actuals?.get(entry.fingerprint) : undefined;
+    const idealProfit =
+      actualPerDollar != null
+        ? round2(stake * actualPerDollar)
+        : round2((stake * entry.profitPct) / 100);
+    // The haircut models arb slippage; floors/actuals are already pessimal
+    // or real, so middles take no additional cut.
+    const haircutProfit = isMiddle
+      ? idealProfit
+      : round2(idealProfit * (1 - settings.haircutPercent / 100));
     settledSoFar.push({ commenceMs: Date.parse(entry.commenceTime), idealProfit });
     return {
       ...entry,
@@ -43,6 +57,7 @@ export function settlePaperBook(
       idealProfit,
       haircutProfit,
       settled: Date.parse(entry.commenceTime) <= nowMs,
+      floor: isMiddle && actualPerDollar == null,
     };
   });
 

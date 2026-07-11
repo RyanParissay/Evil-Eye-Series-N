@@ -100,12 +100,23 @@ export function createOpportunitiesRouter(
     });
   }
 
-  // Risk Mode grading: WON/LOST/VOID turns an EV completion into realized
-  // money. Regrade allowed until balances are applied.
+  // Grading turns a speculative completion into realized money: EV takes
+  // one grade, middles take per-leg grades. Regrade until balances applied.
   router.post('/:id/grade', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const grade = (req.body ?? {}).grade;
-      if (grade !== 'won' && grade !== 'lost' && grade !== 'void') {
+      const { grade, legGrades } = (req.body ?? {}) as { grade?: unknown; legGrades?: unknown };
+      const isGrade = (v: unknown): v is 'won' | 'lost' | 'void' =>
+        v === 'won' || v === 'lost' || v === 'void';
+      if (Array.isArray(legGrades)) {
+        if (!legGrades.every(isGrade)) {
+          res.status(400).json(errorBody('bad_request', "legGrades must be 'won'|'lost'|'void' each"));
+          return;
+        }
+        const outcome = await service.gradeLegs(req.params.id, legGrades);
+        respondReconcile(res, outcome as never);
+        return;
+      }
+      if (!isGrade(grade)) {
         res.status(400).json(errorBody('bad_request', "grade must be 'won', 'lost', or 'void'"));
         return;
       }

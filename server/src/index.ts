@@ -15,6 +15,7 @@ import {
   LAST_SNAPSHOT_FILE,
   EV_FILE,
   FUND_FILE,
+  MIDDLES_FILE,
   OPPORTUNITIES_FILE,
   OPPORTUNITY_ARCHIVE_DIR,
   OPS_FILE,
@@ -37,10 +38,12 @@ import { PaperService } from './paper/paperService';
 import { PaperStore } from './paper/paperStore';
 import { planStakes } from '@shared/stakePlanning';
 import { EvStore } from './ops/evStore';
+import { MiddlesStore } from './ops/middlesStore';
 import { OpsStore } from './ops/opsStore';
 import { ScanHistoryStore } from './ops/scanHistoryStore';
-import { notifyEvBets } from './notifications/alertService';
+import { notifyEvBets, notifyMiddleBets } from './notifications/alertService';
 import { createEvRouter } from './routes/ev';
+import { createMiddlesRouter } from './routes/middles';
 import { computeSurvival } from './ops/survivalService';
 import { createFundRouter } from './routes/fund';
 import { createOpsRouter } from './routes/ops';
@@ -119,6 +122,7 @@ const paperService = new PaperService(
     ]);
     return computeSurvival(records, scans, new Date()).haircut;
   },
+  () => gradedActuals(),
 );
 app.use('/api/paper', createPaperRouter(paperService));
 
@@ -134,6 +138,7 @@ app.use(
     settings: opsStore,
     scanHistory: scanHistoryStore,
     books: bookmakerService,
+    fetchPlan: (tab) => bookmakerService.fetchPlan(tab),
     snapshots: snapshotStore,
     records: () => ledgerService.allRecordsList(),
     ledger: async () => {
@@ -164,6 +169,29 @@ app.use(
   '/api/ev',
   createEvRouter({ settings: evStore, opportunities: opportunityService, fund: fundService }),
 );
+
+const middlesStore = new MiddlesStore(path.join(serverRoot, MIDDLES_FILE));
+app.use(
+  '/api/middles',
+  createMiddlesRouter({
+    settings: middlesStore,
+    opportunities: opportunityService,
+    fund: fundService,
+  }),
+);
+
+/** Realized profit per $1 staked for every graded record — the paper
+ *  fund's middle entries adopt these actuals by fingerprint. */
+async function gradedActuals(): Promise<Map<string, number>> {
+  const actuals = new Map<string, number>();
+  for (const record of await ledgerService.allRecordsList()) {
+    const execution = record.execution;
+    if (!execution || execution.totalStaked <= 0) continue;
+    if (execution.grade == null && execution.legGrades == null) continue;
+    actuals.set(record.fingerprint, execution.lockedProfit / execution.totalStaked);
+  }
+  return actuals;
+}
 app.use(
   '/api/fund',
   createFundRouter({
@@ -214,27 +242,33 @@ app.use(
     snapshots: snapshotStore,
     scanLog: scanHistoryStore,
     ev: { settings: () => evStore.read() },
+    middles: { settings: () => middlesStore.read() },
+    marketSettings: { read: async () => (await opsStore.read()).markets },
     // Limited/dead/disabled books never page the phone — filter before
     // dispatch; whatever actually sent gets flagged on its stored record.
     // The stream carries BOTH strategies; arbs and EV bets split here.
     notifier: async (opportunities) => {
       const alertable = await bookmakerService.filterAlertable(opportunities);
-      const arbs = alertable.filter((o) => !o.ev);
+      const arbs = alertable.filter((o) => !o.ev && !o.middle);
       const evBets = alertable.filter((o) => o.ev);
-      // The paper fund watches the SAME alertable ARB stream a phone would —
-      // its failure must never dent the real alert path. Paper is arb-only
-      // by design (EV proof is grading calibration, not simulation).
-      try {
-        await paperService.considerEntries(arbs);
-      } catch (err) {
-        console.warn('Paper fund entry failed:', err);
-      }
-      // Exact-dollar stakes from persisted fund settings + current balances.
-      const [fundSettings, books, evSettings] = await Promise.all([
+      const middleBets = alertable.filter((o) => o.middle);
+      const [fundSettings, books, evSettings, middlesSettings] = await Promise.all([
         fundService.settings(),
         bookmakerService.list(),
         evStore.read(),
+        middlesStore.read(),
       ]);
+      // The paper fund watches the SAME alertable stream a phone would —
+      // arbs at the paper threshold, middles at the alert breakeven cap
+      // (stored at their worst-case FLOOR). EV proof stays grading-only.
+      try {
+        await paperService.considerEntries(
+          [...arbs, ...middleBets],
+          middlesSettings.alertMaxBreakevenPct,
+        );
+      } catch (err) {
+        console.warn('Paper fund entry failed:', err);
+      }
       const balances = new Map(books.map((b) => [b.key, b.balance ?? null]));
       const { sentFingerprints } = await notifyNewOpportunities(
         {
@@ -266,7 +300,25 @@ app.use(
           console.warn('EV alert dispatch failed:', err);
         }
       }
-      await opportunityService.markAlerted([...sentFingerprints, ...evSent]);
+      let middleSent: string[] = [];
+      if (middleBets.length > 0) {
+        try {
+          const result = await notifyMiddleBets(
+            {
+              store: whatsappStore,
+              sender: whatsappSender,
+              appUrl,
+              maxBreakevenPct: middlesSettings.alertMaxBreakevenPct,
+              stake: fundSettings.defaultStake > 0 ? fundSettings.defaultStake : undefined,
+            },
+            middleBets,
+          );
+          middleSent = result.sentFingerprints;
+        } catch (err) {
+          console.warn('Middle alert dispatch failed:', err);
+        }
+      }
+      await opportunityService.markAlerted([...sentFingerprints, ...evSent, ...middleSent]);
     },
   }),
 );

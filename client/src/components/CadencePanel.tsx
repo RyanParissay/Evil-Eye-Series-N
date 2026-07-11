@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { OpsSettings } from '../../../shared/types';
-import { patchOpsSettings } from '../api';
+import { fetchCostEstimate, patchOpsSettings, type CostEstimate } from '../api';
 import type { BudgetState, CadenceState } from '../cadence';
 import { formatCountdown, msUntilNextScan } from '../autoScan';
 
@@ -16,6 +16,8 @@ export function CadencePanel({
   autoEnabled,
   lastScanAt,
   now,
+  regionTab,
+  topN,
 }: {
   settings: OpsSettings;
   onSettings: (next: OpsSettings) => void;
@@ -24,9 +26,20 @@ export function CadencePanel({
   autoEnabled: boolean;
   lastScanAt: number | null;
   now: number;
+  regionTab: string;
+  topN: number;
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [estimate, setEstimate] = useState<CostEstimate | null>(null);
+
+  // Pre-scan cost, from the live fetch plan + enabled markets — the
+  // number that moves when a market toggle does. Never silent.
+  useEffect(() => {
+    fetchCostEstimate(regionTab, topN)
+      .then(setEstimate)
+      .catch(() => setEstimate(null));
+  }, [regionTab, topN, settings.markets.totals, settings.markets.spreads]);
 
   async function apply(patch: Partial<OpsSettings>) {
     setError(null);
@@ -57,6 +70,12 @@ export function CadencePanel({
         {budget.warning && !budget.stopped && (
           <span className="chip chip-warn" title="Projected month-end burn exceeds the budget">
             ⚠ projected {budget.projectedMonthEnd?.toLocaleString()} / {settings.monthlyCreditBudget.toLocaleString()} credits
+          </span>
+        )}
+        {estimate && (
+          <span className="micro-label" title="markets × region-equivalents × sports">
+            ≈{estimate.creditsPerScan} credits/scan ({estimate.marketCount} market
+            {estimate.marketCount === 1 ? '' : 's'} × {estimate.regionEquivalents} RE × {estimate.topN})
           </span>
         )}
         <button type="button" className="cadence-edit micro-label" onClick={() => setOpen(!open)}>
@@ -132,6 +151,26 @@ export function CadencePanel({
                   void apply({ autoStopPct: v });
                 }
               }}
+            />
+          </label>
+          <label className="micro-label cadence-market">
+            totals market
+            <input
+              type="checkbox"
+              checked={settings.markets.totals}
+              onChange={(e) =>
+                void apply({ markets: { ...settings.markets, totals: e.target.checked } })
+              }
+            />
+          </label>
+          <label className="micro-label cadence-market">
+            spreads market
+            <input
+              type="checkbox"
+              checked={settings.markets.spreads}
+              onChange={(e) =>
+                void apply({ markets: { ...settings.markets, spreads: e.target.checked } })
+              }
             />
           </label>
         </div>

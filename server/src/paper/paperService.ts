@@ -7,7 +7,7 @@
  */
 import type { ArbOpportunity, PaperSettings, PaperView } from '@shared/types';
 import { alertWorthy } from '../notifications/alertService';
-import { opportunityIdFromFingerprint } from '../opportunities/opportunityId';
+import { opportunityFingerprint, opportunityIdFromFingerprint } from '../opportunities/opportunityId';
 import { settlePaperBook } from './paperMath';
 import type { PaperDataStore } from './paperStore';
 
@@ -23,21 +23,46 @@ export class PaperService {
     private readonly store: PaperDataStore,
     private readonly now: () => Date = () => new Date(),
     private readonly haircutOracle?: HaircutOracle,
+    /** Graded real records by fingerprint → profit per $1 (middle FLOOR→actual). */
+    private readonly actualsLookup?: () => Promise<Map<string, number>>,
   ) {}
 
-  /** Fire-and-forget from the scan notifier; returns how many entered. */
-  async considerEntries(opportunities: ArbOpportunity[]): Promise<number> {
+  /**
+   * Fire-and-forget from the scan notifier; returns how many entered.
+   * Arbs enter via alertWorthy at the paper threshold. Middles enter at
+   * alert parity too: non-same-book, breakeven ≤ the alert cap, deduped —
+   * stored at their worst-case FLOOR profitPct.
+   */
+  async considerEntries(
+    opportunities: ArbOpportunity[],
+    middleMaxBreakevenPct?: number,
+  ): Promise<number> {
     const at = this.now().toISOString();
     return this.store.update((data) => {
       if (!data.settings.enabled) return { data, result: 0 };
       const seen = new Set(data.entries.map((e) => e.fingerprint));
-      const picks = alertWorthy(opportunities, data.settings.thresholdPercent, (fp) =>
-        seen.has(fp),
+
+      const arbs = opportunities.filter((o) => !o.middle && !o.ev);
+      const picks = alertWorthy(arbs, data.settings.thresholdPercent, (fp) => seen.has(fp)).map(
+        ({ opportunity, fingerprint }) => ({ opportunity, fingerprint }),
       );
+      if (middleMaxBreakevenPct != null) {
+        for (const opportunity of opportunities) {
+          const middle = opportunity.middle;
+          if (!middle || opportunity.sameBookmaker || opportunity.suspicious) continue;
+          if (!middle.freeMiddle && middle.breakevenPct > middleMaxBreakevenPct) continue;
+          const fingerprint = opportunityFingerprint(opportunity);
+          if (seen.has(fingerprint)) continue;
+          picks.push({ opportunity, fingerprint });
+        }
+      }
+
       for (const { opportunity, fingerprint } of picks) {
+        seen.add(fingerprint);
         data.entries.push({
           id: opportunityIdFromFingerprint(fingerprint),
           fingerprint,
+          strategy: opportunity.middle ? 'middle' : 'arb',
           eventId: opportunity.eventId,
           eventName: opportunity.eventName,
           sportKey: opportunity.sportKey,
@@ -54,8 +79,9 @@ export class PaperService {
     });
   }
 
-  async book(): Promise<PaperView> {
+  async book(actuals?: Map<string, number>): Promise<PaperView> {
     const data = await this.store.read();
+    actuals ??= await this.actualsLookup?.();
     // 'measured' uses the survival-derived number once qualified; anything
     // else — including an unqualified measurement — is honestly ASSUMED.
     let haircut: PaperView['haircut'] = {
@@ -79,6 +105,7 @@ export class PaperService {
         data.entries,
         { ...data.settings, haircutPercent: haircut.pct },
         this.now(),
+        actuals,
       ),
     };
   }
