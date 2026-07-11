@@ -246,10 +246,38 @@ describe('runScan', () => {
             throw new Error('disk full');
           },
         },
+        scanLog: {
+          async append() {
+            throw new Error('disk full');
+          },
+        },
       }),
       { topN: 5, tab: CA_TAB },
     );
     expect(result.opportunities).toHaveLength(1);
+  });
+
+  it('appends a scan-history line with the raw feed facts (Phase 8)', async () => {
+    const appended: unknown[] = [];
+    await runScan(
+      deps(stubProvider([totalsArbEvent()]), {
+        markets: ['totals'],
+        scanLog: {
+          async append(entry) {
+            appended.push(entry);
+          },
+        },
+      }),
+      { topN: 5, tab: CA_TAB },
+    );
+    expect(appended).toHaveLength(1);
+    expect(appended[0]).toMatchObject({
+      scannedAt: NOW.toISOString(),
+      regionTab: 'ca',
+      sportsScanned: ['basketball_nba'],
+      distinctBooks: ['bet365', 'pinnacle'],
+      eventCount: 1,
+    });
   });
 
   it('hands each scan’s opportunities to the notifier', async () => {

@@ -3,7 +3,14 @@
  * → arbitrage engine → usage report. This is the only place the provider,
  * engine, and persistence meet.
  */
-import type { ArbOpportunity, OddsEvent, ScanMeta, ScanResponse, UsageReport } from '@shared/types';
+import type {
+  ArbOpportunity,
+  OddsEvent,
+  ScanLogEntry,
+  ScanMeta,
+  ScanResponse,
+  UsageReport,
+} from '@shared/types';
 import type { RegionTabConfig } from '@shared/regionTabs';
 import type { FetchPlan } from '../bookmakers/effectiveBookmakers';
 import {
@@ -36,6 +43,13 @@ export interface ScanDeps {
   opportunityLog?: OpportunityLogIntegration;
   /** Latest-raw-snapshot persistence (snapshotStore.ts). Optional. */
   snapshots?: SnapshotIntegration;
+  /** Per-scan history line (ops/scanHistoryStore.ts). Optional, non-fatal. */
+  scanLog?: ScanLogIntegration;
+}
+
+/** What runScan needs from ScanHistoryStore — structural, for tests. */
+export interface ScanLogIntegration {
+  append(entry: ScanLogEntry): Promise<void>;
 }
 
 /** What runScan needs from BookmakerService — structural, for tests. */
@@ -208,6 +222,24 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
     await store.write(meta);
   } catch (err) {
     console.warn('Failed to persist last-scan metadata:', err);
+  }
+
+  // 6½. One history line per scan — coverage, survival, and budget
+  //     projection all derive from this. Non-fatal like every store.
+  if (deps.scanLog) {
+    try {
+      await deps.scanLog.append({
+        scannedAt: meta.scannedAt,
+        regionTab: tab.key,
+        sportsScanned: scannedKeys,
+        creditsComputed: creditsComputed,
+        requestsUsedTotal: usage.requestsUsedTotal,
+        distinctBooks: [...new Set(rawEvents.flatMap((e) => e.bookmakers.map((b) => b.key)))],
+        eventCount: rawEvents.length,
+      });
+    } catch (err) {
+      console.warn('Scan-history append failed:', err);
+    }
   }
 
   return { opportunities, meta };

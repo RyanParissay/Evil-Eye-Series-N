@@ -30,6 +30,7 @@ function app() {
       startingBankroll: 5000,
       stakeRule: { kind: 'flat', value: 400 },
       haircutPercent: 20,
+      haircutSource: 'manual',
       thresholdPercent: 2,
     },
     entries: [],

@@ -89,6 +89,12 @@ export const FUND_FILE = 'data/fund.json';
 /** Nudge when a book's balance hasn't been touched for this long. */
 export const STALE_BALANCE_AFTER_MS = 14 * 24 * 3_600_000;
 
+/** Ops settings: scan windows, cadences, credit budget (gitignored). */
+export const OPS_FILE = 'data/ops.json';
+
+/** Per-scan history JSONL, monthly files (gitignored). */
+export const SCAN_HISTORY_DIR = 'data/scan-history';
+
 /**
  * Re-verify marks a record degraded only when fresh profit fell more than
  * this many percentage points below the detection profit — a 2.34% → 2.31%

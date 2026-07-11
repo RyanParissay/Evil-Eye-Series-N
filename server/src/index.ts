@@ -16,8 +16,10 @@ import {
   FUND_FILE,
   OPPORTUNITIES_FILE,
   OPPORTUNITY_ARCHIVE_DIR,
+  OPS_FILE,
   PAPER_FILE,
   PRESETS_FILE,
+  SCAN_HISTORY_DIR,
   WHATSAPP_DATA_FILE,
 } from './config/constants';
 import { notifyNewOpportunities } from './notifications/alertService';
@@ -33,7 +35,11 @@ import { FundStore } from './fund/fundStore';
 import { PaperService } from './paper/paperService';
 import { PaperStore } from './paper/paperStore';
 import { planStakes } from '@shared/stakePlanning';
+import { OpsStore } from './ops/opsStore';
+import { ScanHistoryStore } from './ops/scanHistoryStore';
+import { computeSurvival } from './ops/survivalService';
 import { createFundRouter } from './routes/fund';
+import { createOpsRouter } from './routes/ops';
 import { createPaperRouter } from './routes/paper';
 import { PresetService } from './presets/presetService';
 import { PresetStore } from './presets/presetStore';
@@ -95,8 +101,57 @@ app.use(express.json());
 app.use('/api/whatsapp', createWhatsAppRouter({ store: whatsappStore, sender: whatsappSender }));
 app.use('/api/bookmakers', createBookmakersRouter(bookmakerService));
 app.use('/api/ledger', createLedgerRouter(ledgerService));
-const paperService = new PaperService(new PaperStore(path.join(serverRoot, PAPER_FILE)));
+const scanHistoryStore = new ScanHistoryStore(path.join(serverRoot, SCAN_HISTORY_DIR));
+const opsStore = new OpsStore(path.join(serverRoot, OPS_FILE));
+
+// The paper haircut can be MEASURED from survival once enough history exists.
+const paperService = new PaperService(
+  new PaperStore(path.join(serverRoot, PAPER_FILE)),
+  undefined,
+  async () => {
+    const [records, scans] = await Promise.all([
+      ledgerService.allRecordsList(),
+      collectScanHistory(),
+    ]);
+    return computeSurvival(records, scans, new Date()).haircut;
+  },
+);
 app.use('/api/paper', createPaperRouter(paperService));
+
+async function collectScanHistory() {
+  const scans = [];
+  for await (const entry of scanHistoryStore.entries()) scans.push(entry);
+  return scans;
+}
+
+app.use(
+  '/api/ops',
+  createOpsRouter({
+    settings: opsStore,
+    scanHistory: scanHistoryStore,
+    books: bookmakerService,
+    records: () => ledgerService.allRecordsList(),
+    ledger: async () => {
+      const summary = await ledgerService.summarize();
+      return { realized: summary.realized, captureRate: summary.captureRate };
+    },
+    paper: async () => {
+      const view = await paperService.book();
+      if (!view.settings.enabled && view.book.entries.length === 0) return null;
+      return {
+        simulated: true,
+        idealProfit: Math.round((view.book.bankrollIdeal - view.settings.startingBankroll) * 100) / 100,
+        haircutProfit:
+          Math.round((view.book.bankrollHaircut - view.settings.startingBankroll) * 100) / 100,
+        haircutSource: view.haircut.source,
+        haircutPct: view.haircut.pct,
+      };
+    },
+    lastUsage: async () => ({
+      requestsUsedTotal: (await store.read())?.usage.requestsUsedTotal ?? null,
+    }),
+  }),
+);
 
 const fundService = new FundService(new FundStore(path.join(serverRoot, FUND_FILE)));
 app.use(
@@ -147,6 +202,7 @@ app.use(
     books: bookmakerService,
     opportunityLog: opportunityService,
     snapshots: snapshotStore,
+    scanLog: scanHistoryStore,
     // Limited/dead/disabled books never page the phone — filter before
     // dispatch; whatever actually sent gets flagged on its stored record.
     notifier: async (opportunities) => {

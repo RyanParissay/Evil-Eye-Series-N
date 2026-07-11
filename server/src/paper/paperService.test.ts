@@ -40,18 +40,22 @@ function makeArb(overrides: Partial<ArbOpportunity> = {}): ArbOpportunity {
   };
 }
 
-function fresh(enabled = true) {
+function fresh(
+  enabled = true,
+  haircutOracle?: () => Promise<{ qualified: boolean; measuredPct: number | null; detail: string }>,
+) {
   const store = new MemStore({
     settings: {
       enabled,
       startingBankroll: 5000,
       stakeRule: { kind: 'flat', value: 400 },
       haircutPercent: 20,
+      haircutSource: 'manual',
       thresholdPercent: 2,
     },
     entries: [],
   });
-  return { store, service: new PaperService(store, () => NOW) };
+  return { store, service: new PaperService(store, () => NOW, haircutOracle) };
 }
 
 describe('PaperService.considerEntries', () => {
@@ -98,5 +102,30 @@ describe('PaperService.considerEntries', () => {
     expect(view.simulated).toBe(true);
     expect(view.book.entries[0]).toMatchObject({ settled: true, stake: 400 });
     expect(view.book.bankrollIdeal).toBeCloseTo(5000 + 400 * 0.0234, 2);
+    // Manual source is always labeled assumed.
+    expect(view.haircut).toMatchObject({ source: 'assumed', pct: 20 });
+  });
+
+  it('haircutSource=measured uses the qualified oracle number, else falls back labeled assumed', async () => {
+    const qualified = fresh(true, async () => ({
+      qualified: true,
+      measuredPct: 39,
+      detail: '84 arbs measured: 61% survive one scan interval',
+    }));
+    await qualified.service.patchSettings({ haircutSource: 'measured' });
+    await qualified.service.considerEntries([makeArb({ commenceTime: '2026-07-10T11:30:00Z' })]);
+    const view = await qualified.service.book();
+    expect(view.haircut).toMatchObject({ source: 'measured', pct: 39 });
+    // Settlement actually uses the measured number: ideal 9.36 → haircut ×0.61.
+    expect(view.book.entries[0].haircutProfit).toBeCloseTo(9.36 * 0.61, 2);
+
+    const unqualified = fresh(true, async () => ({
+      qualified: false,
+      measuredPct: null,
+      detail: 'unmeasured',
+    }));
+    await unqualified.service.patchSettings({ haircutSource: 'measured' });
+    const fallback = await unqualified.service.book();
+    expect(fallback.haircut).toMatchObject({ source: 'assumed', pct: 20 });
   });
 });

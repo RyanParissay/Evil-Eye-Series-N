@@ -10,12 +10,17 @@ import type {
   BookPreset,
   BookmakerConfig,
   BookmakerStatusValue,
+  CoverageReport,
   FundPosition,
   FundSettings,
   LedgerSummary,
   OpportunityRecord,
+  OpsSettings,
   PaperSettings,
   PaperView,
+  Scoreboard,
+  SurvivalStats,
+  TelemetryStats,
   ScanMeta,
   ScanResponse,
   WhatsAppStatus,
@@ -188,6 +193,47 @@ export async function revertBalances(id: string): Promise<OpportunityRecord> {
     `/api/opportunities/${encodeURIComponent(id)}/revert-balances`,
     { method: 'POST' },
   );
+}
+
+/* ————— Ops: cadence, coverage, survival, telemetry, scoreboard ————— */
+
+export async function fetchOpsSettings(): Promise<OpsSettings> {
+  return request<OpsSettings>('/api/ops/settings');
+}
+
+export async function patchOpsSettings(patch: Partial<OpsSettings>): Promise<OpsSettings> {
+  return request<OpsSettings>('/api/ops/settings', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function fetchCoverage(): Promise<CoverageReport> {
+  return request<CoverageReport>('/api/ops/coverage');
+}
+
+export async function fetchSurvival(): Promise<SurvivalStats> {
+  return request<SurvivalStats>('/api/ops/survival');
+}
+
+export async function fetchTelemetry(): Promise<TelemetryStats> {
+  return request<TelemetryStats>('/api/ops/telemetry');
+}
+
+export async function fetchScoreboard(): Promise<Scoreboard> {
+  return request<Scoreboard>('/api/ops/scoreboard');
+}
+
+/** Reaction-funnel ping; first write wins server-side. Fire-and-forget. */
+export function pingFunnel(id: string, step: 'cockpit_opened' | 'fills_opened'): void {
+  void fetch(`/api/opportunities/${encodeURIComponent(id)}/funnel`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ step }),
+  }).catch(() => {
+    // Telemetry must never break the cockpit.
+  });
 }
 
 /* ————— Paper fund (SIMULATED) ————— */

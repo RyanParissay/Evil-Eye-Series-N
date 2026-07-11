@@ -1867,3 +1867,124 @@ select.bm-input {
   flex-direction: column;
   gap: 10px;
 }
+
+/* ————— Cadence: the Phase 8 mode line + window/budget settings ————— */
+
+.cadence {
+  border-bottom: 1px solid var(--hairline);
+  padding: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cadence-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cadence-mode {
+  font-weight: 700;
+  color: var(--grey);
+}
+
+/* Green = surveillance live, app-wide. */
+.cadence-mode.is-live {
+  color: var(--green);
+}
+
+.cadence-mode.is-stopped {
+  color: var(--red);
+}
+
+.cadence-edit {
+  margin-left: auto;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--grey);
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 11px;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.cadence-edit:hover,
+.cadence-edit:focus-visible {
+  color: var(--red);
+  outline: none;
+}
+
+.cadence-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+}
+
+.cadence-settings label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cadence-settings input,
+.cadence-settings select {
+  background: var(--black);
+  border: 1px solid var(--hairline);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  padding: 7px 9px;
+  border-radius: 0;
+  color-scheme: dark;
+}
+
+.cadence-settings input[type='number'] {
+  width: 90px;
+}
+
+.cadence-settings input:focus-visible,
+.cadence-settings select:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
+}
+
+.cadence-window span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cadence-error {
+  color: var(--red);
+}
+
+/* ————— Evidence panel + scoreboard ————— */
+
+.scoreboard {
+  border: 1px solid var(--hairline);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.evidence-stat strong {
+  font-size: 24px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.evidence-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+}

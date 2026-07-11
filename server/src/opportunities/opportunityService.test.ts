@@ -151,6 +151,36 @@ describe('OpportunityService', () => {
     expect((await service.get(record.id))?.status).toBe('active');
   });
 
+  it('funnel steps are first-write-wins and stale ids report not_found', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    await service.recordScan([makeArb()], SCOPE);
+    const [record] = await service.list();
+
+    expect(await service.recordFunnelStep(record.id, 'cockpitOpenedAt')).toMatchObject({ ok: true });
+    const later = new OpportunityService(store, new FakeArchive(), () => new Date(NOW.getTime() + 60_000));
+    await later.recordFunnelStep(record.id, 'cockpitOpenedAt'); // second tap: no-op
+    expect((await service.get(record.id))?.funnel?.cockpitOpenedAt).toBe(NOW.toISOString());
+    expect(await service.recordFunnelStep('nope', 'cockpitOpenedAt')).toMatchObject({
+      ok: false,
+      reason: 'not_found',
+    });
+  });
+
+  it('applyVerification stamps the funnel and appends the verify outcome', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    await service.recordScan([makeArb()], SCOPE);
+    const [record] = await service.list();
+
+    await service.applyVerification(record.id, [2.05, 2.02]); // shrinks → degraded
+    const stored = await service.get(record.id);
+    expect(stored?.funnel?.verifyPressedAt).toBe(NOW.toISOString());
+    expect(stored?.verifies).toHaveLength(1);
+    expect(stored?.verifies?.[0]).toMatchObject({ at: NOW.toISOString(), outcome: 'degraded' });
+    expect(stored?.verifies?.[0].profitPct).toBeCloseTo(stored!.profitPct, 6);
+  });
+
   it('ages settled records into the archive and drops them from the active file', async () => {
     const store = new FakeStore();
     const archive = new FakeArchive();

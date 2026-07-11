@@ -45,6 +45,13 @@ export class LedgerService {
     }
   }
 
+  /** Every record, active + archived, as a list (ops survival/telemetry). */
+  async allRecordsList(): Promise<OpportunityRecord[]> {
+    const all: OpportunityRecord[] = [];
+    for await (const record of this.allRecords()) all.push(record);
+    return all;
+  }
+
   /** The newest N records by detection time — bounded regardless of archive size. */
   async recentRows(limit: number): Promise<OpportunityRecord[]> {
     const kept: OpportunityRecord[] = [];
@@ -217,6 +224,12 @@ export class LedgerService {
         'total_staked',
         'locked_profit',
         'completed_at',
+        'cockpit_opened_at',
+        'verify_pressed_at',
+        'fills_opened_at',
+        'verify_count',
+        'last_verify_outcome',
+        'gone_lifetime_ms',
       ].join(',') + '\n',
     );
 
@@ -247,10 +260,23 @@ export class LedgerService {
         record.execution?.totalStaked ?? '',
         record.execution?.lockedProfit ?? '',
         record.execution?.recordedAt ?? '',
+        record.funnel?.cockpitOpenedAt ?? '',
+        record.funnel?.verifyPressedAt ?? '',
+        record.funnel?.fillsOpenedAt ?? '',
+        record.verifies?.length ?? 0,
+        record.verifies?.[record.verifies.length - 1]?.outcome ?? '',
+        goneLifetimeMs(record) ?? '',
       ];
       write(row.map(csvEscape).join(',') + '\n');
     }
   }
+}
+
+/** first-seen → gone, absence-deaths only (commencement kills excluded). */
+function goneLifetimeMs(record: OpportunityRecord): number | null {
+  if (record.status !== 'dead') return null;
+  if (Date.parse(record.commenceTime) <= Date.parse(record.statusChangedAt)) return null;
+  return Date.parse(record.statusChangedAt) - Date.parse(record.detectedAt);
 }
 
 function latestEvidencePct(record: OpportunityRecord): number | null {

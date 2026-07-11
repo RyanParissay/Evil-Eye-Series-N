@@ -100,6 +100,34 @@ export function createOpportunitiesRouter(
     });
   }
 
+  // Reaction-funnel pings from the cockpit — first write wins, later
+  // calls no-op. Pure telemetry: no lifecycle effect whatsoever.
+  router.post('/:id/funnel', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const step = (req.body ?? {}).step;
+      const field =
+        step === 'cockpit_opened'
+          ? ('cockpitOpenedAt' as const)
+          : step === 'fills_opened'
+            ? ('fillsOpenedAt' as const)
+            : null;
+      if (!field) {
+        res
+          .status(400)
+          .json(errorBody('bad_request', "step must be 'cockpit_opened' or 'fills_opened'"));
+        return;
+      }
+      const outcome = await service.recordFunnelStep(req.params.id, field);
+      if (!outcome.ok) {
+        res.status(404).json(errorBody('not_found', outcome.message));
+        return;
+      }
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { status, filledLegs } = (req.body ?? {}) as { status?: unknown; filledLegs?: unknown };

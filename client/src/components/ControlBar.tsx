@@ -16,6 +16,8 @@ interface ControlBarProps {
   autoScan: AutoScanSettings;
   onAutoScanChange: (next: AutoScanSettings) => void;
   lastScanAt: number | null;
+  /** Phase 8: scan windows drive the cadence display. */
+  cadenceDriven?: boolean;
 }
 
 export function ControlBar({
@@ -29,6 +31,7 @@ export function ControlBar({
   autoScan,
   onAutoScanChange,
   lastScanAt,
+  cadenceDriven = false,
 }: ControlBarProps) {
   return (
     <div className="control-bar">
@@ -76,6 +79,7 @@ export function ControlBar({
           lastScanAt={lastScanAt}
           scanning={scanning}
           creditsPerScan={lastMeta?.usage.creditsComputedThisScan ?? null}
+          cadenceDriven={cadenceDriven}
         />
       </div>
 

@@ -9,6 +9,7 @@ import {
   fetchBookmakers,
   fetchFundPosition,
   fetchOpportunity,
+  pingFunnel,
   revertBalances,
   verifyOpportunity,
 } from '../api';
@@ -66,7 +67,9 @@ export function CockpitPage() {
     setPage({ status: 'loading' });
     fetchOpportunity(id)
       .then((record) => {
-        if (!cancelled) setPage({ status: 'ready', record });
+        if (cancelled) return;
+        setPage({ status: 'ready', record });
+        pingFunnel(id, 'cockpit_opened'); // reaction telemetry, first-write-wins
       })
       .catch((err) => {
         if (cancelled) return;
@@ -452,14 +455,15 @@ function Cockpit({
           <button
             type="button"
             className="cockpit-action cockpit-action-complete"
-            onClick={() =>
+            onClick={() => {
+              pingFunnel(record.id, 'fills_opened');
               setFills(
                 record.legs.map((leg, i) => ({
                   odds: leg.odds.toFixed(2),
                   stake: stakes[i].toFixed(2),
                 })),
-              )
-            }
+              );
+            }}
             disabled={busy !== null}
           >
             Both legs placed — record the fills

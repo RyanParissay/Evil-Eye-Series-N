@@ -128,21 +128,35 @@ export function PaperPanel({ realMonthly }: { realMonthly: LedgerSummary['monthl
           />
         </label>
         <label className="micro-label">
-          haircut %
-          <input
-            type="number"
-            min={0}
-            max={100}
-            step={5}
-            defaultValue={settings.haircutPercent}
-            onBlur={(e) => {
-              const v = e.target.valueAsNumber;
-              if (Number.isFinite(v) && v >= 0 && v <= 100 && v !== settings.haircutPercent) {
-                void apply({ haircutPercent: v });
-              }
-            }}
-          />
+          haircut
+          <select
+            value={settings.haircutSource}
+            onChange={(e) =>
+              void apply({ haircutSource: e.target.value as 'manual' | 'measured' })
+            }
+          >
+            <option value="manual">assumed %</option>
+            <option value="measured">measured</option>
+          </select>
         </label>
+        {settings.haircutSource === 'manual' && (
+          <label className="micro-label">
+            haircut %
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={5}
+              defaultValue={settings.haircutPercent}
+              onBlur={(e) => {
+                const v = e.target.valueAsNumber;
+                if (Number.isFinite(v) && v >= 0 && v <= 100 && v !== settings.haircutPercent) {
+                  void apply({ haircutPercent: v });
+                }
+              }}
+            />
+          </label>
+        )}
         <label className="micro-label">
           entry ≥ %
           <input
@@ -177,8 +191,12 @@ export function PaperPanel({ realMonthly }: { realMonthly: LedgerSummary['monthl
               <strong className="is-up">${book.bankrollIdeal.toFixed(2)}</strong>
             </div>
             <div className="ledger-stat">
-              <span className="micro-label">with {settings.haircutPercent}% haircut</span>
+              <span className="micro-label">
+                with {view.haircut.pct}% haircut ·{' '}
+                {view.haircut.source === 'measured' ? 'MEASURED' : 'ASSUMED'}
+              </span>
               <strong>${book.bankrollHaircut.toFixed(2)}</strong>
+              <span className="micro-label">{view.haircut.detail}</span>
             </div>
             <div className="ledger-stat">
               <span className="micro-label">entries / open stake</span>

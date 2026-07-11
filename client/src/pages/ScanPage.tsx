@@ -7,14 +7,18 @@ import type {
   ScanMeta,
   ScanResponse,
 } from '../../../shared/types';
+import type { OpsSettings } from '../../../shared/types';
 import {
   ApiError,
   fetchBookmakers,
   fetchLastScan,
+  fetchOpsSettings,
   patchBookmaker,
   runScan,
   type BookmakerPatchBody,
 } from '../api';
+import { budgetState, windowState } from '../cadence';
+import { CadencePanel } from '../components/CadencePanel';
 import {
   loadAutoScanSettings,
   msUntilNextScan,
@@ -55,6 +59,32 @@ export function ScanPage() {
     setAutoScan(next);
     saveAutoScanSettings(window.localStorage, next);
   }
+
+  // Phase 8 cadence: window/budget settings live server-side; timers stay
+  // right here in the client. A 30s tick re-evaluates window transitions.
+  const [ops, setOps] = useState<OpsSettings | null>(null);
+  const [, setCadenceTick] = useState(0);
+  useEffect(() => {
+    fetchOpsSettings()
+      .then(setOps)
+      .catch(() => {
+        // No ops settings — the fixed auto-scan interval still works.
+      });
+  }, []);
+  useEffect(() => {
+    if (!autoScan.enabled) return;
+    const id = window.setInterval(() => setCadenceTick((t) => t + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, [autoScan.enabled]);
+
+  const cadence = ops ? windowState(ops, new Date()) : null;
+  const budget = ops
+    ? budgetState(ops, lastMeta?.usage.requestsUsedTotal ?? null, new Date())
+    : null;
+  // Effective auto-scan interval: window cadence when ops settings exist,
+  // the classic slider interval otherwise. null = auto-scan sleeps.
+  const effectiveIntervalMins = ops ? (cadence?.cadenceMins ?? null) : autoScan.intervalMins;
+  const autoBlocked = budget?.stopped ?? false;
 
   // The bookmaker registry: shared by the settings panel and the leg
   // warnings on opportunity cards. Scans grow it, so refetch after each one.
@@ -132,10 +162,13 @@ export function ScanPage() {
   // auto) moves lastScanAt, re-arming for a fresh interval. Deliberately no
   // dependency array: re-arming every render keeps the closure's
   // topN/regionTab fresh, and the delay is computed from the absolute
-  // lastScanAt, so constant re-arming causes no drift.
+  // lastScanAt, so constant re-arming causes no drift. Phase 8 adds two
+  // gates: a null effective interval (out of window, sleeping) and the
+  // credit hard stop — manual scans are never blocked by either.
   useEffect(() => {
     if (!autoScan.enabled || scan.status === 'loading') return;
-    const delay = msUntilNextScan(lastScanAt, autoScan.intervalMins, Date.now());
+    if (effectiveIntervalMins == null || autoBlocked) return;
+    const delay = msUntilNextScan(lastScanAt, effectiveIntervalMins, Date.now());
     const id = window.setTimeout(() => void handleScan('auto'), delay);
     return () => window.clearTimeout(id);
   });
@@ -165,7 +198,20 @@ export function ScanPage() {
         autoScan={autoScan}
         onAutoScanChange={updateAutoScan}
         lastScanAt={lastScanAt}
+        cadenceDriven={ops != null}
       />
+
+      {ops && cadence && budget && (
+        <CadencePanel
+          settings={ops}
+          onSettings={setOps}
+          cadence={cadence}
+          budget={budget}
+          autoEnabled={autoScan.enabled}
+          lastScanAt={lastScanAt}
+          now={Date.now()}
+        />
+      )}
 
       <FundPanel refreshKey={lastScanAt} />
 

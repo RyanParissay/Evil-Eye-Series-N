@@ -162,6 +162,17 @@ describe('CSV export', () => {
     const columns = header.split(',');
     const profitIdx = columns.indexOf('locked_profit');
     expect(profitIdx).toBeGreaterThan(-1);
+    // Phase 8 telemetry columns ride along.
+    for (const col of [
+      'cockpit_opened_at',
+      'verify_pressed_at',
+      'fills_opened_at',
+      'verify_count',
+      'last_verify_outcome',
+      'gone_lifetime_ms',
+    ]) {
+      expect(columns).toContain(col);
+    }
     expect(lines).toHaveLength(3);
     const total = lines
       .map((line) => parseCsvLine(line)[profitIdx])

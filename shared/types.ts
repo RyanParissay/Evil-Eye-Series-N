@@ -168,6 +168,14 @@ export interface OpportunityRecord {
   alertedAt: string | null;
   /** Present once the user completed it with actual filled numbers. */
   execution?: OpportunityExecution;
+  /** Reaction-funnel timestamps, first-write-wins; absent steps stay absent. */
+  funnel?: {
+    cockpitOpenedAt?: string;
+    verifyPressedAt?: string;
+    fillsOpenedAt?: string;
+  };
+  /** Every re-verify outcome, appended in order (ages out with the record). */
+  verifies?: Array<{ at: string; outcome: 'active' | 'degraded' | 'dead'; profitPct: number }>;
 }
 
 /* ————— Ledger (Phase 5) ————— */
@@ -344,6 +352,11 @@ export interface PaperSettings {
   stakeRule: PaperStakeRule;
   /** Expectation-style slippage on the secondary curve, in percent of profit. */
   haircutPercent: number;
+  /**
+   * 'measured' uses the survival-derived haircut once qualified (≥14 days,
+   * ≥50 samples), falling back to the manual value labeled ASSUMED.
+   */
+  haircutSource: 'manual' | 'measured';
   /** Entry threshold — independent of any WhatsApp subscription. */
   thresholdPercent: number;
 }
@@ -392,7 +405,137 @@ export interface PaperData {
 export interface PaperView {
   simulated: true;
   settings: PaperSettings;
+  /** The haircut actually applied to this view, with its provenance. */
+  haircut: { source: 'measured' | 'assumed'; pct: number; detail: string };
   book: PaperBook;
+}
+
+/* ————— Ops: evidence instrumentation + cadence (Phase 8) ————— */
+
+/** Minutes from local midnight; end < start spans midnight. */
+export interface ScanWindow {
+  startMinutes: number;
+  endMinutes: number;
+}
+
+export interface OpsSettings {
+  weekday: ScanWindow;
+  weekend: ScanWindow;
+  /** Auto-scan cadence inside the window, minutes. */
+  inWindowMins: number;
+  /** Cadence outside the window; null = auto-scan sleeps out of window. */
+  outWindowMins: number | null;
+  monthlyCreditBudget: number;
+  /** Auto-scan hard-stops at this % of budget; manual scans never blocked. */
+  autoStopPct: number;
+}
+
+/** One line per completed scan in data/scan-history/YYYY-MM.jsonl. */
+export interface ScanLogEntry {
+  scannedAt: string;
+  regionTab: string;
+  sportsScanned: string[];
+  creditsComputed: number;
+  requestsUsedTotal: number | null;
+  distinctBooks: string[];
+  eventCount: number;
+}
+
+export interface BookCoverage {
+  key: string;
+  title: string;
+  balance: number | null;
+  /** Appearances in the last N scans considered. */
+  appearances: number;
+  share: number;
+  lastSeenInFeedAt: string | null;
+  /** missing = funded but absent; thin = funded, share < 50%. */
+  flag: 'ok' | 'thin' | 'missing';
+}
+
+export interface CoverageReport {
+  lastN: number;
+  scansConsidered: number;
+  books: BookCoverage[];
+  distinctBooksPerScan: Array<{ at: string; count: number }>;
+}
+
+export interface RateStat {
+  samples: number;
+  rate: number | null;
+}
+
+export interface SurvivalStats {
+  /** Fraction of arbs still present at the next covering scan. */
+  overall: RateStat;
+  byPair: Array<{ pair: string } & RateStat>;
+  /** Six 4-hour local bands, keyed "00-04" … "20-24". */
+  byBand: Array<{ band: string } & RateStat>;
+  lifetime: {
+    samples: number;
+    medianMs: number | null;
+    p25Ms: number | null;
+    p75Ms: number | null;
+    /** Killed by commencement — outlived the market window, not "gone". */
+    censored: number;
+  };
+  haircut: {
+    qualified: boolean;
+    /** 100 × (1 − overall survival); null until qualified. */
+    measuredPct: number | null;
+    detail: string;
+  };
+}
+
+export interface DeltaStat {
+  samples: number;
+  medianMs: number | null;
+}
+
+export interface TelemetryStats {
+  /** THE headline: median alert → re-verify. */
+  alertToVerify: DeltaStat;
+  alertToOpen: DeltaStat;
+  openToVerify: DeltaStat;
+  verifyToCompleted: DeltaStat;
+  verifyOutcomes: {
+    total: number;
+    active: number;
+    degraded: number;
+    dead: number;
+    /** Mean (verify profit − detection profit), percentage points. */
+    avgProfitDeltaPp: number | null;
+    byBook: Array<{
+      bookmakerKey: string;
+      title: string;
+      total: number;
+      active: number;
+      degraded: number;
+      dead: number;
+      avgProfitDeltaPp: number | null;
+    }>;
+  };
+}
+
+/** The proving-month decision view; simulated figures say so. */
+export interface Scoreboard {
+  paper: {
+    simulated: true;
+    idealProfit: number;
+    haircutProfit: number;
+    haircutSource: 'measured' | 'assumed';
+    haircutPct: number;
+  } | null;
+  realProfit: number;
+  captureRate: { alerted: number; completed: number; rate: number | null };
+  medianArbLifetimeMs: number | null;
+  medianAlertToVerifyMs: number | null;
+  credits: {
+    usedTotal: number | null;
+    budget: number;
+    projectedMonthEnd: number | null;
+    autoStopEngaged: boolean;
+  };
 }
 
 /** Machine-readable error codes surfaced to the UI. */

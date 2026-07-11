@@ -60,9 +60,20 @@ each phase (`docs/superpowers/specs/`):
    (bankroll/default stake/unallocated), position panel with low/stale
    balance warnings, apply-to-balances with exact revert.
 
+8. ✅ Evidence instrumentation + peak-cadence ops: per-scan history log
+   (`data/scan-history/`, the one new persistence primitive), client-only
+   scan windows (weekday/weekend, in/out cadence) with a credit-budget
+   projection + hard auto-scan stop at 95%, funded-book feed coverage
+   audit, arb survival-at-next-scan + gone-lifetime stats feeding a
+   MEASURED paper haircut (qualified at ≥14d + ≥50 samples, else
+   ASSUMED), reaction-funnel telemetry (alert → open → verify → fills →
+   completed, first-write-wins), and the proving-month scoreboard on the
+   Ledger. Everything zero-credit and client-timer-driven.
+
 The governing spec (acceptance criteria + operating rules) is
-**`docs/mission-phases-4-7.md`**. Roadmap items (Pinnacle merge, +EV,
-CLV, middles) remain deliberately unbuilt.
+**`docs/mission-phases-4-7.md`** plus the Phase 8 design doc in
+`docs/superpowers/specs/`. Roadmap items (Pinnacle merge, +EV, CLV,
+middles) remain deliberately unbuilt.
 
 Health: **181 tests green** (164 server, 17 client — Vitest), `tsc` clean
 in both workspaces. `.env` has a live `ODDS_API_KEY`; no `TWILIO_*` vars

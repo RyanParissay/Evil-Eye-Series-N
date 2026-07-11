@@ -26,6 +26,8 @@ interface AutoScanControlProps {
   scanning: boolean;
   /** Credits the last scan cost, for the burn projection; null before any scan. */
   creditsPerScan: number | null;
+  /** Phase 8: scan windows drive the cadence — hide the fixed slider/countdown. */
+  cadenceDriven?: boolean;
 }
 
 export function AutoScanControl({
@@ -34,6 +36,7 @@ export function AutoScanControl({
   lastScanAt,
   scanning,
   creditsPerScan,
+  cadenceDriven = false,
 }: AutoScanControlProps) {
   // 1 Hz clock, running only while auto mode is on, so the countdown moves.
   const [now, setNow] = useState(() => Date.now());
@@ -65,12 +68,16 @@ export function AutoScanControl({
         {settings.enabled && (
           <span className="auto-live micro-label" role="status">
             <span className={`live-dot${scanning ? '' : ' live-dot-pulse'}`} aria-hidden="true" />
-            {scanning ? 'Scanning' : `Next scan ${formatCountdown(remaining)}`}
+            {scanning
+              ? 'Scanning'
+              : cadenceDriven
+                ? 'Window cadence'
+                : `Next scan ${formatCountdown(remaining)}`}
           </span>
         )}
       </div>
 
-      {settings.enabled && (
+      {settings.enabled && !cadenceDriven && (
         <div className="slider-block auto-settings">
           <label
             className="micro-label"

@@ -28,6 +28,7 @@ function settings(overrides: Partial<PaperSettings> = {}): PaperSettings {
     startingBankroll: 5000,
     stakeRule: { kind: 'flat', value: 400 },
     haircutPercent: 20,
+    haircutSource: 'manual',
     thresholdPercent: 2,
     ...overrides,
   };

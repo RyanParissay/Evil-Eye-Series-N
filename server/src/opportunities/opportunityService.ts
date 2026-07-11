@@ -112,7 +112,33 @@ export class OpportunityService {
       } else if (record.status === 'completed') {
         result = { ok: false, reason: 'conflict', message: 'Cannot verify a completed opportunity' };
       } else {
-        applyVerification(record, legOdds, at);
+        const outcome = applyVerification(record, legOdds, at);
+        // Reaction telemetry: first verify stamps the funnel; every verify
+        // logs its outcome (the ideal-vs-reality bridge).
+        record.funnel = { verifyPressedAt: at.toISOString(), ...record.funnel };
+        record.verifies = [
+          ...(record.verifies ?? []),
+          { at: at.toISOString(), outcome, profitPct: record.profitPct },
+        ];
+        result = { ok: true, record };
+      }
+      return { data, result };
+    });
+  }
+
+  /** First-write-wins reaction-funnel timestamp from the cockpit. */
+  async recordFunnelStep(
+    id: string,
+    step: 'cockpitOpenedAt' | 'fillsOpenedAt',
+  ): Promise<UpdateStatusOutcome> {
+    const at = this.now().toISOString();
+    return this.store.update((data) => {
+      const record = data.records.find((r) => r.id === id);
+      let result: UpdateStatusOutcome;
+      if (!record) {
+        result = { ok: false, reason: 'not_found', message: `Unknown opportunity: ${id}` };
+      } else {
+        record.funnel = { [step]: at, ...record.funnel };
         result = { ok: true, record };
       }
       return { data, result };

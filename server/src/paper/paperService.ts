@@ -11,10 +11,18 @@ import { opportunityIdFromFingerprint } from '../opportunities/opportunityId';
 import { settlePaperBook } from './paperMath';
 import type { PaperDataStore } from './paperStore';
 
+/** Survival-derived haircut, when the ops layer can measure one. */
+export type HaircutOracle = () => Promise<{
+  qualified: boolean;
+  measuredPct: number | null;
+  detail: string;
+}>;
+
 export class PaperService {
   constructor(
     private readonly store: PaperDataStore,
     private readonly now: () => Date = () => new Date(),
+    private readonly haircutOracle?: HaircutOracle,
   ) {}
 
   /** Fire-and-forget from the scan notifier; returns how many entered. */
@@ -48,10 +56,30 @@ export class PaperService {
 
   async book(): Promise<PaperView> {
     const data = await this.store.read();
+    // 'measured' uses the survival-derived number once qualified; anything
+    // else — including an unqualified measurement — is honestly ASSUMED.
+    let haircut: PaperView['haircut'] = {
+      source: 'assumed',
+      pct: data.settings.haircutPercent,
+      detail: 'manual assumption',
+    };
+    if (data.settings.haircutSource === 'measured' && this.haircutOracle) {
+      const measured = await this.haircutOracle();
+      if (measured.qualified && measured.measuredPct != null) {
+        haircut = { source: 'measured', pct: measured.measuredPct, detail: measured.detail };
+      } else {
+        haircut = { ...haircut, detail: measured.detail };
+      }
+    }
     return {
       simulated: true,
       settings: data.settings,
-      book: settlePaperBook(data.entries, data.settings, this.now()),
+      haircut,
+      book: settlePaperBook(
+        data.entries,
+        { ...data.settings, haircutPercent: haircut.pct },
+        this.now(),
+      ),
     };
   }
 

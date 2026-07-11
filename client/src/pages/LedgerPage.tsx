@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { ApiErrorCode, LedgerSummary } from '../../../shared/types';
 import { ApiError, fetchLedgerSummary } from '../api';
 import { EquityChart } from '../components/EquityChart';
+import { EvidencePanel } from '../components/EvidencePanel';
 import { EyeGlyph } from '../components/EyeGlyph';
 import { PaperPanel } from '../components/PaperPanel';
 import { errorHint, errorTitle } from '../errorCopy';
@@ -65,6 +66,8 @@ export function LedgerPage() {
 
       {summary && (
         <main className="ledger">
+          <EvidencePanel />
+
           <section className="ledger-heads">
             <div className="ledger-stat">
               <span className="micro-label">realized profit</span>

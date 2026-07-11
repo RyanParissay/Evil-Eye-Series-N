@@ -68,6 +68,15 @@ server/src/
   fund/          Fund settings (real bankroll, default stake, unallocated
                  cash) + position assembly (float, warnings: low-balance,
                  stale-balance at 14d). Balance edits stamp balanceUpdatedAt.
+  ops/           Phase-8 evidence layer, all zero-credit by construction:
+                 scanHistoryStore.ts (append-only per-scan JSONL, monthly —
+                 runScan's scanLog dep writes one line per scan),
+                 opsStore.ts (scan windows/cadence/budget settings — the
+                 TIMERS live in the client, always), coverageService.ts
+                 (funded-book feed audit), survivalService.ts (survival at
+                 next covering scan + gone-lifetimes + the measured-haircut
+                 mapping), telemetryService.ts (reaction funnel + verify
+                 outcome aggregation; missing steps excluded, never zeroed).
   paper/         The SIMULATED shadow fund. paperStore.ts (own JsonStore,
                  facts only), paperMath.ts (pure deterministic settlement:
                  lazy at commence time, %-staking compounds off the settled
@@ -189,6 +198,16 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   paper failure in the notifier is a console.warn, never a dropped alert.
 - Alert selection rules exist exactly once (alertWorthy). Adding a
   strategy or channel must reuse it, not restate it.
+- Ops evidence semantics: survival-at-next-scan counts ANY sighting
+  (scan re-detection or live re-verify) at/after the next covering scan;
+  records with no covering scan are excluded. The paper haircut may be
+  MEASURED = 100 × (1 − survival) only after ≥14 days of scan history
+  and ≥50 samples — anything else is labeled ASSUMED. Funnel timestamps
+  are first-write-wins; verifyPressedAt is stamped server-side.
+- The credit budget guard is CLIENT-side and only ever gates auto-scan
+  (manual scans are never blocked). Stop = used ≥ autoStopPct% × budget,
+  from the provider's own month counter; it releases when the counter
+  resets or the budget moves.
 - Stake/cap math exists exactly once (shared/stakePlanning.ts planStakes):
   a leg never exceeds its book's recorded balance — the WHOLE position
   rescales to the binding book so the guarantee survives. The client

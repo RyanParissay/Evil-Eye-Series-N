@@ -10,6 +10,7 @@ export const DEFAULT_PAPER_SETTINGS: PaperData['settings'] = {
   startingBankroll: 5000,
   stakeRule: { kind: 'flat', value: 400 },
   haircutPercent: 20,
+  haircutSource: 'manual',
   thresholdPercent: 2,
 };
 
