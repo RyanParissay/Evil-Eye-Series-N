@@ -57,6 +57,8 @@ describe('findEvBets', () => {
       outcome: 'Los Angeles Lakers',
       bookmakerKey: 'bet365',
       odds: 2.15,
+      homeTeam: 'Los Angeles Lakers', // Phase 13: threaded through for grading
+      awayTeam: 'Boston Celtics',
     });
     expect(bets[0].ev.fairProbability).toBeCloseTo(0.5, 9);
     expect(bets[0].ev.edgePct).toBeCloseTo(7.5, 6);

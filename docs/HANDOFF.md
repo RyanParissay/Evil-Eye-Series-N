@@ -3,15 +3,14 @@
 1. CLAUDE.md  2. docs/GRADING_RULES.md  3. docs/prompts/phase-13.md  4. this file
 
 ## Where we are
-- Current phase & task: Phase 13, deliverables 2-6 (ingestion/service/UI) — core engine DONE
+- Current phase & task: Phase 13 COMPLETE (committed). Next: Phase 14 (delegated to Sonnet subagent)
 - Last commit: see git log | Tests: 319 green (300 prior + 19 golden)
 - Done since last handoff: protocol docs committed; shared types (RecordGrading,
   schemaVersion, homeTeam/awayTeam); config/gradingRules.ts (rules table §1 + poll policy
   constants §4); engine/grading.ts (pure, gradeRecord); 19 golden tests green.
 
 ## In flight RIGHT NOW
-- Sonnet subagent delegated: scores ingestion + grading service + routes + UI (spec in the
-  Agent prompt; mirrors existing patterns: JsonStore, provider dep, client ticks).
+- Phase 14 delegation in flight: scenario engine (13 series) + portfolio views + Markowitz optimizer per docs/prompts/phase-14.md.
 
 ## Next actions (exact order)
 1. Verify subagent output: npm test + npm run typecheck green from repo root.

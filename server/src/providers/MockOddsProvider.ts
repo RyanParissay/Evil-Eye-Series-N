@@ -17,8 +17,11 @@ import type { OddsEvent, SportInfo } from '@shared/types';
 import { creditsForOddsCall, regionEquivalentsForBookmakers } from '../engine/creditCost';
 import type {
   FetchOddsParams,
+  FetchScoresParams,
   OddsProvider,
   OddsResult,
+  ScoreEntry,
+  ScoresResult,
   SportsResult,
   UsageInfo,
 } from './OddsProvider';
@@ -66,6 +69,94 @@ export class MockOddsProvider implements OddsProvider {
         .filter((e) => e.bookmakers.length > 0);
     }
     return { events, usage: this.usage(credits) };
+  }
+
+  /**
+   * Deterministic fixture finals (Phase 13) — every mock event id gets a
+   * completed score so grading tests never depend on the real endpoint.
+   * mock-nba-arb lands its total at 222 (inside the 220.5–224.5 middle
+   * window from fetchOdds' totals fixtures), so a middle on it grades HIT.
+   */
+  async fetchScores(sportKey: string, params: FetchScoresParams): Promise<ScoresResult> {
+    const credits = params.daysFrom != null ? 2 : 1;
+    this.requestsUsed += credits;
+    const all = this.scoreFixtures()[sportKey] ?? [];
+    const wanted = params.eventIds && params.eventIds.length > 0 ? new Set(params.eventIds) : null;
+    const scores = wanted ? all.filter((s) => wanted.has(s.eventId)) : all;
+    return { scores, usage: this.usage(credits) };
+  }
+
+  private scoreFixtures(): Record<string, ScoreEntry[]> {
+    return {
+      basketball_nba: [
+        {
+          eventId: 'mock-nba-arb',
+          completed: true,
+          home: 113, // total 222 — inside the 220.5–224.5 middle window
+          away: 109,
+          homeTeam: 'Los Angeles Lakers',
+          awayTeam: 'Boston Celtics',
+        },
+        {
+          eventId: 'mock-nba-efficient',
+          completed: true,
+          home: 101,
+          away: 98,
+          homeTeam: 'Denver Nuggets',
+          awayTeam: 'Golden State Warriors',
+        },
+        {
+          eventId: 'mock-nba-stale',
+          completed: true,
+          home: 110,
+          away: 105,
+          homeTeam: 'Phoenix Suns',
+          awayTeam: 'Miami Heat',
+        },
+      ],
+      soccer_epl: [
+        { eventId: 'mock-epl-arb', completed: true, home: 2, away: 1, homeTeam: 'Arsenal', awayTeam: 'Chelsea' },
+        {
+          eventId: 'mock-epl-efficient',
+          completed: true,
+          home: 1,
+          away: 1,
+          homeTeam: 'Liverpool',
+          awayTeam: 'Manchester City',
+        },
+      ],
+      icehockey_nhl: [
+        {
+          eventId: 'mock-nhl-samebook',
+          completed: true,
+          home: 4,
+          away: 3,
+          homeTeam: 'Colorado Avalanche',
+          awayTeam: 'Toronto Maple Leafs',
+        },
+      ],
+      tennis_atp_wimbledon: [
+        {
+          eventId: 'mock-tennis-suspicious',
+          completed: true,
+          home: 2,
+          away: 0,
+          homeTeam: 'Carlos Alcaraz',
+          awayTeam: 'Jannik Sinner',
+        },
+      ],
+      baseball_mlb: [
+        {
+          eventId: 'mock-mlb-efficient',
+          completed: true,
+          home: 5,
+          away: 3,
+          homeTeam: 'New York Yankees',
+          awayTeam: 'Houston Astros',
+        },
+      ],
+      mma_mixed_martial_arts: [],
+    };
   }
 
   private usage(creditsCharged: number): UsageInfo {

@@ -76,6 +76,27 @@ describe('applyScanToRecords', () => {
     });
   });
 
+  it('Phase 13: new records get schemaVersion 2 and homeTeam/awayTeam when the arb carries them', () => {
+    const { records } = applyScanToRecords(
+      [],
+      [makeArb({ homeTeam: 'Boston Celtics', awayTeam: 'Los Angeles Lakers' })],
+      SCOPE,
+      NOW,
+    );
+    expect(records[0]).toMatchObject({
+      schemaVersion: 2,
+      homeTeam: 'Boston Celtics',
+      awayTeam: 'Los Angeles Lakers',
+    });
+  });
+
+  it('a legacy arb with no homeTeam/awayTeam still creates a record (fields simply absent)', () => {
+    const { records } = applyScanToRecords([], [makeArb()], SCOPE, NOW);
+    expect(records[0].schemaVersion).toBe(2);
+    expect(records[0].homeTeam).toBeUndefined();
+    expect(records[0].awayTeam).toBeUndefined();
+  });
+
   it('a re-detection updates the record in place — no duplicate, detection profit kept', () => {
     const first = applyScanToRecords([], [makeArb()], SCOPE, NOW).records;
     const later = new Date(NOW.getTime() + 60_000);

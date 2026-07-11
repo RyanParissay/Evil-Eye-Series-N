@@ -11,6 +11,7 @@ import { BookmakerStore } from './bookmakers/bookmakerStore';
 import {
   BOOKMAKERS_FILE,
   DEFAULT_PORT,
+  GRADING_FILE,
   LAST_SCAN_FILE,
   LAST_SNAPSHOT_FILE,
   EV_FILE,
@@ -24,6 +25,9 @@ import {
   SCAN_HISTORY_DIR,
   WHATSAPP_DATA_FILE,
 } from './config/constants';
+import { GradingService } from './grading/gradingService';
+import { GradingStore } from './grading/gradingStore';
+import { createGradingRouter } from './routes/grading';
 import { notifyNewOpportunities } from './notifications/alertService';
 import { WhatsAppStore } from './notifications/subscriptionStore';
 import { senderFromEnv } from './notifications/whatsappSender';
@@ -97,6 +101,9 @@ const ledgerService = new LedgerService(
   path.join(serverRoot, OPPORTUNITY_ARCHIVE_DIR),
 );
 
+const gradingStore = new GradingStore(path.join(serverRoot, GRADING_FILE));
+const gradingService = new GradingService(provider, opportunityService, gradingStore);
+
 const snapshotStore = new SnapshotStore(path.join(serverRoot, LAST_SNAPSHOT_FILE));
 
 // Where WhatsApp deep links point. Default matches the Vite dev client;
@@ -160,6 +167,17 @@ app.use(
     lastUsage: async () => ({
       requestsUsedTotal: (await store.read())?.usage.requestsUsedTotal ?? null,
     }),
+  }),
+);
+
+app.use(
+  '/api/grading',
+  createGradingRouter({
+    service: gradingService,
+    records: () => opportunityService.list(),
+    gradingStore,
+    scanHistory: scanHistoryStore,
+    opsSettings: opsStore,
   }),
 );
 
@@ -319,6 +337,16 @@ app.use(
         }
       }
       await opportunityService.markAlerted([...sentFingerprints, ...evSent, ...middleSent]);
+
+      // Grading piggybacks on scans too (same "no server-side scheduler"
+      // rule alerts follow) — fire-and-forget, never fails the scan.
+      try {
+        void gradingService.poll().catch((err) => {
+          console.warn('Grading poll failed:', err);
+        });
+      } catch (err) {
+        console.warn('Grading poll failed:', err);
+      }
     },
   }),
 );

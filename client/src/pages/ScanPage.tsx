@@ -14,6 +14,7 @@ import {
   fetchLastScan,
   fetchOpsSettings,
   patchBookmaker,
+  pollGrading,
   runScan,
   type BookmakerPatchBody,
 } from '../api';
@@ -76,6 +77,18 @@ export function ScanPage() {
     const id = window.setInterval(() => setCadenceTick((t) => t + 1), 30_000);
     return () => window.clearInterval(id);
   }, [autoScan.enabled]);
+
+  // Phase 13: grading piggybacks on scans server-side already, but this
+  // page-open tick is the backstop for stretches with no scans at all.
+  // Client timer only — mirrors the cadence tick above, no server timers.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      void pollGrading().catch(() => {
+        // Best-effort — the next tick (or the next scan) tries again.
+      });
+    }, 5 * 60_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const cadence = ops ? windowState(ops, new Date()) : null;
   const budget = ops

@@ -35,6 +35,8 @@ export interface MiddleBet {
   sportTitle: string;
   eventName: string;
   commenceTime: string;
+  homeTeam: string;
+  awayTeam: string;
   marketKey: string;
   legs: [MiddleOffer, MiddleOffer];
   sameBookmaker: boolean;
@@ -163,6 +165,8 @@ export function findMiddles(
           sportTitle: event.sportTitle,
           eventName: `${event.awayTeam} @ ${event.homeTeam}`,
           commenceTime: event.commenceTime,
+          homeTeam: event.homeTeam,
+          awayTeam: event.awayTeam,
           marketKey,
           legs: candidate.legs,
           sameBookmaker: candidate.legs[0].bookmakerKey === candidate.legs[1].bookmakerKey,

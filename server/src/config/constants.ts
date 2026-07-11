@@ -116,6 +116,9 @@ export const OPS_FILE = 'data/ops.json';
 /** Per-scan history JSONL, monthly files (gitignored). */
 export const SCAN_HISTORY_DIR = 'data/scan-history';
 
+/** Score-polling ledger: daily credit spend + per-event poll state (gitignored). */
+export const GRADING_FILE = 'data/grading.json';
+
 /**
  * Re-verify marks a record degraded only when fresh profit fell more than
  * this many percentage points below the detection profit — a 2.34% → 2.31%

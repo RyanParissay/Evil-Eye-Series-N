@@ -2,7 +2,7 @@
  * Store-backed façade over opportunity persistence — what scanService, the
  * routes, and the alert notifier composition talk to.
  */
-import type { ArbOpportunity, OpportunityRecord, OpportunityStatus } from '@shared/types';
+import type { ArbOpportunity, OpportunityRecord, OpportunityStatus, RecordGrading } from '@shared/types';
 import {
   applyExecution,
   applyScanToRecords,
@@ -233,6 +233,52 @@ export class OpportunityService {
       } else {
         record.execution.balancesAppliedAt = winningLegIndex == null ? null : at;
         record.execution.winningLegIndex = winningLegIndex;
+        result = { ok: true, record };
+      }
+      return { data, result };
+    });
+  }
+
+  /**
+   * Phase 13 signal grading (GRADING_RULES.md, distinct from execution.grade
+   * above — this is the arb/EV/middle SIGNAL settlement, not the realized-
+   * money grade). Writes record.grading and clears gradingFlags. Refuses to
+   * let an AUTO grading (source 'auto') overwrite an existing manually_graded
+   * record — manual always wins (§3); a manual call re-grading its own prior
+   * manual grade is allowed (that's how a correction works).
+   */
+  async applyGrading(id: string, grading: RecordGrading): Promise<UpdateStatusOutcome> {
+    return this.store.update((data) => {
+      const record = data.records.find((r) => r.id === id);
+      let result: UpdateStatusOutcome;
+      if (!record) {
+        result = { ok: false, reason: 'not_found', message: `Unknown opportunity: ${id}` };
+      } else if (grading.source === 'auto' && record.grading?.flags.includes('manually_graded')) {
+        result = {
+          ok: false,
+          reason: 'conflict',
+          message: 'Manually graded — auto-grading refuses to overwrite it',
+        };
+      } else {
+        record.grading = grading;
+        record.gradingFlags = [];
+        result = { ok: true, record };
+      }
+      return { data, result };
+    });
+  }
+
+  /** Pending-state flag for score polling (needs_rules / ungraded_stale). */
+  async setGradingFlag(id: string, flag: string): Promise<UpdateStatusOutcome> {
+    return this.store.update((data) => {
+      const record = data.records.find((r) => r.id === id);
+      let result: UpdateStatusOutcome;
+      if (!record) {
+        result = { ok: false, reason: 'not_found', message: `Unknown opportunity: ${id}` };
+      } else {
+        const flags = new Set(record.gradingFlags ?? []);
+        flags.add(flag);
+        record.gradingFlags = [...flags];
         result = { ok: true, record };
       }
       return { data, result };

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { ApiErrorCode, OpportunityRecord } from '../../../shared/types';
+import type { ApiErrorCode, GradeResult, OpportunityRecord } from '../../../shared/types';
 import { planStakes } from '../../../shared/stakePlanning';
 import {
   ApiError,
@@ -11,6 +11,7 @@ import {
   fetchOpportunity,
   gradeOpportunity,
   gradeOpportunityLegs,
+  manualGradeOpportunity,
   pingFunnel,
   revertBalances,
   verifyOpportunity,
@@ -206,6 +207,7 @@ export function CockpitPage() {
           onRevert={() => void handleReconcile(() => revertBalances(id))}
           onGrade={(grade) => void handleReconcile(() => gradeOpportunity(id, grade))}
           onGradeLegs={(legGrades) => void handleReconcile(() => gradeOpportunityLegs(id, legGrades))}
+          onManualGrade={(result, note) => void handleReconcile(() => manualGradeOpportunity(id, result, note))}
         />
       )}
     </div>
@@ -225,6 +227,7 @@ function Cockpit({
   onRevert,
   onGrade,
   onGradeLegs,
+  onManualGrade,
 }: {
   record: OpportunityRecord;
   bankroll: number;
@@ -238,6 +241,7 @@ function Cockpit({
   onRevert: () => void;
   onGrade: (grade: 'won' | 'lost' | 'void') => void;
   onGradeLegs: (legGrades: Array<'won' | 'lost' | 'void'>) => void;
+  onManualGrade: (result: GradeResult, note?: string) => void;
 }) {
   const isEv = record.strategy === 'ev' && record.ev != null;
   const isMiddle = record.strategy === 'middle' && record.middle != null;
@@ -252,6 +256,11 @@ function Cockpit({
   );
   const reduced = record.profitPct < record.profitPctAtDetection;
   const [winner, setWinner] = useState<number | null>(null);
+
+  // Phase 13 signal grading (distinct from execution.grade above — this is
+  // the arb/EV/middle SETTLEMENT vs the final score, GRADING_RULES.md).
+  const [manualResult, setManualResult] = useState<GradeResult>('win');
+  const [manualNote, setManualNote] = useState('');
 
   // Completion books ACTUAL numbers: the form opens prefilled with the
   // record's odds and the current bankroll split — confirm or correct.
@@ -290,6 +299,57 @@ function Cockpit({
             </span>
           )}
         </p>
+      </section>
+
+      {record.grading && (
+        <p className="micro-label">
+          {record.grading.source === 'manual' ? 'manually graded' : 'auto-graded'}{' '}
+          {record.grading.result.toUpperCase()} · P&L per $100:{' '}
+          {record.grading.pnlPer100 >= 0 ? '+' : '−'}${Math.abs(record.grading.pnlPer100).toFixed(2)}
+          {record.grading.flags.includes('broken_arb') && (
+            <span className="chip chip-warn"> ⚠ broken arb</span>
+          )}
+        </p>
+      )}
+
+      <section className="cockpit-reconcile" aria-label="Manual grade override">
+        <p className="micro-label">
+          Manual override — always wins over auto-grading; every change is logged.
+        </p>
+        <div className="cockpit-grade-row">
+          {(['win', 'loss', 'push', 'void'] as const).map((result) => (
+            <button
+              key={result}
+              type="button"
+              className={`cockpit-action cockpit-grade${manualResult === result ? ' is-current' : ''}`}
+              onClick={() => setManualResult(result)}
+              disabled={busy !== null}
+              aria-pressed={manualResult === result}
+            >
+              {result.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        <div className="cockpit-fill-row">
+          <label className="micro-label">
+            note (optional)
+            <input
+              type="text"
+              value={manualNote}
+              onChange={(e) => setManualNote(e.target.value)}
+              disabled={busy !== null}
+            />
+          </label>
+          <button
+            type="button"
+            className="cockpit-action cockpit-action-verify"
+            onClick={() => onManualGrade(manualResult, manualNote.trim() || undefined)}
+            disabled={busy !== null}
+            aria-busy={busy === 'reconcile'}
+          >
+            {busy === 'reconcile' ? 'Saving…' : 'Save manual grade'}
+          </button>
+        </div>
       </section>
 
       <section className="cockpit-profit-block" aria-live="polite">

@@ -325,6 +325,8 @@ function evBetToOpportunity(bet: EvBet): ArbOpportunity {
     sportTitle: bet.sportTitle,
     eventName: bet.eventName,
     commenceTime: bet.commenceTime,
+    homeTeam: bet.homeTeam,
+    awayTeam: bet.awayTeam,
     marketKey: bet.marketKey,
     arbIndex: 1, // meaningless for EV; never displayed on EV surfaces
     profitPct: bet.ev.edgePct, // semantics: EXPECTED edge, not guaranteed
@@ -360,6 +362,8 @@ function middleBetToOpportunity(bet: MiddleBet): ArbOpportunity {
     sportTitle: bet.sportTitle,
     eventName: bet.eventName,
     commenceTime: bet.commenceTime,
+    homeTeam: bet.homeTeam,
+    awayTeam: bet.awayTeam,
     marketKey: bet.marketKey,
     arbIndex,
     profitPct: -bet.middle.costPct, // the floor; positive only for free middles

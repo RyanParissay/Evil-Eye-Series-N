@@ -13,8 +13,10 @@ import type { OddsEvent, SportInfo } from '@shared/types';
 import { creditsForOddsCall, regionEquivalentsForBookmakers } from '../engine/creditCost';
 import type {
   FetchOddsParams,
+  FetchScoresParams,
   OddsProvider,
   OddsResult,
+  ScoresResult,
   SportsResult,
   UsageInfo,
 } from './OddsProvider';
@@ -61,6 +63,24 @@ interface ApiEvent {
   home_team: string;
   away_team: string;
   bookmakers: ApiBookmaker[];
+}
+
+/** Scores endpoint wire shape: `scores` entries are `{name, score}`, score
+ *  as a decimal string; absent/null while the game is still in progress. */
+interface ApiScoreLine {
+  name: string;
+  score: string;
+}
+
+interface ApiScoreEvent {
+  id: string;
+  sport_key: string;
+  commence_time: string;
+  completed: boolean;
+  home_team: string;
+  away_team: string;
+  scores: ApiScoreLine[] | null;
+  last_update: string | null;
 }
 
 export class TheOddsApiProvider implements OddsProvider {
@@ -132,6 +152,32 @@ export class TheOddsApiProvider implements OddsProvider {
     return { events, usage };
   }
 
+  /**
+   * Scores for one sport (GRADING_RULES.md §4). daysFrom reaches further
+   * back into completed history — costs 2 credits instead of 1 when set.
+   */
+  async fetchScores(sportKey: string, params: FetchScoresParams): Promise<ScoresResult> {
+    const credits = params.daysFrom != null ? 2 : 1;
+    const query: Record<string, string> = {};
+    if (params.daysFrom != null) query.daysFrom = String(params.daysFrom);
+    if (params.eventIds && params.eventIds.length > 0) query.eventIds = params.eventIds.join(',');
+
+    const { body, usage } = await this.request<ApiScoreEvent[]>(
+      `/sports/${encodeURIComponent(sportKey)}/scores`,
+      query,
+      credits,
+    );
+    const scores = body.map((e) => ({
+      eventId: e.id,
+      completed: e.completed,
+      home: scoreFor(e.scores, e.home_team),
+      away: scoreFor(e.scores, e.away_team),
+      homeTeam: e.home_team,
+      awayTeam: e.away_team,
+    }));
+    return { scores, usage };
+  }
+
   private async request<T>(
     path: string,
     query: Record<string, string>,
@@ -200,5 +246,13 @@ export class TheOddsApiProvider implements OddsProvider {
 function parseHeaderNumber(value: string | null): number | null {
   if (value == null) return null;
   const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Decimal parse of the `{name, score}` line matching a team name. */
+function scoreFor(lines: ApiScoreLine[] | null, team: string): number | null {
+  const line = lines?.find((l) => l.name === team);
+  if (!line) return null;
+  const n = Number(line.score);
   return Number.isFinite(n) ? n : null;
 }

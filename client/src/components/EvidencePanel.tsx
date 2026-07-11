@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react';
 import type { CoverageReport, Scoreboard, SurvivalStats, TelemetryStats } from '../../../shared/types';
-import { fetchCoverage, fetchScoreboard, fetchSurvival, fetchTelemetry } from '../api';
+import {
+  fetchCoverage,
+  fetchGradingStatus,
+  fetchScoreboard,
+  fetchSurvival,
+  fetchTelemetry,
+  type GradingStatus,
+} from '../api';
 
 /**
  * The proving-month evidence: scoreboard (the decision view), funded-book
@@ -12,6 +19,7 @@ export function EvidencePanel() {
   const [coverage, setCoverage] = useState<CoverageReport | null>(null);
   const [survival, setSurvival] = useState<SurvivalStats | null>(null);
   const [telemetry, setTelemetry] = useState<TelemetryStats | null>(null);
+  const [grading, setGrading] = useState<GradingStatus | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -20,6 +28,7 @@ export function EvidencePanel() {
       fetchCoverage().then((c) => !cancelled && setCoverage(c)),
       fetchSurvival().then((s) => !cancelled && setSurvival(s)),
       fetchTelemetry().then((t) => !cancelled && setTelemetry(t)),
+      fetchGradingStatus().then((g) => !cancelled && setGrading(g)),
     ]);
     return () => {
       cancelled = true;
@@ -208,6 +217,56 @@ export function EvidencePanel() {
                   : `${telemetry.verifyOutcomes.avgProfitDeltaPp.toFixed(2)}pp`}
               </span>
             </p>
+          )}
+        </section>
+
+        <section>
+          <h2 className="ledger-section micro-label">Grading</h2>
+          {!grading ? (
+            <p className="micro-label">No grading data yet.</p>
+          ) : (
+            <>
+              <p className="evidence-stat">
+                <strong>{grading.buckets.graded}</strong>{' '}
+                <span className="micro-label">
+                  graded · {grading.buckets.open} open · {grading.buckets.needsRules} needs rules ·{' '}
+                  {grading.buckets.stale} stale · {grading.buckets.preV13} pre-v13
+                </span>
+              </p>
+              <p className="micro-label">
+                scores spend today: {grading.scoresSpendToday} / {grading.cap}
+                {grading.capped && (
+                  <span className="chip chip-warn"> ⚠ CAPPED</span>
+                )}
+              </p>
+              {grading.capped && (
+                <p className="ledger-note">
+                  ⚠ Daily scores cap reached — polling is paused until it resets tomorrow.
+                </p>
+              )}
+              {grading.gaps.length === 0 ? (
+                <p className="micro-label">No missed scans detected in the active window.</p>
+              ) : (
+                <table className="ledger-table">
+                  <thead>
+                    <tr>
+                      <th>From</th>
+                      <th>To</th>
+                      <th>Minutes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {grading.gaps.map((gap) => (
+                      <tr key={gap.from}>
+                        <td>{new Date(gap.from).toLocaleString()}</td>
+                        <td>{new Date(gap.to).toLocaleString()}</td>
+                        <td className="num">{gap.minutes}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </>
           )}
         </section>
       </div>

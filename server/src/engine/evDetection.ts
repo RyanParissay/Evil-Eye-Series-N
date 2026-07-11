@@ -24,6 +24,8 @@ export interface EvBet {
   sportTitle: string;
   eventName: string;
   commenceTime: string;
+  homeTeam: string;
+  awayTeam: string;
   marketKey: string;
   outcome: string;
   point?: number;
@@ -86,6 +88,8 @@ export function findEvBets(
               sportTitle: event.sportTitle,
               eventName: `${event.awayTeam} @ ${event.homeTeam}`,
               commenceTime: event.commenceTime,
+              homeTeam: event.homeTeam,
+              awayTeam: event.awayTeam,
               marketKey: benchMarket.key,
               outcome: side.name,
               point: side.point,

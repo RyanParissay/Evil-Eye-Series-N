@@ -89,6 +89,9 @@ function stubProvider(events: OddsEvent[]) {
       throw new Error('verify never lists sports');
     },
     fetchOdds,
+    async fetchScores(): Promise<never> {
+      throw new Error('verify never fetches scores');
+    },
   };
   return { provider, fetchOdds };
 }

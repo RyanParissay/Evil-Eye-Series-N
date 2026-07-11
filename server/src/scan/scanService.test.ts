@@ -60,6 +60,9 @@ function stubProvider(
         usage: { requestsUsedTotal: used, requestsRemainingTotal: 900 - used, creditsCharged: credits },
       };
     },
+    async fetchScores(): Promise<never> {
+      throw new Error('scan never fetches scores');
+    },
   };
 }
 

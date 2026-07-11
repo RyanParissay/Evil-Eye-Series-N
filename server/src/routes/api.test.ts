@@ -27,6 +27,9 @@ function throwingProvider(err: unknown): OddsProvider {
     async fetchOdds(): Promise<never> {
       throw err;
     },
+    async fetchScores(): Promise<never> {
+      throw err;
+    },
   };
 }
 

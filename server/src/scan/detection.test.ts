@@ -58,4 +58,9 @@ describe('detectOpportunities', () => {
     const arbs = detectOpportunities([ARB_EVENT], ['fanduel'], OPTIONS);
     expect(arbs).toHaveLength(0);
   });
+
+  it('Phase 13: enriches each opportunity with homeTeam/awayTeam from its source event', () => {
+    const arbs = detectOpportunities([ARB_EVENT], ['fanduel', 'draftkings'], OPTIONS);
+    expect(arbs[0]).toMatchObject({ homeTeam: 'Los Angeles Lakers', awayTeam: 'Boston Celtics' });
+  });
 });

@@ -320,6 +320,62 @@ export async function whatsappSetMiddles(enabled: boolean): Promise<WhatsAppStat
   });
 }
 
+/* ————— Grading (Phase 13: score polling + auto-grading) ————— */
+
+export interface GradingBuckets {
+  graded: number;
+  open: number;
+  needsRules: number;
+  stale: number;
+  /** No schemaVersion and no grading — a record from before Phase 13. */
+  preV13: number;
+}
+
+export interface ScanGap {
+  from: string;
+  to: string;
+  minutes: number;
+}
+
+export interface GradingStatus {
+  buckets: GradingBuckets;
+  scoresSpendToday: number;
+  cap: number;
+  capped: boolean;
+  gaps: ScanGap[];
+}
+
+export interface GradingPollResult {
+  graded: number;
+  polled: number;
+  capped: boolean;
+  scoresSpendToday: number;
+  cap: number;
+}
+
+/** The client-side grading tick — mirrors the "timers live in the client"
+ *  rule the scan cadence follows. Never throws into a caller that doesn't
+ *  await it; callers should still .catch() since this is a real fetch. */
+export async function pollGrading(): Promise<GradingPollResult> {
+  return request<GradingPollResult>('/api/grading/poll', { method: 'POST' });
+}
+
+export async function fetchGradingStatus(): Promise<GradingStatus> {
+  return request<GradingStatus>('/api/grading/status');
+}
+
+export async function manualGradeOpportunity(
+  id: string,
+  result: 'win' | 'loss' | 'push' | 'void',
+  note?: string,
+): Promise<OpportunityRecord> {
+  return request<OpportunityRecord>('/api/grading/manual-grade', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id, result, ...(note && { note }) }),
+  });
+}
+
 export interface CostEstimate {
   regionTab: string;
   topN: number;

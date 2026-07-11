@@ -161,4 +161,24 @@ function resolveTeams(
   return { home: parts[1], away: parts[0] };
 }
 
+/**
+ * §3 manual override money: the user asserts one overall result directly
+ * (not a score), so every leg is treated uniformly at that result — the
+ * same win/loss/push/void money rule as `done()` above, specialized to a
+ * single known outcome instead of per-leg score-derived results.
+ */
+export function manualPnlPer100(legs: Array<{ stake: number; odds: number }>, result: GradeResult): number {
+  if (result === 'win') {
+    return round2(legs.reduce((sum, leg) => sum + leg.stake * (leg.odds - 1), 0));
+  }
+  if (result === 'loss') {
+    return round2(-legs.reduce((sum, leg) => sum + leg.stake, 0));
+  }
+  return 0; // push/void: stake refunded
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 export { GRADING_RULES };

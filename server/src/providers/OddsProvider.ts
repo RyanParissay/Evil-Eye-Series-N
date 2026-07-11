@@ -36,12 +36,36 @@ export interface FetchOddsParams {
   bookmakers?: readonly string[];
 }
 
+/** One event's final score (Phase 13, GRADING_RULES.md §4). */
+export interface ScoreEntry {
+  eventId: string;
+  completed: boolean;
+  home: number | null;
+  away: number | null;
+  homeTeam: string;
+  awayTeam: string;
+}
+
+export interface FetchScoresParams {
+  /** Odds API: reach further back than the default lookback (costs more). */
+  daysFrom?: number;
+  /** Only poll for these events — the credits-discipline knob (§4). */
+  eventIds?: readonly string[];
+}
+
+export interface ScoresResult {
+  scores: ScoreEntry[];
+  usage: UsageInfo;
+}
+
 export interface OddsProvider {
   readonly mode: 'live' | 'mock';
   /** List the sports catalogue. Free on The Odds API. */
   listSports(): Promise<SportsResult>;
   /** Fetch decimal-format odds for one sport across regions/markets. */
   fetchOdds(sportKey: string, params: FetchOddsParams): Promise<OddsResult>;
+  /** Fetch final scores for one sport (Phase 13 grading). */
+  fetchScores(sportKey: string, params: FetchScoresParams): Promise<ScoresResult>;
 }
 
 /** Typed provider failure, mapped to an HTTP status + UI message upstream. */

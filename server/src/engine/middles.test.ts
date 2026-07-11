@@ -113,6 +113,7 @@ describe('findMiddles', () => {
     // Margin window (3.5, 7.5) strictly contains the key number 7.
     expect(m.middle.keyNumbers).toEqual([7]);
     expect(m.sameBookmaker).toBe(false);
+    expect(m).toMatchObject({ homeTeam: 'Chiefs', awayTeam: 'Raiders' }); // Phase 13: threaded through for grading
   });
 
   it('respects maxCostPct and minWindow filters', () => {

@@ -263,6 +263,61 @@ describe('OpportunityService', () => {
     });
   });
 
+  it('applyGrading and setGradingFlag report not_found for unknown ids', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    expect(
+      await service.applyGrading('nope', {
+        result: 'win',
+        legResults: ['win'],
+        pnlPer100: 100,
+        flags: [],
+        gradedAt: NOW.toISOString(),
+        source: 'auto',
+        audit: [],
+      }),
+    ).toMatchObject({ ok: false, reason: 'not_found' });
+    expect(await service.setGradingFlag('nope', 'needs_rules')).toMatchObject({
+      ok: false,
+      reason: 'not_found',
+    });
+  });
+
+  it('setGradingFlag accumulates distinct flags without duplicating them', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    await service.recordScan([makeArb()], SCOPE);
+    const [record] = await service.list();
+
+    await service.setGradingFlag(record.id, 'needs_rules');
+    await service.setGradingFlag(record.id, 'needs_rules'); // idempotent
+    await service.setGradingFlag(record.id, 'ungraded_stale');
+
+    expect((await service.get(record.id))?.gradingFlags).toEqual(['needs_rules', 'ungraded_stale']);
+  });
+
+  it('applyGrading writes record.grading and clears gradingFlags', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    await service.recordScan([makeArb()], SCOPE);
+    const [record] = await service.list();
+    await service.setGradingFlag(record.id, 'needs_rules');
+
+    const outcome = await service.applyGrading(record.id, {
+      result: 'win',
+      legResults: ['win', 'win'],
+      pnlPer100: 100,
+      flags: [],
+      gradedAt: NOW.toISOString(),
+      source: 'auto',
+      audit: [{ at: NOW.toISOString(), old: null, next: 'win' }],
+    });
+    expect(outcome.ok).toBe(true);
+    const stored = await service.get(record.id);
+    expect(stored?.grading?.result).toBe('win');
+    expect(stored?.gradingFlags).toEqual([]);
+  });
+
   it('ages settled records into the archive and drops them from the active file', async () => {
     const store = new FakeStore();
     const archive = new FakeArchive();

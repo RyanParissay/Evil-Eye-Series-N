@@ -34,7 +34,16 @@ export function detectOpportunities(
     marketKeys: options.marketKeys,
   });
   fillLinkFallbacks(opportunities);
+  // Phase 13: homeTeam/awayTeam ride along for score→outcome mapping at
+  // grading time. Attached here (not inside the pure arb engine) so the
+  // engine's pinned numeric output never changes shape.
+  const teamsByEvent = new Map(events.map((e) => [e.id, { homeTeam: e.homeTeam, awayTeam: e.awayTeam }]));
   for (const arb of opportunities) {
+    const teams = teamsByEvent.get(arb.eventId);
+    if (teams) {
+      arb.homeTeam = teams.homeTeam;
+      arb.awayTeam = teams.awayTeam;
+    }
     arb.id = opportunityIdFromFingerprint(opportunityFingerprint(arb));
   }
   return opportunities;

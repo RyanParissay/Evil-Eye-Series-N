@@ -130,6 +130,9 @@ export interface ArbOpportunity {
   eventName: string;
   commenceTime: string;
   marketKey: string;
+  /** Phase 13+: for score→outcome mapping (legacy parses eventName). */
+  homeTeam?: string;
+  awayTeam?: string;
   /** Arbitrage index S = Σ 1/best_odds. Below 1.0 means guaranteed profit. */
   arbIndex: number;
   /** Guaranteed profit percentage: (1/S − 1) × 100. */

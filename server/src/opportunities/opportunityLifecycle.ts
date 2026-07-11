@@ -45,6 +45,8 @@ export function applyScanToRecords(
       existing.sameBookmaker = arb.sameBookmaker;
       if (arb.ev) existing.ev = arb.ev; // strategy context follows the latest sighting
       if (arb.middle) existing.middle = arb.middle;
+      if (arb.homeTeam) existing.homeTeam = arb.homeTeam;
+      if (arb.awayTeam) existing.awayTeam = arb.awayTeam;
       existing.lastSeenAt = at;
       // Re-detection revives dead/degraded records; an executed (completed)
       // opportunity is history and never reopens.
@@ -66,6 +68,9 @@ export function applyScanToRecords(
         eventName: arb.eventName,
         commenceTime: arb.commenceTime,
         marketKey: arb.marketKey,
+        ...(arb.homeTeam && { homeTeam: arb.homeTeam }),
+        ...(arb.awayTeam && { awayTeam: arb.awayTeam }),
+        schemaVersion: 2,
         legs: arb.legs,
         profitPctAtDetection: arb.profitPct,
         profitPct: arb.profitPct,
