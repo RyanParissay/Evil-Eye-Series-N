@@ -232,6 +232,35 @@ export interface OpportunityRecord {
   };
   /** Every re-verify outcome, appended in order (ages out with the record). */
   verifies?: Array<{ at: string; outcome: 'active' | 'degraded' | 'dead'; profitPct: number }>;
+  /** Phase 13+: 2. Absent = pre-v13 record (see GRADING_RULES.md §6). */
+  schemaVersion?: number;
+  /** Phase 13+: for score→outcome mapping (legacy parses eventName). */
+  homeTeam?: string;
+  awayTeam?: string;
+  /** Signal-level settlement per GRADING_RULES.md (independent of execution). */
+  grading?: RecordGrading;
+  /** Pending-state flags: 'needs_rules' | 'ungraded_stale'. */
+  gradingFlags?: string[];
+}
+
+/* ————— Auto-grading (Phase 13, GRADING_RULES.md is binding) ————— */
+
+export type GradeResult = 'win' | 'loss' | 'push' | 'void';
+
+export interface RecordGrading {
+  /** Exactly one of win/loss/push/void (taxonomy §2). */
+  result: GradeResult;
+  /** Aligned with the record's legs. */
+  legResults: GradeResult[];
+  /** Signal P&L per $100 total stake at recorded odds/stake split. */
+  pnlPer100: number;
+  /** 'broken_arb' | 'manually_graded' | ... */
+  flags: string[];
+  score?: { home: number; away: number };
+  gradedAt: string;
+  source: 'auto' | 'manual';
+  /** Append-only audit trail (§3). */
+  audit: Array<{ at: string; old: GradeResult | null; next: GradeResult; note?: string }>;
 }
 
 /* ————— Ledger (Phase 5) ————— */
