@@ -8,6 +8,8 @@ import {
 import {
   alertWorthy,
   formatAlertMessage,
+  formatEvAlertMessage,
+  notifyEvBets,
   notifyNewOpportunities,
   opportunityFingerprint,
   selectAlerts,
@@ -306,6 +308,57 @@ describe('notifyNewOpportunities', () => {
     const second = await notifyNewOpportunities(deps, [makeArb({ profitPct: 2.4 })]);
     expect(sender.sent).toHaveLength(1);
     expect(second.sentFingerprints).toEqual([]);
+  });
+
+  it('EV alerts: honest format, own threshold, OFF unless the subscription opted in', async () => {
+    const evOpp = makeArb({
+      eventId: 'evt-ev',
+      profitPct: 5.5,
+      legs: [
+        { outcome: 'Lakers', bookmakerKey: 'bet365', bookmakerTitle: 'Bet365', odds: 2.15, stake: 400, link: null },
+      ],
+      ev: {
+        benchmarkKey: 'pinnacle',
+        benchmarkOdds: 1.95,
+        fairProbability: 0.5,
+        edgePct: 5.5,
+        benchmarkLastUpdate: NOW.toISOString(),
+      },
+    });
+
+    // Format: expected-value framing, no unqualified "guaranteed", ever.
+    const message = formatEvAlertMessage(evOpp, 400, 'http://localhost:5173');
+    expect(message).toContain('Bet365');
+    expect(message).toContain('@2.15');
+    expect(message).toContain('Edge 5.5');
+    expect(message).toContain('win probability 50%');
+    expect(message).toContain('Not guaranteed');
+    expect(message.toLowerCase()).not.toMatch(/(?<!not )guaranteed profit/);
+    expect(message).toContain('/opportunity/');
+
+    // Default subscription: EV disabled → nothing sends.
+    const store = new FakeStore(makeData());
+    const sender = new FakeSender();
+    const off = await notifyEvBets(
+      { store, sender, now: () => NOW, evThresholdPercent: 3 },
+      [evOpp],
+    );
+    expect(off.sentFingerprints).toEqual([]);
+    expect(sender.sent).toHaveLength(0);
+
+    // Opted in: sends once, dedups on re-sighting.
+    store.data.subscriptions[0].evEnabled = true;
+    const on = await notifyEvBets(
+      { store, sender, now: () => NOW, evThresholdPercent: 3 },
+      [evOpp],
+    );
+    expect(on.sentFingerprints).toHaveLength(1);
+    expect(sender.sent).toHaveLength(1);
+    const again = await notifyEvBets(
+      { store, sender, now: () => NOW, evThresholdPercent: 3 },
+      [evOpp],
+    );
+    expect(again.sentFingerprints).toEqual([]);
   });
 
   it('sends the deep link when deps carry the app URL', async () => {

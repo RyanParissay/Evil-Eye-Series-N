@@ -9,6 +9,7 @@ import {
   fetchBookmakers,
   fetchFundPosition,
   fetchOpportunity,
+  gradeOpportunity,
   pingFunnel,
   revertBalances,
   verifyOpportunity,
@@ -202,6 +203,7 @@ export function CockpitPage() {
           onComplete={(filledLegs) => void handleComplete(filledLegs)}
           onApply={(winner) => void handleReconcile(() => applyBalances(id, winner))}
           onRevert={() => void handleReconcile(() => revertBalances(id))}
+          onGrade={(grade) => void handleReconcile(() => gradeOpportunity(id, grade))}
         />
       )}
     </div>
@@ -219,6 +221,7 @@ function Cockpit({
   onComplete,
   onApply,
   onRevert,
+  onGrade,
 }: {
   record: OpportunityRecord;
   bankroll: number;
@@ -230,7 +233,9 @@ function Cockpit({
   onComplete: (filledLegs: Array<{ odds: number; stake: number }>) => void;
   onApply: (winningLegIndex: number) => void;
   onRevert: () => void;
+  onGrade: (grade: 'won' | 'lost' | 'void') => void;
 }) {
+  const isEv = record.strategy === 'ev' && record.ev != null;
   const settled = record.status === 'dead' || record.status === 'completed';
   // The same planStakes the alert path runs: ideal shares, whole-position
   // rescale when a book's recorded balance would be exceeded.
@@ -253,10 +258,11 @@ function Cockpit({
     );
 
   return (
-    <main className={`cockpit-body cockpit-${record.status}`}>
+    <main className={`cockpit-body cockpit-${record.status}${isEv ? ' cockpit-ev' : ''}`}>
       <section className="cockpit-event">
         <p className="micro-label">
           {record.sportTitle} · {record.marketKey} · {formatKickoff(record.commenceTime)}
+          {isEv && <span className="risk-badge cockpit-ev-badge">EV · not guaranteed</span>}
         </p>
         <h1 className="cockpit-title">{record.eventName}</h1>
         <p className="cockpit-status micro-label">
@@ -278,28 +284,64 @@ function Cockpit({
           {record.profitPct >= 0 ? '+' : ''}
           {record.profitPct.toFixed(2)}%
         </span>
-        <span className="micro-label">
-          {reduced ? (
-            <>
-              <s>+{record.profitPctAtDetection.toFixed(2)}%</s> at detection · index{' '}
-              {record.arbIndex.toFixed(4)}
-            </>
-          ) : (
-            <>index {record.arbIndex.toFixed(4)}</>
-          )}
-        </span>
+        {isEv ? (
+          <span className="micro-label">
+            expected edge — not guaranteed · fair {(record.ev!.fairProbability * 100).toFixed(0)}%
+            win ({(1 / record.ev!.fairProbability).toFixed(2)}) · benchmark {record.ev!.benchmarkKey}{' '}
+            @{record.ev!.benchmarkOdds}
+          </span>
+        ) : (
+          <span className="micro-label">
+            {reduced ? (
+              <>
+                <s>+{record.profitPctAtDetection.toFixed(2)}%</s> at detection · index{' '}
+                {record.arbIndex.toFixed(4)}
+              </>
+            ) : (
+              <>index {record.arbIndex.toFixed(4)}</>
+            )}
+          </span>
+        )}
       </section>
 
       {record.status === 'completed' && (
         <div className="cockpit-stamp" role="status">
           <span className="cockpit-stamp-title">Completed</span>
           <span>
-            Legs placed {relativeTime(record.statusChangedAt)}.{' '}
+            {isEv ? 'Bet placed' : 'Legs placed'} {relativeTime(record.statusChangedAt)}.{' '}
             {record.execution
-              ? `Locked ${record.execution.lockedProfit >= 0 ? '+' : '−'}$${Math.abs(record.execution.lockedProfit).toFixed(2)} on $${record.execution.totalStaked.toFixed(2)} staked.`
+              ? isEv
+                ? record.execution.grade
+                  ? `Graded ${record.execution.grade.toUpperCase()}: ${record.execution.lockedProfit >= 0 ? '+' : '−'}$${Math.abs(record.execution.lockedProfit).toFixed(2)} realized.`
+                  : `Ungraded — counts $0 until you grade it below.`
+                : `Locked ${record.execution.lockedProfit >= 0 ? '+' : '−'}$${Math.abs(record.execution.lockedProfit).toFixed(2)} on $${record.execution.totalStaked.toFixed(2)} staked.`
               : 'No filled numbers were recorded, so it counts as captured but adds nothing to P&L.'}
           </span>
         </div>
+      )}
+
+      {record.status === 'completed' && record.execution && isEv && !record.execution.balancesAppliedAt && (
+        <section className="cockpit-reconcile" aria-label="Grade the bet">
+          <p className="micro-label">
+            Event settled? Grade it — the grade IS the realized money.
+            {record.execution.grade && ' Regrade any time before applying balances.'}
+          </p>
+          <div className="cockpit-grade-row">
+            {(['won', 'lost', 'void'] as const).map((grade) => (
+              <button
+                key={grade}
+                type="button"
+                className={`cockpit-action cockpit-grade${record.execution?.grade === grade ? ' is-current' : ''}`}
+                onClick={() => onGrade?.(grade)}
+                disabled={busy !== null}
+                aria-busy={busy === 'reconcile'}
+                aria-pressed={record.execution?.grade === grade}
+              >
+                {grade.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </section>
       )}
 
       {record.status === 'completed' && record.execution && (
@@ -307,8 +349,10 @@ function Cockpit({
           {record.execution.balancesAppliedAt ? (
             <div className="cockpit-reconcile-done">
               <span className="micro-label">
-                applied to balances {relativeTime(record.execution.balancesAppliedAt)} · winner:{' '}
-                {record.legs[record.execution.winningLegIndex ?? 0]?.outcome}
+                applied to balances {relativeTime(record.execution.balancesAppliedAt)} ·{' '}
+                {isEv
+                  ? `graded ${record.execution.grade?.toUpperCase()}`
+                  : `winner: ${record.legs[record.execution.winningLegIndex ?? 0]?.outcome}`}
               </span>
               <button
                 type="button"
@@ -320,6 +364,18 @@ function Cockpit({
                 {busy === 'reconcile' ? 'Reverting…' : 'Revert balance changes'}
               </button>
             </div>
+          ) : isEv ? (
+            record.execution.grade != null && (
+              <button
+                type="button"
+                className="cockpit-action cockpit-action-verify"
+                onClick={() => onApply(0)}
+                disabled={busy !== null}
+                aria-busy={busy === 'reconcile'}
+              >
+                {busy === 'reconcile' ? 'Applying…' : 'Apply to balances'}
+              </button>
+            )
           ) : (
             <>
               <p className="micro-label">
@@ -373,12 +429,22 @@ function Cockpit({
             value={Number.isFinite(bankroll) ? bankroll : ''}
             onChange={(e) => onBankroll(e.target.valueAsNumber)}
           />
-          <span className="cockpit-guaranteed">
-            <span className="micro-label">guaranteed</span>
-            <strong className={guaranteedProfit >= 0 ? '' : 'is-negative'}>
-              {guaranteedProfit >= 0 ? '+' : '−'}${Math.abs(guaranteedProfit).toFixed(2)}
-            </strong>
-          </span>
+          {isEv ? (
+            <span className="cockpit-guaranteed">
+              <span className="micro-label">expected · if it loses</span>
+              <strong className="cockpit-ev-expected">
+                +${((totalStaked * record.ev!.edgePct) / 100).toFixed(2)} · −$
+                {totalStaked.toFixed(2)}
+              </strong>
+            </span>
+          ) : (
+            <span className="cockpit-guaranteed">
+              <span className="micro-label">guaranteed</span>
+              <strong className={guaranteedProfit >= 0 ? '' : 'is-negative'}>
+                {guaranteedProfit >= 0 ? '+' : '−'}${Math.abs(guaranteedProfit).toFixed(2)}
+              </strong>
+            </span>
+          )}
         </div>
         <p className="micro-label">
           split of ${totalStaked.toFixed(2)} across {record.legs.length} legs
@@ -441,7 +507,7 @@ function Cockpit({
 
       {record.status !== 'completed' && fills == null && (
         <section className="cockpit-actions">
-          {record.status !== 'dead' && (
+          {record.status !== 'dead' && !isEv && (
             <button
               type="button"
               className="cockpit-action cockpit-action-verify"
@@ -466,7 +532,7 @@ function Cockpit({
             }}
             disabled={busy !== null}
           >
-            Both legs placed — record the fills
+            {isEv ? 'Bet placed — record the fill' : 'Both legs placed — record the fills'}
           </button>
         </section>
       )}

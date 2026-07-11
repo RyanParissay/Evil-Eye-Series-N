@@ -70,6 +70,8 @@ export class LedgerService {
     let totalLockedProfit = 0;
     let completions = 0;
     let unpricedCompletions = 0;
+    let evExpectedBets = 0;
+    let evExpectedProfit = 0;
     let alertedCount = 0;
     const executions: Array<{ at: string; profit: number }> = [];
     const monthly = new Map<string, { lockedProfit: number; completions: number }>();
@@ -101,6 +103,14 @@ export class LedgerService {
       const execution = record.execution;
       if (!execution) {
         unpricedCompletions += 1;
+        continue;
+      }
+
+      // EV completions realize money only through their grade; until then
+      // they contribute to the EXPECTED (model) line and nothing else.
+      if (record.strategy === 'ev' && execution.grade == null) {
+        evExpectedBets += 1;
+        evExpectedProfit += (execution.totalStaked * (record.ev?.edgePct ?? 0)) / 100;
         continue;
       }
 
@@ -153,6 +163,7 @@ export class LedgerService {
         completions,
         unpricedCompletions,
       },
+      evExpected: { bets: evExpectedBets, profit: round2(evExpectedProfit) },
       equity,
       monthly: [...monthly.entries()]
         .sort(([a], [b]) => a.localeCompare(b))
@@ -230,6 +241,10 @@ export class LedgerService {
         'verify_count',
         'last_verify_outcome',
         'gone_lifetime_ms',
+        'fair_probability',
+        'benchmark_odds',
+        'edge_pct',
+        'grade',
       ].join(',') + '\n',
     );
 
@@ -266,6 +281,10 @@ export class LedgerService {
         record.verifies?.length ?? 0,
         record.verifies?.[record.verifies.length - 1]?.outcome ?? '',
         goneLifetimeMs(record) ?? '',
+        record.ev?.fairProbability ?? '',
+        record.ev?.benchmarkOdds ?? '',
+        record.ev?.edgePct ?? '',
+        record.execution?.grade ?? '',
       ];
       write(row.map(csvEscape).join(',') + '\n');
     }

@@ -79,10 +79,19 @@ each phase (`docs/superpowers/specs/`):
    lands multiplicative de-vig with typed rejections. Nothing consumes
    fair probabilities yet — Phase 10 (EV detection + % EDGE tab) does.
 
+10. ✅ Risk Mode (bright-yellow tab, Ryan's UI direction): EV detection
+    rides every scan (edge = fair × odds − 1 with maxOdds/freshness/
+    threshold guards), strategy:'ev' records on the shared rails, the
+    /risk board sorted by edge, honest opt-in alerts ("Not guaranteed",
+    evEnabled default false), single-leg cockpit with WON/LOST/VOID
+    grading → realized P&L, EXPECTED (model) ledger line, grade-driven
+    apply-to-balances. Yellow = speculative, reserved. Paper stays
+    arb-only. Kelly + stochastic models are Phase 11 (next).
+
 The governing specs are **`docs/mission-phases-4-7.md`** (phases 4–7),
 the Phase 8 design doc, and the Phases 9–11 Speculative Mode mission
-(benchmark → EV detection → RISK tab; phase 10 next). Remaining roadmap
-(CLV, auto-grading, power/Shin de-vig, middles) deliberately unbuilt.
+(phase 11 — RISK models + Kelly — remains). Remaining roadmap (CLV,
+auto-grading, power/Shin de-vig, middles) deliberately unbuilt.
 
 Health: **181 tests green** (164 server, 17 client — Vitest), `tsc` clean
 in both workspaces. `.env` has a live `ODDS_API_KEY`; no `TWILIO_*` vars

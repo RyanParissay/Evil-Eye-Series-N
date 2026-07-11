@@ -13,6 +13,7 @@ import {
   DEFAULT_PORT,
   LAST_SCAN_FILE,
   LAST_SNAPSHOT_FILE,
+  EV_FILE,
   FUND_FILE,
   OPPORTUNITIES_FILE,
   OPPORTUNITY_ARCHIVE_DIR,
@@ -35,8 +36,11 @@ import { FundStore } from './fund/fundStore';
 import { PaperService } from './paper/paperService';
 import { PaperStore } from './paper/paperStore';
 import { planStakes } from '@shared/stakePlanning';
+import { EvStore } from './ops/evStore';
 import { OpsStore } from './ops/opsStore';
 import { ScanHistoryStore } from './ops/scanHistoryStore';
+import { notifyEvBets } from './notifications/alertService';
+import { createEvRouter } from './routes/ev';
 import { computeSurvival } from './ops/survivalService';
 import { createFundRouter } from './routes/fund';
 import { createOpsRouter } from './routes/ops';
@@ -155,6 +159,11 @@ app.use(
 );
 
 const fundService = new FundService(new FundStore(path.join(serverRoot, FUND_FILE)));
+const evStore = new EvStore(path.join(serverRoot, EV_FILE));
+app.use(
+  '/api/ev',
+  createEvRouter({ settings: evStore, opportunities: opportunityService, fund: fundService }),
+);
 app.use(
   '/api/fund',
   createFundRouter({
@@ -204,21 +213,27 @@ app.use(
     opportunityLog: opportunityService,
     snapshots: snapshotStore,
     scanLog: scanHistoryStore,
+    ev: { settings: () => evStore.read() },
     // Limited/dead/disabled books never page the phone — filter before
     // dispatch; whatever actually sent gets flagged on its stored record.
+    // The stream carries BOTH strategies; arbs and EV bets split here.
     notifier: async (opportunities) => {
       const alertable = await bookmakerService.filterAlertable(opportunities);
-      // The paper fund watches the SAME alertable stream a phone would —
-      // its failure must never dent the real alert path.
+      const arbs = alertable.filter((o) => !o.ev);
+      const evBets = alertable.filter((o) => o.ev);
+      // The paper fund watches the SAME alertable ARB stream a phone would —
+      // its failure must never dent the real alert path. Paper is arb-only
+      // by design (EV proof is grading calibration, not simulation).
       try {
-        await paperService.considerEntries(alertable);
+        await paperService.considerEntries(arbs);
       } catch (err) {
         console.warn('Paper fund entry failed:', err);
       }
       // Exact-dollar stakes from persisted fund settings + current balances.
-      const [fundSettings, books] = await Promise.all([
+      const [fundSettings, books, evSettings] = await Promise.all([
         fundService.settings(),
         bookmakerService.list(),
+        evStore.read(),
       ]);
       const balances = new Map(books.map((b) => [b.key, b.balance ?? null]));
       const { sentFingerprints } = await notifyNewOpportunities(
@@ -231,9 +246,27 @@ app.use(
               ? (arb) => planStakes(arb.legs, fundSettings.defaultStake, balances)
               : undefined,
         },
-        alertable,
+        arbs,
       );
-      await opportunityService.markAlerted(sentFingerprints);
+      let evSent: string[] = [];
+      if (evBets.length > 0) {
+        try {
+          const result = await notifyEvBets(
+            {
+              store: whatsappStore,
+              sender: whatsappSender,
+              appUrl,
+              evThresholdPercent: evSettings.alertMinEdgePct,
+              stake: fundSettings.defaultStake > 0 ? fundSettings.defaultStake : undefined,
+            },
+            evBets,
+          );
+          evSent = result.sentFingerprints;
+        } catch (err) {
+          console.warn('EV alert dispatch failed:', err);
+        }
+      }
+      await opportunityService.markAlerted([...sentFingerprints, ...evSent]);
     },
   }),
 );

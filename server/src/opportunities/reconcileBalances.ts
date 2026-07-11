@@ -35,7 +35,13 @@ export async function applyToBalances(
   if (execution.balancesAppliedAt) {
     return { ok: false, reason: 'conflict', message: 'Already applied — revert first' };
   }
-  if (!Number.isInteger(winningLegIndex) || !execution.filledLegs[winningLegIndex]) {
+  if (record.strategy === 'ev') {
+    // EV money comes from the grade, not a winning leg.
+    if (execution.grade == null) {
+      return { ok: false, reason: 'conflict', message: 'Grade the bet before reconciling balances' };
+    }
+    winningLegIndex = 0;
+  } else if (!Number.isInteger(winningLegIndex) || !execution.filledLegs[winningLegIndex]) {
     return { ok: false, reason: 'bad_request', message: 'winningLegIndex must address a leg' };
   }
 
@@ -59,7 +65,11 @@ export async function revertBalances(deps: ReconcileDeps, id: string): Promise<R
   return { ok: true, record: marked.record };
 }
 
-/** −stake per leg book, +payout on the winner; sign −1 inverts exactly. */
+/**
+ * Arb: −stake per leg book, +payout on the winner. EV: −stake, then the
+ * grade decides — won pays stake×odds, void returns the stake, lost adds
+ * nothing. sign −1 inverts exactly (revert).
+ */
 function deltas(
   record: OpportunityRecord,
   winningLegIndex: number,
@@ -70,6 +80,13 @@ function deltas(
     key: leg.bookmakerKey,
     delta: sign * -execution.filledLegs[i].stake,
   }));
+  if (record.strategy === 'ev') {
+    const [leg] = execution.filledLegs;
+    const bookKey = record.legs[0].bookmakerKey;
+    if (execution.grade === 'won') out.push({ key: bookKey, delta: sign * leg.stake * leg.odds });
+    if (execution.grade === 'void') out.push({ key: bookKey, delta: sign * leg.stake });
+    return out;
+  }
   const winner = execution.filledLegs[winningLegIndex];
   out.push({
     key: record.legs[winningLegIndex].bookmakerKey,

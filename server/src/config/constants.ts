@@ -93,6 +93,9 @@ export const PAPER_FILE = 'data/paper.json';
 /** Fund settings: real bankroll, default stake, unallocated cash (gitignored). */
 export const FUND_FILE = 'data/fund.json';
 
+/** Risk Mode (EV) settings (gitignored). */
+export const EV_FILE = 'data/ev.json';
+
 /** Nudge when a book's balance hasn't been touched for this long. */
 export const STALE_BALANCE_AFTER_MS = 14 * 24 * 3_600_000;
 

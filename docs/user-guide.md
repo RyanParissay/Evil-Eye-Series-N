@@ -107,6 +107,26 @@ usually a stale price).
     realism. Reset it any time; it never touches real numbers.
 - **Cockpit (/opportunity/:id)** — see §2.
 
+## 3½ · Risk Mode (yellow — expected value, NOT guaranteed)
+
+The yellow **RISK MODE** tab shows single bets where a soft book's price
+beats Pinnacle's de-vigged fair line. Different contract from arbs:
+roughly half of these bets LOSE — the edge is statistical.
+
+- The board sorts live edges best-first: offered vs fair, edge %, win
+  probability, flat stake (Kelly arrives in the next phase), expected
+  profit, benchmark age. Guards up top: show/alert thresholds, max odds
+  (longshots are model-error bait), benchmark freshness.
+- Tap into the cockpit (yellow variant): place the bet, record the fill,
+  and after the event **grade it WON / LOST / VOID** — grading is what
+  creates realized P&L. Ungraded bets sit on the ledger's EXPECTED
+  (model) line and add $0 to real money, forever.
+- EV WhatsApp alerts are OFF by default — flip the "EV alerts" switch in
+  the WhatsApp panel to opt in. The messages say "Not guaranteed" and
+  mean it.
+- No edges showing? Check the Ledger's benchmark-reach audit — sports
+  Pinnacle doesn't cover can never produce one.
+
 ## 4 · Reading the month (the three numbers)
 
 After 3–4 weeks: **ideal paper curve** (was there money at all?),

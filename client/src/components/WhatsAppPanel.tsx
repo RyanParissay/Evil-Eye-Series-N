@@ -13,6 +13,7 @@ import {
   whatsappConnect,
   whatsappDisconnect,
   whatsappSendTest,
+  whatsappSetEv,
   whatsappSetThreshold,
   whatsappVerify,
 } from '../api';
@@ -183,6 +184,27 @@ export function WhatsAppPanel() {
           <div className="wa-field">
             <span className="micro-label">Number</span>
             <span className="wa-value">{status.phoneMasked}</span>
+          </div>
+          <div className="wa-field wa-field-narrow">
+            <span className="micro-label" id="wa-ev-label">
+              EV alerts <span className="risk-badge wa-ev-badge">not guaranteed</span>
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={status.evEnabled}
+              aria-labelledby="wa-ev-label"
+              className="switch"
+              disabled={busy}
+              onClick={() =>
+                void run(
+                  () => whatsappSetEv(!status.evEnabled),
+                  status.evEnabled ? 'EV alerts off.' : 'EV alerts on — expect losing bets too.',
+                )
+              }
+            >
+              <span className="switch-thumb" aria-hidden="true" />
+            </button>
           </div>
           <form className="wa-field wa-field-narrow" onSubmit={handleThresholdSave}>
             <label className="micro-label" htmlFor="wa-threshold">

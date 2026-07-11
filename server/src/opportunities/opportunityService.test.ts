@@ -181,6 +181,41 @@ describe('OpportunityService', () => {
     expect(stored?.verifies?.[0].profitPct).toBeCloseTo(stored!.profitPct, 6);
   });
 
+  it('grading an EV completion sets realized money exactly: won / lost / void', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    const evArb = makeArb({
+      legs: [{ outcome: 'Lakers', bookmakerKey: 'bet365', bookmakerTitle: 'Bet365', odds: 2.15, stake: 100, link: null }],
+      ev: { benchmarkKey: 'pinnacle', benchmarkOdds: 1.95, fairProbability: 0.5, edgePct: 7.5, benchmarkLastUpdate: NOW.toISOString() },
+    });
+    await service.recordScan([evArb], SCOPE);
+    const [record] = await service.list();
+    await service.updateStatus(record.id, 'completed', [{ odds: 2.1, stake: 400 }]);
+
+    const won = await service.grade(record.id, 'won');
+    expect(won.ok).toBe(true);
+    expect((await service.get(record.id))?.execution?.lockedProfit).toBeCloseTo(400 * 1.1, 2);
+
+    // Regrade allowed while balances are unapplied.
+    await service.grade(record.id, 'lost');
+    expect((await service.get(record.id))?.execution?.lockedProfit).toBeCloseTo(-400, 2);
+    await service.grade(record.id, 'void');
+    expect((await service.get(record.id))?.execution?.lockedProfit).toBe(0);
+  });
+
+  it('grading guards: arbs never grade; ungraded and uncompleted refuse cleanly', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    await service.recordScan([makeArb()], SCOPE); // a true arb
+    const [arb] = await service.list();
+    await service.updateStatus(arb.id, 'completed', [
+      { odds: 2.1, stake: 240 },
+      { odds: 2.05, stake: 260 },
+    ]);
+    expect(await service.grade(arb.id, 'won')).toMatchObject({ ok: false, reason: 'conflict' });
+    expect(await service.grade('nope', 'won')).toMatchObject({ ok: false, reason: 'not_found' });
+  });
+
   it('ages settled records into the archive and drops them from the active file', async () => {
     const store = new FakeStore();
     const archive = new FakeArchive();

@@ -151,6 +151,66 @@ describe('LedgerService.summarize', () => {
   });
 });
 
+describe('EV records in the ledger', () => {
+  function evRecord(overrides: Partial<OpportunityRecord> = {}): OpportunityRecord {
+    return record({
+      strategy: 'ev',
+      legs: [
+        { outcome: 'Lakers', bookmakerKey: 'bet365', bookmakerTitle: 'Bet365', odds: 2.15, stake: 400, link: null },
+      ],
+      ev: {
+        benchmarkKey: 'pinnacle',
+        benchmarkOdds: 1.95,
+        fairProbability: 0.5,
+        edgePct: 7.5,
+        benchmarkLastUpdate: '2026-07-09T11:55:00Z',
+      },
+      ...overrides,
+    });
+  }
+
+  it('graded EV money is realized; ungraded is EXPECTED only, never mixed', async () => {
+    const active = [
+      // Graded won: realized +440.
+      evRecord({
+        status: 'completed',
+        execution: {
+          filledLegs: [{ odds: 2.1, stake: 400 }],
+          totalStaked: 400,
+          lockedProfit: 440,
+          recordedAt: '2026-07-09T13:00:00Z',
+          grade: 'won',
+        },
+      }),
+      // Completed but ungraded: $0 realized, EXPECTED = 400 × 7.5% = 30.
+      evRecord({
+        status: 'completed',
+        execution: {
+          filledLegs: [{ odds: 2.1, stake: 400 }],
+          totalStaked: 400,
+          lockedProfit: 0,
+          recordedAt: '2026-07-09T13:00:00Z',
+          grade: null,
+        },
+      }),
+    ];
+    const summary = await service(active).summarize();
+    expect(summary.realized.totalLockedProfit).toBeCloseTo(440, 2);
+    expect(summary.evExpected).toEqual({ bets: 1, profit: 30 });
+  });
+
+  it('CSV carries the ev columns and the grade', async () => {
+    let csv = '';
+    await service([evRecord()]).exportCsv((chunk) => {
+      csv += chunk;
+    });
+    const header = csv.split('\n')[0].split(',');
+    for (const col of ['fair_probability', 'benchmark_odds', 'edge_pct', 'grade']) {
+      expect(header).toContain(col);
+    }
+  });
+});
+
 describe('CSV export', () => {
   it('round-trips: parsing the export recovers the realized total to the cent', async () => {
     const active = [completed('2026-07', 4.25), completed('2026-07', -1.05), record({})];

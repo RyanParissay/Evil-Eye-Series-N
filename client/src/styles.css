@@ -1995,3 +1995,135 @@ select.bm-input {
   color: var(--grey);
   margin-left: 8px;
 }
+
+/* ————————————————————————————————————————————————
+   RISK MODE — /risk. Namespace: .risk-*
+   Yellow means exactly ONE thing app-wide: speculative, expected
+   value, NOT guaranteed. (Red = guaranteed arbs; green = live watch.)
+   ———————————————————————————————————————————————— */
+
+:root {
+  --yellow: #ffe000;
+}
+
+.risk-nav {
+  color: var(--yellow);
+  font-weight: 900;
+  text-decoration: none;
+  letter-spacing: 0.18em;
+}
+
+.risk-nav:hover,
+.risk-nav:focus-visible {
+  color: var(--white);
+  outline: none;
+}
+
+.risk-accent {
+  color: var(--yellow);
+}
+
+.risk-badge {
+  border: 1px solid var(--yellow);
+  color: var(--yellow);
+  padding: 2px 8px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.risk-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.risk-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.risk-controls input {
+  background: var(--black);
+  border: 1px solid var(--hairline);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  padding: 7px 9px;
+  width: 90px;
+  border-radius: 0;
+}
+
+.risk-controls input:focus-visible {
+  outline: 2px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+.risk-note {
+  color: var(--grey);
+  max-width: 340px;
+}
+
+.risk-table-wrap {
+  overflow-x: auto;
+}
+
+.risk-table {
+  min-width: 900px;
+}
+
+.risk-edge {
+  color: var(--yellow);
+  font-weight: 900;
+}
+
+/* Cockpit EV variant: the number wears yellow, never red. */
+.cockpit-ev .cockpit-profit {
+  color: var(--yellow);
+}
+
+.cockpit-ev-badge {
+  margin-left: 10px;
+}
+
+.cockpit-ev .cockpit-guaranteed strong {
+  color: var(--yellow);
+}
+
+.cockpit-grade-row {
+  display: flex;
+  gap: 10px;
+}
+
+.cockpit-grade {
+  flex: 1;
+  background: var(--black);
+  color: var(--white);
+  border: 1px solid var(--hairline);
+}
+
+.cockpit-grade:hover:not(:disabled) {
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+.cockpit-grade.is-current {
+  border-color: var(--yellow);
+  color: var(--yellow);
+  box-shadow: inset 0 -3px 0 var(--yellow);
+}
+
+.cockpit-grade:focus-visible {
+  outline: 2px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+.wa-ev-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  margin-left: 6px;
+}

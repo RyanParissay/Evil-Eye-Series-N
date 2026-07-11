@@ -18,6 +18,11 @@ export interface WhatsAppSubscription {
   verification: PendingVerification | null;
   /** ISO timestamps of recent sends, for the per-hour rate limit. */
   sendTimestamps: string[];
+  /**
+   * Risk Mode opt-in: EV alerts are OFF by default — individual EV bets
+   * lose by design, so getting paged about them is a choice.
+   */
+  evEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
 }

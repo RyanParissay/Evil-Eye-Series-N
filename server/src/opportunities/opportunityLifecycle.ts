@@ -43,6 +43,7 @@ export function applyScanToRecords(
       existing.arbIndex = arb.arbIndex;
       existing.suspicious = arb.suspicious;
       existing.sameBookmaker = arb.sameBookmaker;
+      if (arb.ev) existing.ev = arb.ev; // EV context follows the latest sighting
       existing.lastSeenAt = at;
       // Re-detection revives dead/degraded records; an executed (completed)
       // opportunity is history and never reopens.
@@ -55,7 +56,8 @@ export function applyScanToRecords(
       byFingerprint.set(fingerprint, {
         id: opportunityIdFromFingerprint(fingerprint),
         fingerprint,
-        strategy: 'arb',
+        strategy: arb.ev ? 'ev' : 'arb',
+        ...(arb.ev && { ev: arb.ev }),
         eventId: arb.eventId,
         sportKey: arb.sportKey,
         sportTitle: arb.sportTitle,

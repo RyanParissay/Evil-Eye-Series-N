@@ -11,6 +11,7 @@ import type {
   BookmakerConfig,
   BookmakerStatusValue,
   CoverageReport,
+  EvSettings,
   FundPosition,
   FundSettings,
   LedgerSummary,
@@ -233,6 +234,46 @@ export function pingFunnel(id: string, step: 'cockpit_opened' | 'fills_opened'):
     body: JSON.stringify({ step }),
   }).catch(() => {
     // Telemetry must never break the cockpit.
+  });
+}
+
+/* ————— Risk Mode (EV — expected value, not guaranteed) ————— */
+
+export interface EvBoard {
+  bets: OpportunityRecord[];
+  settings: EvSettings;
+  defaultStake: number;
+}
+
+export async function fetchEvBoard(): Promise<EvBoard> {
+  return request<EvBoard>('/api/ev/board');
+}
+
+export async function patchEvSettings(patch: Partial<EvSettings>): Promise<EvSettings> {
+  return request<EvSettings>('/api/ev/settings', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+/** Grading turns an EV completion into realized money. */
+export async function gradeOpportunity(
+  id: string,
+  grade: 'won' | 'lost' | 'void',
+): Promise<OpportunityRecord> {
+  return request<OpportunityRecord>(`/api/opportunities/${encodeURIComponent(id)}/grade`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ grade }),
+  });
+}
+
+export async function whatsappSetEv(enabled: boolean): Promise<WhatsAppStatus> {
+  return request<WhatsAppStatus>('/api/whatsapp/ev', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ enabled }),
   });
 }
 

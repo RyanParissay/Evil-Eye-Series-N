@@ -131,6 +131,38 @@ describe('applyScanToRecords', () => {
   });
 });
 
+describe('applyScanToRecords — EV records (strategy discriminator)', () => {
+  const EV_BLOCK = {
+    benchmarkKey: 'pinnacle',
+    benchmarkOdds: 1.95,
+    fairProbability: 0.5,
+    edgePct: 7.5,
+    benchmarkLastUpdate: '2026-07-09T11:55:00Z',
+  };
+  const evArb = (edgePct = 7.5) =>
+    makeArb({
+      legs: [
+        { outcome: 'Lakers', bookmakerKey: 'bet365', bookmakerTitle: 'Bet365', odds: 2.15, stake: 100, link: null },
+      ],
+      profitPct: edgePct,
+      ev: { ...EV_BLOCK, edgePct },
+    });
+
+  it('creates an ev-strategy record carrying the ev context', () => {
+    const { records } = applyScanToRecords([], [evArb()], SCOPE, NOW);
+    expect(records[0].strategy).toBe('ev');
+    expect(records[0].ev).toMatchObject({ benchmarkKey: 'pinnacle', edgePct: 7.5 });
+  });
+
+  it('re-detection refreshes the ev context in place', () => {
+    const first = applyScanToRecords([], [evArb()], SCOPE, NOW).records;
+    const { records } = applyScanToRecords(first, [evArb(5.2)], SCOPE, new Date(NOW.getTime() + 60_000));
+    expect(records).toHaveLength(1);
+    expect(records[0].ev?.edgePct).toBe(5.2);
+    expect(records[0].profitPct).toBe(5.2);
+  });
+});
+
 describe('applyStatusChange', () => {
   it('completes an active record', () => {
     const record = recordFor(makeArb());

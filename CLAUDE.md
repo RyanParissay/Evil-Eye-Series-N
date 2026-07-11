@@ -222,6 +222,20 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
 - Fair probabilities come only from fairForLineGroup within one |point|
   group; a benchmark missing a side or quoting a different line is a
   typed rejection. Never infer fair prices from soft-book consensus.
+- YELLOW is reserved app-wide for exactly one meaning: speculative /
+  expected value / NOT guaranteed (Risk Mode). Red stays "guaranteed
+  arb", green stays "surveillance live". EV surfaces never use the word
+  "guaranteed" unnegated — the alert format test pins it.
+- EV records (strategy 'ev', single leg + ev context) ride every shared
+  rail: same fingerprints, lifecycle, cockpit, ledger, alertWorthy. But:
+  the arb scan RESPONSE never contains them (Risk Mode reads persisted
+  records via /api/ev/board); EV alerts are per-subscription OPT-IN
+  (evEnabled, default false); the paper fund is arb-only by design.
+- Grading IS EV money: won → +stake×(odds−1), lost → −stake, void → 0,
+  written onto execution.lockedProfit. Ungraded EV completions count for
+  capture rate but sum $0 (the EXPECTED model line shows Σ stake×edge,
+  never mixed into realized). Regrade allowed until balances applied;
+  EV apply-to-balances derives from the grade, not a winning leg.
 - Stake/cap math exists exactly once (shared/stakePlanning.ts planStakes):
   a leg never exceeds its book's recorded balance — the WHOLE position
   rescales to the binding book so the guarantee survives. The client

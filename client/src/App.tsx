@@ -8,6 +8,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { AdvancedPage } from './pages/AdvancedPage';
 import { CockpitPage } from './pages/CockpitPage';
 import { LedgerPage } from './pages/LedgerPage';
+import { RiskModePage } from './pages/RiskModePage';
 import { ScanPage } from './pages/ScanPage';
 
 export function App() {
@@ -17,6 +18,7 @@ export function App() {
         <Route path="/" element={<ScanPage />} />
         <Route path="/advanced" element={<AdvancedPage />} />
         <Route path="/ledger" element={<LedgerPage />} />
+        <Route path="/risk" element={<RiskModePage />} />
         <Route path="/opportunity/:id" element={<CockpitPage />} />
       </Routes>
     </BrowserRouter>

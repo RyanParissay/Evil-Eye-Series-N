@@ -110,6 +110,48 @@ describe('apply-to-balances / revert', () => {
     expect(await revertBalances(deps, record.id)).toMatchObject({ ok: false, reason: 'conflict' });
   });
 
+  it('EV records reconcile from their grade: won pays out, lost only deducts, void returns the stake', async () => {
+    const oppStore = new MemStore<OpportunityData>({ records: [] });
+    const bookStore = new MemStore<BookmakerData>({ bookmakers: [book('bet365', 1000)] });
+    const opportunities = new OpportunityService(
+      oppStore as unknown as OpportunityDataStore,
+      new FakeArchive(),
+      () => NOW,
+    );
+    const books = new BookmakerService(bookStore as unknown as BookmakerDataStore, () => NOW);
+    const deps = { opportunities, books };
+    const evArb = {
+      ...makeArb(),
+      commenceTime: '2026-07-11T00:00:00Z',
+      legs: [{ outcome: 'Lakers', bookmakerKey: 'bet365', bookmakerTitle: 'Bet365', odds: 2.15, stake: 100, link: null }],
+      ev: { benchmarkKey: 'pinnacle', benchmarkOdds: 1.95, fairProbability: 0.5, edgePct: 7.5, benchmarkLastUpdate: NOW.toISOString() },
+    };
+    await opportunities.recordScan([evArb], { sportsScanned: ['basketball_nba'], regionTab: 'ca' });
+    const [record] = await opportunities.list();
+    await opportunities.updateStatus(record.id, 'completed', [{ odds: 2.1, stake: 400 }]);
+
+    // Ungraded EV refuses to reconcile.
+    expect(await applyToBalances(deps, record.id, 0)).toMatchObject({ ok: false, reason: 'conflict' });
+
+    // Won: −400 stake, +840 payout → net +440.
+    await opportunities.grade(record.id, 'won');
+    await applyToBalances(deps, record.id, 0);
+    expect(bookStore.data.bookmakers[0].balance).toBeCloseTo(1000 - 400 + 400 * 2.1, 2);
+    await revertBalances(deps, record.id);
+    expect(bookStore.data.bookmakers[0].balance).toBeCloseTo(1000, 2);
+
+    // Lost: only the stake leaves.
+    await opportunities.grade(record.id, 'lost');
+    await applyToBalances(deps, record.id, 0);
+    expect(bookStore.data.bookmakers[0].balance).toBeCloseTo(600, 2);
+    await revertBalances(deps, record.id);
+
+    // Void: money goes nowhere.
+    await opportunities.grade(record.id, 'void');
+    await applyToBalances(deps, record.id, 0);
+    expect(bookStore.data.bookmakers[0].balance).toBeCloseTo(1000, 2);
+  });
+
   it('guards: unknown id, not completed, no execution, bad winner index', async () => {
     const { opportunities, books } = await harness();
     const deps = { opportunities, books };

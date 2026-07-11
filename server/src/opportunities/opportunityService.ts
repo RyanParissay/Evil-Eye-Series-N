@@ -145,6 +145,40 @@ export class OpportunityService {
     });
   }
 
+  /**
+   * Grade an EV completion: the graded outcome IS its realized money
+   * (won → +stake×(odds−1), lost → −stake, void → 0). Arbs never grade —
+   * their profit is outcome-independent. Regrade is allowed until the
+   * execution has been applied to balances.
+   */
+  async grade(id: string, grade: 'won' | 'lost' | 'void'): Promise<UpdateStatusOutcome> {
+    return this.store.update((data) => {
+      const record = data.records.find((r) => r.id === id);
+      let result: UpdateStatusOutcome;
+      if (!record) {
+        result = { ok: false, reason: 'not_found', message: `Unknown opportunity: ${id}` };
+      } else if (record.strategy !== 'ev') {
+        result = { ok: false, reason: 'conflict', message: 'Only EV records grade — arb profit is outcome-independent' };
+      } else if (record.status !== 'completed' || !record.execution) {
+        result = { ok: false, reason: 'conflict', message: 'Grade after completing with filled numbers' };
+      } else if (record.execution.balancesAppliedAt) {
+        result = { ok: false, reason: 'conflict', message: 'Balances applied — revert before regrading' };
+      } else {
+        const execution = record.execution;
+        const [leg] = execution.filledLegs;
+        execution.grade = grade;
+        execution.lockedProfit =
+          grade === 'won'
+            ? Math.round(leg.stake * (leg.odds - 1) * 100) / 100
+            : grade === 'lost'
+              ? -Math.round(leg.stake * 100) / 100
+              : 0;
+        result = { ok: true, record };
+      }
+      return { data, result };
+    });
+  }
+
   /** Marks (or clears, with null) the applied-to-balances state. */
   async markBalancesApplied(
     id: string,

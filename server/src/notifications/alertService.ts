@@ -196,6 +196,95 @@ export async function notifyNewOpportunities(
   });
 }
 
+/**
+ * Risk Mode alert: honest by construction — edge and win probability up
+ * front, "Not guaranteed" always, the word "guaranteed" never unqualified.
+ */
+export function formatEvAlertMessage(
+  opportunity: ArbOpportunity,
+  stake?: number,
+  appUrl?: string,
+): string {
+  const [leg] = opportunity.legs;
+  const ev = opportunity.ev!;
+  const line = leg.point != null ? ` ${formatPoint(leg.point)}` : '';
+  const link = appUrl
+    ? ` ${appUrl.replace(/\/$/, '')}/opportunity/${opportunityIdFromFingerprint(opportunityFingerprint(opportunity))}`
+    : '';
+  const stakePart = stake != null && stake > 0 ? ` Stake $${stake.toFixed(2)}.` : '';
+  return (
+    `🎲 EV bet: ${opportunity.eventName} (${opportunity.marketKey}) — ` +
+    `${leg.outcome}${line} @${leg.odds} at ${leg.bookmakerTitle}. ` +
+    `Edge ${ev.edgePct.toFixed(1)}%, win probability ${Math.round(ev.fairProbability * 100)}%.` +
+    `${stakePart} Not guaranteed — expected value.${link}`
+  );
+}
+
+export interface EvAlertDeps extends AlertDeps {
+  /** Global EV alert threshold (settings), applied per opted-in subscriber. */
+  evThresholdPercent: number;
+  /** Flat stake quoted in the message (fund default), when configured. */
+  stake?: number;
+}
+
+/**
+ * EV alerts are OFF unless a subscription opted in (evEnabled) — the
+ * emotional contract differs from arbs, so delivery is a choice. Shares
+ * the sent-alert dedup store and the hourly rate-limit budget.
+ */
+export async function notifyEvBets(
+  deps: EvAlertDeps,
+  evOpportunities: ArbOpportunity[],
+): Promise<NotifyResult> {
+  const now = (deps.now ?? (() => new Date()))();
+
+  return deps.store.update(async (data) => {
+    const rateCutoff = now.getTime() - HOUR_MS;
+    const alreadySent = new Set(data.sentAlerts.map((r) => `${r.phoneE164}|${r.fingerprint}`));
+    const sent = new Set<string>();
+
+    for (const subscription of data.subscriptions) {
+      if (!subscription.verified || !subscription.active || !subscription.evEnabled) continue;
+      let budget =
+        WHATSAPP_MAX_ALERTS_PER_HOUR -
+        subscription.sendTimestamps.filter((t) => Date.parse(t) > rateCutoff).length;
+      const worthy = alertWorthy(evOpportunities, deps.evThresholdPercent, (fingerprint) =>
+        alreadySent.has(`${subscription.phoneE164}|${fingerprint}`),
+      );
+      for (const { opportunity, fingerprint } of worthy) {
+        if (budget <= 0) break;
+        if (!subscription.active) break;
+        try {
+          await deps.sender.send(
+            subscription.phoneE164,
+            formatEvAlertMessage(opportunity, deps.stake, deps.appUrl),
+          );
+          budget -= 1;
+          subscription.failedSendCount = 0;
+          subscription.sendTimestamps.push(now.toISOString());
+          sent.add(fingerprint);
+          data.sentAlerts.push({
+            phoneE164: subscription.phoneE164,
+            fingerprint,
+            profitPct: opportunity.profitPct,
+            sentAt: now.toISOString(),
+          });
+        } catch (err) {
+          subscription.failedSendCount += 1;
+          console.warn(`WhatsApp EV send failed for ${maskPhone(subscription.phoneE164)}:`, err);
+          if (subscription.failedSendCount >= WHATSAPP_MAX_CONSECUTIVE_FAILURES) {
+            subscription.active = false;
+          }
+        }
+        subscription.updatedAt = now.toISOString();
+      }
+    }
+
+    prune(data, now);
+    return { data, result: { sentFingerprints: [...sent] } };
+  });
+}
+
 /** Sent-alert records and rate-limit timestamps both age out. */
 function prune(data: WhatsAppData, now: Date): void {
   const sentCutoff = now.getTime() - WHATSAPP_SENT_ALERT_RETENTION_MS;

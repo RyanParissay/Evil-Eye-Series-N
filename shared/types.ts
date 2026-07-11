@@ -74,6 +74,20 @@ export interface ArbLeg {
   link: string | null;
 }
 
+/**
+ * The speculative payload on an EV opportunity (strategy 'ev'): why this
+ * price beats the sharp benchmark. Expected value — NOT guaranteed.
+ */
+export interface EvContext {
+  benchmarkKey: string;
+  benchmarkOdds: number;
+  /** De-vigged win probability from the benchmark's line group. */
+  fairProbability: number;
+  /** fairProbability × offeredOdds − 1, in percent. */
+  edgePct: number;
+  benchmarkLastUpdate: string;
+}
+
 export interface ArbOpportunity {
   /**
    * The persisted OpportunityRecord id (fingerprint prefix), filled by the
@@ -81,6 +95,8 @@ export interface ArbOpportunity {
    * Absent only on engine output that hasn't passed through detection.
    */
   id?: string;
+  /** Present on speculative (EV) opportunities; absent on true arbs. */
+  ev?: EvContext;
   eventId: string;
   sportKey: string;
   sportTitle: string;
@@ -123,7 +139,7 @@ export type OpportunityStatus = 'active' | 'degraded' | 'dead' | 'completed';
  * the discriminator is here so future strategies (+EV, middles) can share
  * the persistence and alert rails without a migration.
  */
-export type OpportunityStrategy = 'arb';
+export type OpportunityStrategy = 'arb' | 'ev';
 
 /** Actual filled numbers captured when the user completes an opportunity. */
 export interface OpportunityExecution {
@@ -136,6 +152,11 @@ export interface OpportunityExecution {
   /** Set when the user applied this execution to book balances (revertible). */
   balancesAppliedAt?: string | null;
   winningLegIndex?: number | null;
+  /**
+   * EV records only: the graded outcome. Grading is what turns an EV
+   * completion into realized P&L; ungraded completions sum $0 forever.
+   */
+  grade?: 'won' | 'lost' | 'void' | null;
 }
 
 export interface OpportunityRecord {
@@ -168,6 +189,8 @@ export interface OpportunityRecord {
   alertedAt: string | null;
   /** Present once the user completed it with actual filled numbers. */
   execution?: OpportunityExecution;
+  /** Present on speculative (EV) records; refreshed each re-detection. */
+  ev?: EvContext;
   /** Reaction-funnel timestamps, first-write-wins; absent steps stay absent. */
   funnel?: {
     cockpitOpenedAt?: string;
@@ -194,6 +217,11 @@ export interface LedgerSummary {
     /** Completions recorded without filled numbers — counted, never summed. */
     unpricedCompletions: number;
   };
+  /**
+   * EXPECTED (model): Σ(stake × edge) over placed-but-ungraded EV bets.
+   * Never mixed into realized totals — it is a model, not money.
+   */
+  evExpected: { bets: number; profit: number };
   equity: Array<{ at: string; cumulativeProfit: number }>;
   monthly: Array<{ month: string; lockedProfit: number; completions: number }>;
   /** Stake-weighted attribution — an arb's profit is not truly per-book. */
@@ -338,8 +366,23 @@ export interface WhatsAppStatus {
   pendingVerification: boolean;
   phoneMasked: string | null;
   thresholdPercent: number | null;
+  /** Risk Mode opt-in — EV alerts are off by default. */
+  evEnabled: boolean;
   /** True when the server logs messages instead of sending via Twilio. */
   devMode: boolean;
+}
+
+/* ————— Risk Mode / EV (Speculative phase 10) ————— */
+
+export interface EvSettings {
+  /** Bets below this edge never surface in the Risk Mode board. */
+  showMinEdgePct: number;
+  /** Alert threshold (per-subscription toggle gates delivery). */
+  alertMinEdgePct: number;
+  /** Model error dominates longshots — cap candidate odds. */
+  maxOdds: number;
+  /** Stale benchmark = phantom edges — cap benchmark age. */
+  maxBenchmarkAgeMins: number;
 }
 
 /* ————— Paper trading (Phase 6) — everything here is SIMULATED ————— */

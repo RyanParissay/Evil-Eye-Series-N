@@ -290,6 +290,43 @@ describe('runScan', () => {
     expect(books).toContain('pinnacle');
   });
 
+  it('EV detection rides the scan: persisted + notified, but NEVER in the arb response', async () => {
+    // Feed: the totals arb (bet365/pinnacle) — pinnacle's fresh side also
+    // makes bet365's 2.1 price an EV bet against the de-vigged benchmark.
+    const recorded: unknown[][] = [];
+    const notified: unknown[][] = [];
+    const result = await runScan(
+      deps(stubProvider([totalsArbEvent()]), {
+        markets: ['totals'],
+        ev: {
+          settings: async () => ({
+            showMinEdgePct: 1,
+            alertMinEdgePct: 3,
+            maxOdds: 4,
+            maxBenchmarkAgeMins: 60,
+          }),
+        },
+        opportunityLog: {
+          async recordScan(opportunities) {
+            recorded.push(opportunities as unknown[]);
+          },
+        },
+        notifier: (opportunities) => {
+          notified.push(opportunities as unknown[]);
+        },
+      }),
+      { topN: 5, tab: CA_TAB },
+    );
+    // The scan response stays arb-only — the arb UI never sees EV rows.
+    expect(result.opportunities.every((o) => o.ev === undefined)).toBe(true);
+    // Persistence and the notifier see both strategies.
+    const persisted = recorded[0] as Array<{ ev?: unknown }>;
+    expect(persisted.some((o) => o.ev !== undefined)).toBe(true);
+    expect(persisted.some((o) => o.ev === undefined)).toBe(true);
+    const pushed = notified[0] as Array<{ ev?: unknown }>;
+    expect(pushed.some((o) => o.ev !== undefined)).toBe(true);
+  });
+
   it('appends a scan-history line with the raw feed facts (Phase 8)', async () => {
     const appended: unknown[] = [];
     await runScan(

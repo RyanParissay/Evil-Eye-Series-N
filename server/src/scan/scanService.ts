@@ -5,12 +5,16 @@
  */
 import type {
   ArbOpportunity,
+  EvSettings,
   OddsEvent,
   ScanLogEntry,
   ScanMeta,
   ScanResponse,
   UsageReport,
 } from '@shared/types';
+import { BENCHMARK_BOOKS } from '../config/constants';
+import { findEvBets, type EvBet } from '../engine/evDetection';
+import { opportunityFingerprint, opportunityIdFromFingerprint } from '../opportunities/opportunityId';
 import type { RegionTabConfig } from '@shared/regionTabs';
 import type { FetchPlan } from '../bookmakers/effectiveBookmakers';
 import {
@@ -45,6 +49,12 @@ export interface ScanDeps {
   snapshots?: SnapshotIntegration;
   /** Per-scan history line (ops/scanHistoryStore.ts). Optional, non-fatal. */
   scanLog?: ScanLogIntegration;
+  /**
+   * Risk Mode: EV detection rides the same raw feed — zero extra credits.
+   * EV opportunities go to persistence and the notifier, NEVER into the
+   * arb scan response.
+   */
+  ev?: { settings(): Promise<EvSettings> };
 }
 
 /** What runScan needs from ScanHistoryStore — structural, for tests. */
@@ -148,6 +158,26 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
     { topN, now: now(), marketKeys: [...markets] },
   );
 
+  // 4¼. Risk Mode: EV bets from the SAME raw feed against the sharp
+  //      benchmark — expected value, not guaranteed; they join persistence
+  //      and alerts below but never the arb response.
+  let evOpportunities: ArbOpportunity[] = [];
+  if (deps.ev) {
+    try {
+      const settings = await deps.ev.settings();
+      const allowed = plan ? plan.allowedKeys : tab.allowedBookmakers;
+      evOpportunities = findEvBets(rawEvents, allowed, BENCHMARK_BOOKS, {
+        showMinEdgePct: settings.showMinEdgePct,
+        maxOdds: settings.maxOdds,
+        maxBenchmarkAgeMins: settings.maxBenchmarkAgeMins,
+        now: now(),
+      }).map(evBetToOpportunity);
+    } catch (err) {
+      console.warn('EV detection failed (arb scan unaffected):', err);
+    }
+  }
+  const allDetected = [...opportunities, ...evOpportunities];
+
   // 4⅓. Persist: the raw snapshot (offline recomputation) and the
   //      opportunity records (IDs, lifecycle). Neither failure is fatal,
   //      but recording MUST precede alert dispatch so markAlerted has
@@ -168,7 +198,7 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
   }
   if (deps.opportunityLog) {
     try {
-      await deps.opportunityLog.recordScan(opportunities, {
+      await deps.opportunityLog.recordScan(allDetected, {
         sportsScanned: scannedKeys,
         regionTab: tab.key,
       });
@@ -179,9 +209,10 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
 
   // 4½. Alert dispatch is deliberately not awaited: subscribers get their
   //     WhatsApp messages while the HTTP response returns immediately.
+  //     The notifier receives BOTH strategies; the composition splits them.
   if (deps.notifier) {
     try {
-      void Promise.resolve(deps.notifier(opportunities)).catch((err) => {
+      void Promise.resolve(deps.notifier(allDetected)).catch((err) => {
         console.warn('Alert notifier failed:', err);
       });
     } catch (err) {
@@ -243,6 +274,36 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
   }
 
   return { opportunities, meta };
+}
+
+/** An EV bet as a single-leg opportunity riding the shared record rails. */
+function evBetToOpportunity(bet: EvBet): ArbOpportunity {
+  const opportunity: ArbOpportunity = {
+    ev: bet.ev,
+    eventId: bet.eventId,
+    sportKey: bet.sportKey,
+    sportTitle: bet.sportTitle,
+    eventName: bet.eventName,
+    commenceTime: bet.commenceTime,
+    marketKey: bet.marketKey,
+    arbIndex: 1, // meaningless for EV; never displayed on EV surfaces
+    profitPct: bet.ev.edgePct, // semantics: EXPECTED edge, not guaranteed
+    legs: [
+      {
+        outcome: bet.outcome,
+        point: bet.point,
+        bookmakerKey: bet.bookmakerKey,
+        bookmakerTitle: bet.bookmakerTitle,
+        odds: bet.odds,
+        stake: 100, // placeholder split; Risk Mode quotes flat/Kelly stakes
+        link: bet.link,
+      },
+    ],
+    sameBookmaker: false,
+    suspicious: false,
+  };
+  opportunity.id = opportunityIdFromFingerprint(opportunityFingerprint(opportunity));
+  return opportunity;
 }
 
 function maxOrNull(values: Array<number | null>): number | null {

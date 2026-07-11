@@ -100,6 +100,28 @@ export function createOpportunitiesRouter(
     });
   }
 
+  // Risk Mode grading: WON/LOST/VOID turns an EV completion into realized
+  // money. Regrade allowed until balances are applied.
+  router.post('/:id/grade', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const grade = (req.body ?? {}).grade;
+      if (grade !== 'won' && grade !== 'lost' && grade !== 'void') {
+        res.status(400).json(errorBody('bad_request', "grade must be 'won', 'lost', or 'void'"));
+        return;
+      }
+      const outcome = await service.grade(req.params.id, grade);
+      if (!outcome.ok) {
+        const httpStatus =
+          outcome.reason === 'not_found' ? 404 : outcome.reason === 'conflict' ? 409 : 400;
+        res.status(httpStatus).json(errorBody(outcome.reason, outcome.message));
+        return;
+      }
+      res.json(outcome.record);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // Reaction-funnel pings from the cockpit — first write wins, later
   // calls no-op. Pure telemetry: no lifecycle effect whatsoever.
   router.post('/:id/funnel', async (req: Request, res: Response, next: NextFunction) => {

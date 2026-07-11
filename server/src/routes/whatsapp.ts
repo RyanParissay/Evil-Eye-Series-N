@@ -159,6 +159,33 @@ export function createWhatsAppRouter(deps: WhatsAppRouteDeps): Router {
     }
   });
 
+  // Risk Mode opt-in: EV alerts are a per-subscriber choice, off by
+  // default — individual EV bets lose by design.
+  router.patch('/ev', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const enabled = (req.body ?? {}).enabled;
+      if (typeof enabled !== 'boolean') {
+        res.status(400).json(errorBody('bad_request', 'enabled must be boolean'));
+        return;
+      }
+      const status = await deps.store.update((data) => {
+        const subscription = data.subscriptions[0];
+        if (subscription) {
+          subscription.evEnabled = enabled;
+          subscription.updatedAt = now().toISOString();
+        }
+        return { data, result: subscription ? statusOf(subscription, deps.sender) : null };
+      });
+      if (!status) {
+        res.status(400).json(errorBody('bad_request', 'No WhatsApp number connected'));
+        return;
+      }
+      res.json(status);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // A successful test proves delivery works again, so it also clears the
   // failure counter and reactivates a subscription that alert failures
   // paused — "send a test message" doubles as the recovery button.
@@ -224,6 +251,7 @@ function statusOf(
     pendingVerification: !!subscription && !subscription.verified && !!subscription.verification,
     phoneMasked: subscription ? maskPhone(subscription.phoneE164) : null,
     thresholdPercent: subscription?.thresholdPercent ?? null,
+    evEnabled: subscription?.evEnabled ?? false,
     devMode: sender.mode === 'console',
   };
 }
