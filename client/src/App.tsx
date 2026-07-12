@@ -7,6 +7,7 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { AdvancedPage } from './pages/AdvancedPage';
 import { CockpitPage } from './pages/CockpitPage';
+import { HubPage } from './pages/HubPage';
 import { LedgerPage } from './pages/LedgerPage';
 import { PortfoliosPage } from './pages/PortfoliosPage';
 import { RiskModePage } from './pages/RiskModePage';
@@ -23,6 +24,7 @@ export function App() {
         <Route path="/risk" element={<RiskModePage />} />
         <Route path="/portfolios" element={<PortfoliosPage />} />
         <Route path="/scans" element={<ScanHistoryPage />} />
+        <Route path="/hub" element={<HubPage />} />
         <Route path="/opportunity/:id" element={<CockpitPage />} />
       </Routes>
     </BrowserRouter>
