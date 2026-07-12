@@ -34,3 +34,22 @@ export function scoresSharePct(scoresSpendToday: number, cap: number): number | 
   if (cap <= 0) return null;
   return Math.round((scoresSpendToday / cap) * 100);
 }
+
+/** The confirmation block of /api/ops/cost-estimate (Phase 16 Part A). */
+export interface ConfirmationCostView {
+  intervalSecs: number;
+  /** Share of recent scans that left ≥1 candidate (and so bought a scan B). */
+  hitRate: number;
+  /** MEASURED from ≥50 logged scans in 14 days, else the ASSUMED 30%. */
+  hitRateSource: 'measured' | 'assumed';
+  samples: number;
+  /** cost(A) + hitRate × cost(B) — the honest per-window number. */
+  creditsPerPairWindow: number;
+}
+
+/** "≈13 credits/window · 30% hit rate (ASSUMED)" — server-computed numbers,
+ *  display-only here (the client does no credit math of its own). */
+export function describePairCost(c: ConfirmationCostView): string {
+  const pct = Math.round(c.hitRate * 100);
+  return `≈${c.creditsPerPairWindow} credits/window · ${pct}% hit rate (${c.hitRateSource.toUpperCase()})`;
+}

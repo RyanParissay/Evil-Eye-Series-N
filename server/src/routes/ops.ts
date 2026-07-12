@@ -18,7 +18,14 @@ import type {
   Scoreboard,
 } from '@shared/types';
 import { regionTabByKey, type RegionTabConfig } from '@shared/regionTabs';
-import { BENCHMARK_BOOKS, MAX_TOP_N } from '../config/constants';
+import {
+  BENCHMARK_BOOKS,
+  CONFIRMATION_ASSUMED_HIT_RATE,
+  CONFIRMATION_HIT_RATE_MIN_SAMPLES,
+  CONFIRMATION_HIT_RATE_WINDOW_MS,
+  DEFAULT_CONFIRMATION_INTERVAL_SECS,
+  MAX_TOP_N,
+} from '../config/constants';
 import { computeCoverage } from '../ops/coverageService';
 import { buildScanBrowser } from '../ops/scanBrowser';
 import { computeSurvival } from '../ops/survivalService';
@@ -122,21 +129,36 @@ export function createOpsRouter(deps: OpsRouterDeps): Router {
         res.status(400).json(errorBody('bad_request', 'regionTab required'));
         return;
       }
-      const [settings, plan] = await Promise.all([
+      const [settings, plan, scans] = await Promise.all([
         deps.settings.read(),
         deps.fetchPlan(tab),
+        allScans(deps),
       ]);
       const regionEquivalents = plan.bookmakersParam
         ? Math.ceil(plan.bookmakersParam.length / 10)
         : tab.apiRegions.length;
       const marketCount = 1 + Number(settings.markets.totals) + Number(settings.markets.spreads);
+      const creditsPerScan = marketCount * regionEquivalents * topN;
+      // Phase 16 Part A: the conditional pair. Scan B costs the same as A
+      // and fires only when A left candidates, so the honest per-window
+      // number is cost(A) + hitRate × cost(B). The plain per-scan number
+      // stays visible alongside it.
+      const { hitRate, source, samples } = confirmationHitRate(scans, now());
       res.json({
         regionTab: tab.key,
         topN,
         marketCount,
         regionEquivalents,
         creditsPerSport: marketCount * regionEquivalents,
-        creditsPerScan: marketCount * regionEquivalents * topN,
+        creditsPerScan,
+        confirmation: {
+          intervalSecs:
+            settings.scheduler.confirmationIntervalSecs ?? DEFAULT_CONFIRMATION_INTERVAL_SECS,
+          hitRate,
+          hitRateSource: source,
+          samples,
+          creditsPerPairWindow: Math.round(creditsPerScan * (1 + hitRate) * 100) / 100,
+        },
       });
     } catch (err) {
       next(err);
@@ -235,6 +257,32 @@ async function allScans(deps: OpsRouterDeps): Promise<ScanLogEntry[]> {
   const scans: ScanLogEntry[] = [];
   for await (const entry of deps.scanHistory.entries()) scans.push(entry);
   return scans;
+}
+
+/**
+ * Share of the last 14 days' scans that left ≥1 confirmation candidate
+ * (i.e. bought a scan B). MEASURED once ≥50 in-window lines carry the
+ * candidates field; pre-Phase-16 lines never count. Below the bar it is
+ * the ASSUMED 30% — the same measured-vs-assumed honesty idiom as the
+ * paper haircut.
+ */
+export function confirmationHitRate(
+  scans: ScanLogEntry[],
+  now: Date,
+): { hitRate: number; source: 'measured' | 'assumed'; samples: number } {
+  const cutoff = now.getTime() - CONFIRMATION_HIT_RATE_WINDOW_MS;
+  const window = scans.filter(
+    (s) => s.confirmationCandidates != null && Date.parse(s.scannedAt) >= cutoff,
+  );
+  if (window.length >= CONFIRMATION_HIT_RATE_MIN_SAMPLES) {
+    const hits = window.filter((s) => (s.confirmationCandidates ?? 0) > 0).length;
+    return {
+      hitRate: Math.round((hits / window.length) * 10_000) / 10_000,
+      source: 'measured',
+      samples: window.length,
+    };
+  }
+  return { hitRate: CONFIRMATION_ASSUMED_HIT_RATE, source: 'assumed', samples: window.length };
 }
 
 /** Month-to-date burn → naive calendar-month projection + stop state. */

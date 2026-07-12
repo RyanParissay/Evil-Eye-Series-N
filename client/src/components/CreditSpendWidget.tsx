@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Scoreboard } from '../../../shared/types';
-import { fetchGradingStatus, fetchScoreboard, type GradingStatus } from '../api';
-import { creditSpendSeverity, scoresSharePct } from '../creditWidget';
+import { fetchCostEstimate, fetchGradingStatus, fetchScoreboard, type CostEstimate, type GradingStatus } from '../api';
+import { creditSpendSeverity, describePairCost, scoresSharePct } from '../creditWidget';
 
 /**
  * Phase 15 #7: spent/budget, projected month-end, and today's scores
@@ -10,20 +10,33 @@ import { creditSpendSeverity, scoresSharePct } from '../creditWidget';
  * Amber at projected ≥80% of budget, red at ≥100% — numeric danger, not
  * the arb red (CLAUDE.md's red/green/yellow reservations are untouched).
  */
-export function CreditSpendWidget({ refreshKey }: { refreshKey?: number | null }) {
+export function CreditSpendWidget({
+  refreshKey,
+  regionTab,
+  topN,
+}: {
+  refreshKey?: number | null;
+  /** Scope for the per-window pair cost (Phase 16 Part A); omit to hide it. */
+  regionTab?: string;
+  topN?: number;
+}) {
   const [scoreboard, setScoreboard] = useState<Scoreboard | null>(null);
   const [grading, setGrading] = useState<GradingStatus | null>(null);
+  const [estimate, setEstimate] = useState<CostEstimate | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void Promise.allSettled([
       fetchScoreboard().then((s) => !cancelled && setScoreboard(s)),
       fetchGradingStatus().then((g) => !cancelled && setGrading(g)),
+      regionTab && topN
+        ? fetchCostEstimate(regionTab, topN).then((e) => !cancelled && setEstimate(e))
+        : Promise.resolve(),
     ]);
     return () => {
       cancelled = true;
     };
-  }, [refreshKey]);
+  }, [refreshKey, regionTab, topN]);
 
   if (!scoreboard) return null;
 
@@ -48,6 +61,16 @@ export function CreditSpendWidget({ refreshKey }: { refreshKey?: number | null }
           <span className="micro-label">scores share today</span>
           <strong>{share == null ? '—' : `${share}%`}</strong>
         </div>
+        {estimate && (
+          <div className="credit-widget-stat">
+            <span className="micro-label">per scan window</span>
+            <strong title={describePairCost(estimate.confirmation)}>
+              ≈{estimate.confirmation.creditsPerPairWindow} cr ·{' '}
+              {Math.round(estimate.confirmation.hitRate * 100)}%{' '}
+              {estimate.confirmation.hitRateSource === 'measured' ? 'MEASURED' : 'ASSUMED'}
+            </strong>
+          </div>
+        )}
         {severity !== 'ok' && (
           <span className={`chip ${severity === 'red' ? 'chip-warn' : 'chip-amber'}`}>
             {severity === 'red' ? '⚠ PROJECTED OVER BUDGET' : '⚠ PROJECTED ≥80% OF BUDGET'}

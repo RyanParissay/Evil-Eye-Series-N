@@ -168,7 +168,7 @@ export function ScanPage() {
 
       <FundPanel refreshKey={lastScanAt} />
 
-      <CreditSpendWidget refreshKey={lastScanAt} />
+      <CreditSpendWidget refreshKey={lastScanAt} regionTab={regionTab} topN={topN} />
 
       <WhatsAppPanel />
 

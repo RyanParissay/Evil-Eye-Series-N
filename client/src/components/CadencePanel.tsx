@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { OpsSettings, SchedulerBlock, SurvivalStats } from '../../../shared/types';
+import { describePairCost } from '../creditWidget';
 import {
   fetchCostEstimate,
   fetchSurvival,
@@ -85,6 +86,14 @@ export function CadencePanel({
           <span className="micro-label" title="markets × region-equivalents × sports">
             ≈{estimate.creditsPerScan} credits/scan ({estimate.marketCount} market
             {estimate.marketCount === 1 ? '' : 's'} × {estimate.regionEquivalents} RE × {estimate.topN})
+          </span>
+        )}
+        {estimate && (
+          <span
+            className="micro-label"
+            title="a scan window = scan A + (hit rate × confirmation scan B)"
+          >
+            {describePairCost(estimate.confirmation)}
           </span>
         )}
         <button type="button" className="cadence-edit micro-label" onClick={() => setOpen(!open)}>

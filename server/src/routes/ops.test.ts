@@ -161,6 +161,68 @@ describe('/api/ops', () => {
     expect(on.body).toMatchObject({ marketCount: 3, creditsPerScan: 30 });
   });
 
+  it('cost estimate models the conditional pair: ASSUMED 30% before 50 samples, the plain number kept', async () => {
+    const { app } = harness();
+    const res = await request(app).get('/api/ops/cost-estimate?regionTab=ca&topN=5');
+    expect(res.status).toBe(200);
+    expect(res.body.creditsPerScan).toBe(10); // the plain per-scan number stays visible
+    expect(res.body.confirmation).toEqual({
+      intervalSecs: 60,
+      hitRate: 0.3,
+      hitRateSource: 'assumed',
+      samples: 0,
+      creditsPerPairWindow: 13, // 10 × (1 + 0.30)
+    });
+  });
+
+  it('cost estimate MEASURES the hit rate from the last 14 days once ≥50 logged scans carry candidates', async () => {
+    const line = (daysAgo: number, candidates?: number): ScanLogEntry => ({
+      scannedAt: new Date(NOW.getTime() - daysAgo * 86_400_000).toISOString(),
+      regionTab: 'ca',
+      sportsScanned: ['basketball_nba'],
+      creditsComputed: 10,
+      requestsUsedTotal: null,
+      distinctBooks: [],
+      eventCount: 1,
+      ...(candidates != null && { confirmationCandidates: candidates }),
+    });
+    const scans: ScanLogEntry[] = [
+      ...Array.from({ length: 15 }, (_, i) => line(i % 10, 1)), // 15 hits
+      ...Array.from({ length: 45 }, (_, i) => line(i % 10, 0)), // 45 misses
+      ...Array.from({ length: 30 }, () => line(2)), // pre-Phase-16 lines: excluded
+      ...Array.from({ length: 30 }, () => line(20, 1)), // outside 14 days: excluded
+    ];
+    const { app } = harness(scans);
+    const res = await request(app).get('/api/ops/cost-estimate?regionTab=ca&topN=5');
+    expect(res.body.confirmation).toEqual({
+      intervalSecs: 60,
+      hitRate: 0.25, // 15 / 60
+      hitRateSource: 'measured',
+      samples: 60,
+      creditsPerPairWindow: 12.5, // 10 × 1.25
+    });
+  });
+
+  it('cost estimate hit rate stays ASSUMED at 49 in-window samples (the ≥50 boundary)', async () => {
+    const line = (candidates: number): ScanLogEntry => ({
+      scannedAt: new Date(NOW.getTime() - 3_600_000).toISOString(),
+      regionTab: 'ca',
+      sportsScanned: ['basketball_nba'],
+      creditsComputed: 10,
+      requestsUsedTotal: null,
+      distinctBooks: [],
+      eventCount: 1,
+      confirmationCandidates: candidates,
+    });
+    const { app } = harness(Array.from({ length: 49 }, (_, i) => line(i % 2)));
+    const res = await request(app).get('/api/ops/cost-estimate?regionTab=ca&topN=5');
+    expect(res.body.confirmation).toMatchObject({
+      hitRate: 0.3,
+      hitRateSource: 'assumed',
+      samples: 49,
+    });
+  });
+
   it('GET coverage / telemetry / scoreboard respond from persisted data only', async () => {
     const { app } = harness([
       {

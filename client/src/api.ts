@@ -2,6 +2,7 @@
  * Thin typed client for the Express API. The API key never reaches this
  * side of the wire — the server proxies The Odds API.
  */
+import type { ConfirmationCostView } from './creditWidget';
 import type { RegionTabKey } from '../../shared/regionTabs';
 import type {
   ApiErrorBody,
@@ -397,6 +398,8 @@ export interface CostEstimate {
   regionEquivalents: number;
   creditsPerSport: number;
   creditsPerScan: number;
+  /** Phase 16 Part A: the conditional pair — cost(A) + hitRate × cost(B). */
+  confirmation: ConfirmationCostView;
 }
 
 export async function fetchCostEstimate(regionTab: string, topN: number): Promise<CostEstimate> {

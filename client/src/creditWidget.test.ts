@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { creditSpendSeverity, scoresSharePct } from './creditWidget';
+import { creditSpendSeverity, describePairCost, scoresSharePct } from './creditWidget';
 
 describe('creditSpendSeverity', () => {
   it('is ok well below 80% of budget', () => {
@@ -28,6 +28,32 @@ describe('creditSpendSeverity', () => {
 
   it('is ok when budget is non-positive (nothing to divide by)', () => {
     expect(creditSpendSeverity(100, 0)).toBe('ok');
+  });
+});
+
+describe('describePairCost (Phase 16 Part A — conditional pair)', () => {
+  it('labels an assumed hit rate ASSUMED, showing the per-window number', () => {
+    expect(
+      describePairCost({
+        intervalSecs: 60,
+        hitRate: 0.3,
+        hitRateSource: 'assumed',
+        samples: 12,
+        creditsPerPairWindow: 13,
+      }),
+    ).toBe('≈13 credits/window · 30% hit rate (ASSUMED)');
+  });
+
+  it('labels a measured hit rate MEASURED', () => {
+    expect(
+      describePairCost({
+        intervalSecs: 60,
+        hitRate: 0.25,
+        hitRateSource: 'measured',
+        samples: 60,
+        creditsPerPairWindow: 12.5,
+      }),
+    ).toBe('≈12.5 credits/window · 25% hit rate (MEASURED)');
   });
 });
 
