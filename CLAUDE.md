@@ -147,22 +147,31 @@ server/src/
   scheduler/     Phase 16: THE one owner of wall-clock scheduling — the module
                  that retired "no server-side schedulers". plan.ts (PURE,
                  engine-grade) maps (settings, now, scan history, score polls,
-                 budget, pending confirmation pair) → ONE next action: run
-                 scan / run confirmation scan B / resolve a lapsed pair / run
-                 score poll / sleep until T; its global gates make it budget-,
-                 cap-, and quiet-hours-aware by construction.
+                 budget, pending confirmation pair, dense-week state) → ONE
+                 next action: run scan / run confirmation scan B / resolve a
+                 lapsed pair / run score poll / sleep until T; its global gates
+                 make it budget-, cap-, and quiet-hours-aware by construction.
                  confirmationPair.test.ts holds Part A's binding acceptance
                  fixtures (mini index.ts composition, counting provider,
                  injectable clock — no test sleeps). scheduler.ts is the single
                  self-rescheduling setTimeout chain (injectable clock/timer so
                  no test sleeps), started from index.ts; it self-disables
-                 persistently on spent-quota / rejected-key errors.
+                 persistently on spent-quota / rejected-key errors, and each
+                 tick resolves the dense week (Part C.3) from scan history.
+                 denseWeek.ts (PURE, Part C.3) derives the dense-week interval
+                 + day/week spend + cap banner; optimizer.ts (PURE, Part C.4)
+                 is the deterministic MODEL weekly proposal (density→blocks
+                 under quiet-hours + ≥1-window-per-2h + spend-ceiling
+                 constraints). routes/scheduler.ts is their HTTP boundary
+                 (zero credits structural): dense-week start/cancel/status +
+                 GET/apply proposal — the SOLE writer of scheduler.blocks.
                  vancouverTime.ts is the DST-safe America/Vancouver clock via
-                 Intl/IANA (local fields, quiet-hours predicate, next-08:00
-                 boundary, local→epoch). realTimer.ts holds the ONLY real
-                 setTimeout in server/src (timerScope.test enforces the scope).
-                 routes/quietHoursGuard.ts is the route-level half of quiet
-                 hours (manual scan + cockpit re-verify).
+                 Intl/IANA (local fields, quiet-hours predicate, next-08:00 +
+                 next-local-midnight boundaries, local→epoch). realTimer.ts
+                 holds the ONLY real setTimeout in server/src (timerScope.test
+                 enforces the scope). routes/quietHoursGuard.ts is the
+                 route-level half of quiet hours (manual scan + cockpit
+                 re-verify).
   routes/        Express boundary: parse → runScan → JSON; ProviderError → HTTP status.
                  api.ts (/api/scan, /api/last-scan) + whatsapp.ts (/api/whatsapp/*).
   config/        constants.ts (every tunable) + bookmakerLinks.ts (homepage fallbacks)
@@ -219,6 +228,25 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   disabled; the pending pair is STORE-derived, so with no pending records a
   reload stays completely inert, and a pending pair survives the reload
   (fires or lapses honestly) instead of hanging.
+- **Dense week + weekly proposal (Phase 16 Part C).** The dense
+  data-gathering week (`scheduler.denseWeek.startedAt`, user-started via
+  POST /api/scheduler/dense-week; DELETE cancels) runs 7 days and OVERRIDES
+  the enabled gate — it scans even while `enabled:false`, so it is DELIBERATELY
+  absent by default and NEVER migrated in (a present denseWeek would burn
+  credits on the hot-reloading dev server). While active it replaces block
+  cadence with pairs across all allowed hours at an interval DERIVED from
+  measured per-pair cost (`max(5, ceil(1020 × perPairCost / 4500))`, perPairCost
+  = per-scan credits × (1 + measured hit rate)). Two HARD caps, measured from
+  scan-history `creditsComputed` scoped to the week, hard-stop SCHEDULED
+  scanning (manual scans stay allowed): 4,500/Vancouver-day (resumes next local
+  midnight) and 30,000/week (stops for the week) — quiet hours stay absolute
+  and the 95% monthly auto-stop still applies on top. Day 7 → falls back to
+  normal blocks automatically and denseWeek clears. The weekly optimizer
+  (`scheduler/optimizer.ts`) is DETERMINISTIC and PROPOSE-ONLY: GET
+  /api/scheduler/proposal computes a fresh MODEL proposal (409 below 7 days of
+  history); POST /api/scheduler/proposal/apply is the ONLY writer of
+  `scheduler.blocks` and stamps `proposalAppliedAt` — NEVER auto-applied, no
+  timer-driven recompute.
 - **Quiet hours are absolute** — zero Odds API calls of ANY kind 01:00–08:00
   America/Vancouver, DST-safe via Intl/IANA (never a fixed UTC offset).
   `plan.ts` blocks scheduler scans AND score polls; a route guard 503s manual
@@ -421,3 +449,11 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   tab is correctly excluded from that scan's drill-down (its regionTab is
   stamped at creation and never moves); this is intentional scope
   discipline, not a bug to "fix" with looser matching.
+- The MODEL label is a standing honesty rule (portfolios optimizer +, since
+  Phase 16 Part C.4, the weekly schedule proposal): a deterministic in-sample
+  fit computed from history, NEVER a live promise and NEVER auto-applied. The
+  proposal carries `model: true`, its client surface is MODEL-tagged, and
+  `scheduler.blocks` change ONLY through POST /api/scheduler/proposal/apply on
+  explicit user confirmation — no timer recomputes or applies it. (Distinct
+  from YELLOW = speculative/simulated/not-guaranteed; the proposal is neither
+  yellow nor a forecast, just a fit.)
