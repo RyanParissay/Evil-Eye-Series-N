@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { OpsSettings } from '@shared/types';
 import { ProviderError } from '../providers/OddsProvider';
 import { DEFAULT_OPS_SETTINGS } from '../ops/opsStore';
+import { denseWeekSpend } from './denseWeek';
 import { Scheduler, type SchedulerDeps } from './scheduler';
 import { QUIET_END_MIN, QUIET_START_MIN, vancouverEpochOf, vancouverLocal } from './vancouverTime';
 
@@ -361,6 +362,43 @@ describe('Scheduler — dense data-gathering week (Phase 16 Part C.3; injectable
     await h.advanceTo(h.current + 20 * 3_600_000);
     s.stop();
     expect(rec.scans).toEqual([]);
+  });
+
+  it('acceptance: pairs accumulate to the 4,500/day cap → scanning stops that day, resumes next local day', async () => {
+    // Faithful end-to-end: each scheduled scan appends a real scan-history
+    // line, denseWeekInputs measures the day/week spend from it (no injected
+    // cap), and the derived interval lets ~9 scans/day reach 4,500 credits.
+    const startVan = vancouverEpochOf(2026, 1, 15, 8 * 60); // 08:00 Thu — day starts
+    const h = new Harness(startVan);
+    const scanLog: { scannedAt: string; creditsComputed: number }[] = [];
+    const startedAtMs = h.current;
+    const CREDITS_PER_SCAN = 500; // 9 scans → exactly 4,500
+    const rec = wire(h, {
+      settings: opsSettings({ enabled: false, denseWeek: { startedAt: new Date(startedAtMs).toISOString() } }),
+    });
+    rec.deps.runScan = async () => {
+      rec.scans.push(h.current);
+      rec.lastScanAt = h.current;
+      scanLog.push({ scannedAt: new Date(h.current).toISOString(), creditsComputed: CREDITS_PER_SCAN });
+    };
+    // perPairCost = 500 → interval = ceil(1020×500/4500) = 114 min.
+    rec.deps.denseWeekInputs = async (startMs, at) => ({
+      ...denseWeekSpend(startMs, at, scanLog),
+      perPairCost: CREDITS_PER_SCAN,
+    });
+    rec.deps.clearDenseWeek = async () => {};
+    const s = new Scheduler(rec.deps);
+    s.start();
+
+    // Run to the end of the local day (08:00 → 24:00).
+    await h.advanceTo(startVan + 16 * 3_600_000);
+    const day1Scans = rec.scans.length;
+    expect(day1Scans * CREDITS_PER_SCAN).toBeLessThanOrEqual(4_500); // cap never exceeded
+    expect(day1Scans).toBeGreaterThanOrEqual(8); // and the cap actually binds
+
+    // Advance into the next local day — the day counter resets and it scans again.
+    await h.advanceTo(vancouverEpochOf(2026, 1, 16, 10 * 60));
+    expect(rec.scans.length).toBeGreaterThan(day1Scans);
   });
 
   it('an expired dense week clears itself and falls back to normal blocks', async () => {
