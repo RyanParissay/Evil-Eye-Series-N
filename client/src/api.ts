@@ -15,10 +15,15 @@ import type {
   EvSettings,
   FundPosition,
   FundSettings,
+  HubLeaderboards,
+  HubProfile,
+  HubProfileReport,
+  HubStake,
   Leaderboard,
   LedgerSummary,
   MiddlesSettings,
   OpportunityRecord,
+  OpportunityStrategy,
   OpsSettings,
   PaperSettings,
   PaperView,
@@ -597,4 +602,52 @@ async function requestVoid(url: string, init?: RequestInit): Promise<Response> {
     );
   }
   return response;
+}
+
+/* ————— Analytics Hub (Phase 16 Part B — everything here is SIMULATED) ————— */
+
+export interface HubProfileInput {
+  name: string;
+  startingBankroll: number;
+  stake: HubStake;
+  strategies: OpportunityStrategy[];
+  minEdgePct: number;
+}
+
+/** GET /api/hub → one HubProfileReport per profile (premades always present
+ *  after the server's first seed). Zero credits — reads persisted purchases
+ *  + the current record grading, never the provider. */
+export async function fetchHubReports(): Promise<HubProfileReport[]> {
+  const { reports } = await request<{ reports: HubProfileReport[] }>('/api/hub');
+  return reports;
+}
+
+export async function createHubProfile(input: HubProfileInput): Promise<HubProfile> {
+  return request<HubProfile>('/api/hub/profiles', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+/** Premades are editable too — only delete is premade-restricted. */
+export async function updateHubProfile(
+  id: string,
+  patch: Partial<HubProfileInput>,
+): Promise<HubProfile> {
+  return request<HubProfile>(`/api/hub/profiles/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+/** 409s server-side for premade profiles — callers should hide/disable the
+ *  delete action for those rather than relying on the error alone. */
+export async function deleteHubProfile(id: string): Promise<void> {
+  await requestVoid(`/api/hub/profiles/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function fetchHubLeaderboards(): Promise<HubLeaderboards> {
+  return request<HubLeaderboards>('/api/hub/leaderboards');
 }
