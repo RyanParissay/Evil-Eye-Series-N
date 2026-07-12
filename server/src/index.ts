@@ -41,6 +41,7 @@ import { createHubRouter } from './routes/hub';
 import { SafetyStore } from './ops/safetyStore';
 import { createSafetyRouter } from './routes/safety';
 import { scoreConfirmedRecords, type ConfirmationScoringDeps } from './safety/scoring';
+import { passesSafetyGate } from './engine/safety';
 import { GradingService } from './grading/gradingService';
 import { GradingStore } from './grading/gradingStore';
 import { createGradingRouter } from './routes/grading';
@@ -374,7 +375,16 @@ function onConfirmed(records: OpportunityRecord[]): void {
  * single_sighting and pending records can never reach here by construction.
  */
 async function dispatchConfirmedAlerts(records: OpportunityRecord[]): Promise<void> {
-  const opportunities = records.map(recordToOpportunity);
+  // Phase 17: THE safety gate — the one passesSafetyGate function, applied
+  // here and in the hub-purchases consumer (never restated). Filtered
+  // records are not alerted but stay fully persisted with score + reasons
+  // (Cost of Safety prices them); safeMode OFF passes everything, and a
+  // record with no safety (scoring failure / pre-Phase-17) is never
+  // retro-gated.
+  const safetySettings = await safetyStore.read();
+  const passed = records.filter((r) => passesSafetyGate(r, safetySettings));
+  if (passed.length === 0) return;
+  const opportunities = passed.map(recordToOpportunity);
   const alertable = await bookmakerService.filterAlertable(opportunities);
   if (alertable.length === 0) return;
   const arbs = alertable.filter((o) => !o.ev && !o.middle);
@@ -525,7 +535,13 @@ app.use(
 );
 confirmedConsumers.push({
   name: 'hub-purchases',
-  consume: (records) => hubService.onConfirmed(records),
+  consume: async (records) => {
+    // Phase 17: the SAME safety gate alerts apply — one function, both
+    // paths, identical behavior. Filtered records are never purchased but
+    // stay persisted with score + reasons.
+    const safetySettings = await safetyStore.read();
+    await hubService.onConfirmed(records.filter((r) => passesSafetyGate(r, safetySettings)));
+  },
 });
 // ─────────────────────────────────────────────────────────────────────────
 
