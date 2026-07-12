@@ -9,6 +9,7 @@
  */
 import type { ScanMeta, OpsSettings, SchedulerBlock, SchedulerSettings } from '@shared/types';
 import { regionTabByKey } from '@shared/regionTabs';
+import { DEFAULT_CONFIRMATION_INTERVAL_SECS } from '../config/constants';
 import { JsonStore } from '../lib/jsonStore';
 
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
@@ -41,7 +42,13 @@ export const DEFAULT_SCHEDULER_SETTINGS: SchedulerSettings = {
   blocks: SEED_SCHEDULER_BLOCKS,
   scanParams: { regionTab: 'ca_us', topN: 5 },
   disabledReason: null,
+  confirmationIntervalSecs: DEFAULT_CONFIRMATION_INTERVAL_SECS,
 };
+
+/** confirmationIntervalSecs must stay well under the smallest block cadence
+ *  (15 min), or scan B would forever chase the next scan A's re-basing. */
+export const CONFIRMATION_INTERVAL_MIN_SECS = 10;
+export const CONFIRMATION_INTERVAL_MAX_SECS = 600;
 
 export const DEFAULT_OPS_SETTINGS: OpsSettings = {
   weekday: { startMinutes: 18 * 60 + 30, endMinutes: 22 * 60 + 30 }, // 18:30–22:30 (legacy)
@@ -53,7 +60,6 @@ export const DEFAULT_OPS_SETTINGS: OpsSettings = {
   // Extra markets multiply every odds call's credits — the operator
   // flips these deliberately, with the budget to match (Phase 12).
   markets: { totals: false, spreads: false },
-  confirmSecondSighting: false,
   scheduler: DEFAULT_SCHEDULER_SETTINGS,
 };
 
@@ -90,11 +96,23 @@ export interface OpsSettingsStore {
  *  migrates in cleanly (JsonStore normalize pattern — same as strategy
  *  fields). Existing files with no `scheduler` key get the seed, disabled. */
 function normalizeScheduler(raw: Partial<SchedulerSettings> | undefined): SchedulerSettings {
-  return {
+  const merged: SchedulerSettings = {
     ...DEFAULT_SCHEDULER_SETTINGS,
     ...(raw ?? {}),
     scanParams: { ...DEFAULT_SCHEDULER_SETTINGS.scanParams, ...(raw?.scanParams ?? {}) },
   };
+  // Phase 16 Part A: normalize to 60 (contract) — repair anything that is
+  // not an integer inside the allowed range rather than trusting the file.
+  const secs = merged.confirmationIntervalSecs;
+  if (
+    typeof secs !== 'number' ||
+    !Number.isInteger(secs) ||
+    secs < CONFIRMATION_INTERVAL_MIN_SECS ||
+    secs > CONFIRMATION_INTERVAL_MAX_SECS
+  ) {
+    merged.confirmationIntervalSecs = DEFAULT_CONFIRMATION_INTERVAL_SECS;
+  }
+  return merged;
 }
 
 export class OpsStore extends JsonStore<OpsSettings> implements OpsSettingsStore {
@@ -103,12 +121,16 @@ export class OpsStore extends JsonStore<OpsSettings> implements OpsSettingsStore
       filePath,
       () => ({ ...DEFAULT_OPS_SETTINGS }),
       (parsed) => {
-        const raw = (parsed ?? {}) as Partial<OpsSettings>;
-        return {
+        const raw = (parsed ?? {}) as Partial<OpsSettings> & { confirmSecondSighting?: unknown };
+        const settings = {
           ...DEFAULT_OPS_SETTINGS,
           ...raw,
           scheduler: normalizeScheduler(raw.scheduler),
         };
+        // Phase 15's second-sighting toggle was CONVERTED into confirmation
+        // pairs (Phase 16 Part A) — drop the dead key instead of carrying it.
+        delete (settings as { confirmSecondSighting?: unknown }).confirmSecondSighting;
+        return settings;
       },
     );
   }

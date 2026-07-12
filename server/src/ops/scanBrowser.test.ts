@@ -11,7 +11,6 @@ const SETTINGS: OpsSettings = {
   monthlyCreditBudget: 20_000,
   autoStopPct: 95,
   markets: { totals: false, spreads: false },
-  confirmSecondSighting: false,
   // An all-day / all-week block with a 5-min cadence: every stretch is "in a
   // block" whatever the runner's timezone, so gap detection depends only on
   // the (timezone-invariant) deltas and the 2×5 threshold — deterministic.

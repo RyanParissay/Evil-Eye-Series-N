@@ -30,7 +30,6 @@ const DEFAULTS: OpsSettings = {
   monthlyCreditBudget: 20_000,
   autoStopPct: 95,
   markets: { totals: false, spreads: false },
-  confirmSecondSighting: false,
   scheduler: DEFAULT_SCHEDULER_SETTINGS,
 };
 
@@ -85,7 +84,7 @@ describe('/api/ops', () => {
       { autoStopPct: 150 },
       { weekday: { startMinutes: -5, endMinutes: 100 } },
       { monthlyCreditBudget: -1 },
-      { confirmSecondSighting: 'yes' },
+      { confirmSecondSighting: true }, // superseded by the confirmation pair (Phase 16 Part A)
       {},
     ]) {
       const bad = await request(app).patch('/api/ops/settings').send(body);
@@ -93,15 +92,20 @@ describe('/api/ops', () => {
     }
   });
 
-  it('PATCH toggles confirmSecondSighting', async () => {
+  it('PATCH scheduler.confirmationIntervalSecs (Phase 16 Part A) within 10-600s', async () => {
     const { app } = harness();
-    const on = await request(app).patch('/api/ops/settings').send({ confirmSecondSighting: true });
-    expect(on.status).toBe(200);
-    expect(on.body.confirmSecondSighting).toBe(true);
+    const set = await request(app)
+      .patch('/api/ops/settings')
+      .send({ scheduler: { confirmationIntervalSecs: 120 } });
+    expect(set.status).toBe(200);
+    expect(set.body.scheduler.confirmationIntervalSecs).toBe(120);
 
-    const off = await request(app).patch('/api/ops/settings').send({ confirmSecondSighting: false });
-    expect(off.status).toBe(200);
-    expect(off.body.confirmSecondSighting).toBe(false);
+    for (const secs of [5, 601, 60.5, 'soon']) {
+      const bad = await request(app)
+        .patch('/api/ops/settings')
+        .send({ scheduler: { confirmationIntervalSecs: secs } });
+      expect(bad.status).toBe(400);
+    }
   });
 
   it('enabling the scheduler clears the self-disable reason, seeds scope from last scan, and wakes it', async () => {

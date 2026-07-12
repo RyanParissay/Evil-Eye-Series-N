@@ -15,7 +15,6 @@ function settings(overrides: Partial<OpsSettings> = {}): OpsSettings {
     monthlyCreditBudget: 20_000,
     autoStopPct: 95,
     markets: { totals: false, spreads: false },
-    confirmSecondSighting: false,
     scheduler: {
       enabled: false,
       blocks: [],

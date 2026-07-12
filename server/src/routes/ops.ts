@@ -23,7 +23,12 @@ import { computeCoverage } from '../ops/coverageService';
 import { buildScanBrowser } from '../ops/scanBrowser';
 import { computeSurvival } from '../ops/survivalService';
 import { computeTelemetry } from '../ops/telemetryService';
-import { seedScanParams, type OpsSettingsStore } from '../ops/opsStore';
+import {
+  CONFIRMATION_INTERVAL_MAX_SECS,
+  CONFIRMATION_INTERVAL_MIN_SECS,
+  seedScanParams,
+  type OpsSettingsStore,
+} from '../ops/opsStore';
 
 /** The PATCH body shape: any top-level setting, plus a PARTIAL scheduler
  *  (the client sends just `enabled` / `scanParams`, deep-merged in). */
@@ -304,12 +309,6 @@ function parseOpsPatch(
     }
     patch.markets = { totals: markets.totals, spreads: markets.spreads };
   }
-  if ('confirmSecondSighting' in raw) {
-    if (typeof raw.confirmSecondSighting !== 'boolean') {
-      return { ok: false, message: 'confirmSecondSighting must be boolean' };
-    }
-    patch.confirmSecondSighting = raw.confirmSecondSighting;
-  }
   if ('scheduler' in raw) {
     const parsed = parseSchedulerPatch(raw.scheduler);
     if (!parsed.ok) return parsed;
@@ -358,8 +357,27 @@ function parseSchedulerPatch(
     }
     patch.disabledReason = sched.disabledReason as string | null;
   }
+  if ('confirmationIntervalSecs' in sched) {
+    if (
+      !isIntIn(
+        sched.confirmationIntervalSecs,
+        CONFIRMATION_INTERVAL_MIN_SECS,
+        CONFIRMATION_INTERVAL_MAX_SECS,
+      )
+    ) {
+      return {
+        ok: false,
+        message: `scheduler.confirmationIntervalSecs must be ${CONFIRMATION_INTERVAL_MIN_SECS}–${CONFIRMATION_INTERVAL_MAX_SECS} seconds`,
+      };
+    }
+    patch.confirmationIntervalSecs = sched.confirmationIntervalSecs as number;
+  }
   if (Object.keys(patch).length === 0) {
-    return { ok: false, message: 'scheduler patch must set enabled, scanParams, or disabledReason' };
+    return {
+      ok: false,
+      message:
+        'scheduler patch must set enabled, scanParams, disabledReason, or confirmationIntervalSecs',
+    };
   }
   return { ok: true, patch };
 }

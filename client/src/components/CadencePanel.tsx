@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { OpsSettings, SchedulerBlock, SurvivalStats } from '../../../shared/types';
-import { fetchCostEstimate, fetchSurvival, patchOpsSettings, type CostEstimate } from '../api';
+import {
+  fetchCostEstimate,
+  fetchSurvival,
+  patchOpsSettings,
+  patchScheduler,
+  type CostEstimate,
+} from '../api';
 
 /**
  * Scheduler status + the settings the scheduler actually uses (Phase 16).
@@ -44,6 +50,16 @@ export function CadencePanel({
     setError(null);
     try {
       onSettings(await patchOpsSettings(patch));
+    } catch {
+      setError('Could not save settings.');
+    }
+  }
+
+  /** Partial scheduler patch (Phase 16) — the server deep-merges it. */
+  async function applyScheduler(patch: Parameters<typeof patchScheduler>[0]) {
+    setError(null);
+    try {
+      onSettings(await patchScheduler(patch));
     } catch {
       setError('Could not save settings.');
     }
@@ -136,16 +152,30 @@ export function CadencePanel({
             />
           </label>
           <div className="cadence-second-sight">
-            <label className="micro-label cadence-market">
-              confirm second sighting
+            <label className="micro-label">
+              confirmation interval (s)
               <input
-                type="checkbox"
-                checked={settings.confirmSecondSighting}
-                onChange={(e) => void apply({ confirmSecondSighting: e.target.checked })}
+                type="number"
+                min={10}
+                max={600}
+                step={10}
+                defaultValue={sched.confirmationIntervalSecs ?? 60}
+                onBlur={(e) => {
+                  const v = e.target.valueAsNumber;
+                  if (
+                    Number.isInteger(v) &&
+                    v >= 10 &&
+                    v <= 600 &&
+                    v !== (sched.confirmationIntervalSecs ?? 60)
+                  ) {
+                    void applyScheduler({ confirmationIntervalSecs: v });
+                  }
+                }}
               />
             </label>
             <span className="micro-label">
-              delays every alert by one scan interval; filters ghosts
+              scan B re-confirms candidates this long after scan A (±0.5pp) — only confirmed
+              opportunities alert; unconfirmed are never acted on
               {survival && survival.overall.samples > 0 && (
                 <>
                   {' · '}

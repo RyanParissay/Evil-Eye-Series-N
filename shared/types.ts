@@ -590,13 +590,6 @@ export interface OpsSettings {
    */
   markets: { totals: boolean; spreads: boolean };
   /**
-   * Default OFF. When ON, a record may alert only once it's been sighted
-   * in ≥2 scans (lastSeenAt strictly after detectedAt) — delays every
-   * alert by one scan interval, filtering ghosts that vanish before the
-   * next scan. Applies to arb, EV, and middle alerts alike.
-   */
-  confirmSecondSighting: boolean;
-  /**
    * Phase 16 adaptive scheduler — the ONE owner of all server-side scan +
    * score-poll timing (server/src/scheduler/). The legacy weekday/weekend
    * windows + inWindowMins/outWindowMins above are retained for back-compat
@@ -642,7 +635,8 @@ export interface SchedulerSettings {
   disabledReason: string | null;
   /**
    * Phase 16 Part A: seconds between scan A and the conditional
-   * confirmation scan B. Optional pre-WP2; normalize to 60.
+   * confirmation scan B. Optional in old files; the store normalizes it to
+   * 60 (and repairs out-of-range values), so it is always present at rest.
    */
   confirmationIntervalSecs?: number;
   /**

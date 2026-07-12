@@ -68,6 +68,27 @@ describe('OpsStore scheduler migration', () => {
     expect(scheduler.blocks).toEqual(blocks);
     expect(scheduler.scanParams).toEqual({ regionTab: 'ca', topN: 3 });
   });
+
+  it('normalizes confirmationIntervalSecs to 60 when absent or invalid, keeps a valid one (Phase 16 Part A)', async () => {
+    await writeFile(file, JSON.stringify({ scheduler: { enabled: false } }), 'utf8');
+    expect((await new OpsStore(file).read()).scheduler.confirmationIntervalSecs).toBe(60);
+
+    await writeFile(
+      file,
+      JSON.stringify({ scheduler: { confirmationIntervalSecs: 'soon' } }),
+      'utf8',
+    );
+    expect((await new OpsStore(file).read()).scheduler.confirmationIntervalSecs).toBe(60);
+
+    await writeFile(file, JSON.stringify({ scheduler: { confirmationIntervalSecs: 120 } }), 'utf8');
+    expect((await new OpsStore(file).read()).scheduler.confirmationIntervalSecs).toBe(120);
+  });
+
+  it('drops the superseded confirmSecondSighting key from legacy files (converted, not carried)', async () => {
+    await writeFile(file, JSON.stringify({ confirmSecondSighting: true }), 'utf8');
+    const settings = await new OpsStore(file).read();
+    expect('confirmSecondSighting' in settings).toBe(false);
+  });
 });
 
 describe('seedScanParams', () => {

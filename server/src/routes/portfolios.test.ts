@@ -14,7 +14,6 @@ const OPS_SETTINGS: OpsSettings = {
   monthlyCreditBudget: 20_000,
   autoStopPct: 95,
   markets: { totals: false, spreads: false },
-  confirmSecondSighting: false,
   scheduler: DEFAULT_SCHEDULER_SETTINGS,
 };
 
