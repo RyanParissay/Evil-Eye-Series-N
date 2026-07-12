@@ -27,6 +27,7 @@ import {
   OPS_FILE,
   PAPER_FILE,
   PRESETS_FILE,
+  SAFETY_FILE,
   SCAN_HISTORY_DIR,
   SCHEDULER_MAX_SLEEP_MS,
   SCHEDULER_SCORE_POLL_INTERVAL_MS,
@@ -37,6 +38,8 @@ import { LeaderboardStore } from './ops/leaderboardStore';
 import { HubService } from './hub/hubService';
 import { HubProfileStore } from './hub/profileStore';
 import { createHubRouter } from './routes/hub';
+import { SafetyStore } from './ops/safetyStore';
+import { createSafetyRouter } from './routes/safety';
 import { GradingService } from './grading/gradingService';
 import { GradingStore } from './grading/gradingStore';
 import { createGradingRouter } from './routes/grading';
@@ -505,8 +508,9 @@ const scanDeps: ScanDeps = {
 // retro-purchased (mirror of the never-retro-alert rule). onConfirmed is
 // idempotent (purchases/skips dedupe by recordId); a Hub failure is a
 // console.warn, never a failed scan.
+const hubProfileStore = new HubProfileStore(path.join(serverRoot, HUB_FILE));
 const hubService = new HubService({
-  store: new HubProfileStore(path.join(serverRoot, HUB_FILE)),
+  store: hubProfileStore,
   records: () => ledgerService.allRecordsList(),
 });
 app.use(
@@ -517,6 +521,24 @@ confirmedConsumers.push({
   name: 'hub-purchases',
   consume: (records) => hubService.onConfirmed(records),
 });
+// ─────────────────────────────────────────────────────────────────────────
+
+// ── PHASE-17 SAFETY SCORE (WP-A) ─────────────────────────────────────────
+// Settings + advisory rotation telemetry only. Read/settings-only, zero
+// credits — the scoring engine + gate are INERT until WP-B wires them into
+// the confirmation transition and the two consumers (alerts, Hub purchases).
+// Rotation's acted-on population = alerted OR Hub-purchased (recordId set
+// read from the hub store).
+const safetyStore = new SafetyStore(path.join(serverRoot, SAFETY_FILE));
+app.use(
+  '/api/safety',
+  createSafetyRouter({
+    settings: safetyStore,
+    records: () => ledgerService.allRecordsList(),
+    hubPurchasedRecordIds: async () =>
+      new Set((await hubProfileStore.read()).purchases.map((p) => p.recordId)),
+  }),
+);
 // ─────────────────────────────────────────────────────────────────────────
 
 // Manual scans are blocked in quiet hours too (spec: "zero calls of any
