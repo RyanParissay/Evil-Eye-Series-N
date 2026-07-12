@@ -250,6 +250,12 @@ export interface OpportunityRecord {
    * retro-alerted — the alerted flag already gates that).
    */
   confirmation?: RecordConfirmation;
+  /**
+   * Phase 17: Safety Score, computed + persisted at the confirmation
+   * transition (before the fan-out). Present on every record that reached
+   * 'confirmed' after Phase 17 — including gate-filtered ones.
+   */
+  safety?: RecordSafety;
 }
 
 /* ————— Confirmation scanning (Phase 16 Part A) ————— */
@@ -999,4 +1005,89 @@ export interface SchedulerProposal {
   monthlyBudget: number;
   /** Budget minus the 10% reserve the proposal must fit under. */
   spendCeiling: number;
+}
+
+/* ————— Safety Score (Phase 17 — deterministic account-longevity filter) ————— */
+
+/** One scored component with its signed contribution and human detail. */
+export interface SafetyComponent {
+  /** 'edge_cap' | 'consensus' | 'sharp_anchor' | 'market_tier' | 'exposure' | 'stake_rounding' */
+  key: string;
+  /** Signed score contribution (+20, −30, …); 0 for informational entries. */
+  delta: number;
+  /** Human-readable itemization, e.g. "−30: leg 2 is 5.1% off consensus". */
+  detail: string;
+}
+
+/**
+ * Persisted on every CONFIRMED record at the confirmation transition,
+ * BEFORE the fan-out — filtered records keep it too (Cost of Safety needs
+ * to price what safety declined). Deterministic: same snapshot + config +
+ * exposure inputs → identical result.
+ */
+export interface RecordSafety {
+  /** 0–100; any hard reject → 0. */
+  score: number;
+  components: SafetyComponent[];
+  /** Hard-reject reasons: 'suspicious_edge' | 'off_consensus' | 'book_exposure' | 'book_cooldown' | 'rounding_kills_edge'. Empty = no hard reject. */
+  reasons: string[];
+  /** Per-leg stakes rounded to the nearest $5 — the PRIMARY displayed/alerted amounts. Aligned with record.legs. */
+  roundedStakes?: number[];
+  scoredAt: string;
+}
+
+/** The ONE settings-editable config object (spec defaults in parentheses). */
+export interface SafetySettings {
+  /** Gate on/off (ON). OFF still computes + persists scores. */
+  safeMode: boolean;
+  /** Gate threshold 0–100 (55). */
+  safetyThreshold: number;
+  /** Arb edge above this % hard-rejects (4.5). */
+  maxSafeEdge: number;
+  /** Consensus deviation bands, % from median implied probability. */
+  consensus: {
+    noPenaltyMaxPct: number; // 2
+    minorPenaltyMaxPct: number; // 4, delta −15
+    majorPenaltyMaxPct: number; // 6, delta −30; beyond → hard reject
+    minorPenalty: number; // -15
+    majorPenalty: number; // -30
+    /** Legs whose outcome has fewer priced books than this get thinPenalty. */
+    minBooks: number; // 5
+    thinPenalty: number; // -15
+  };
+  /** Books that never limit winners; exempt from budgets/cooldowns. */
+  neverLimitBooks: string[];
+  sharpAnchor: { oneLeg: number; bothLegs: number }; // +20 / +25
+  /** Market tier matchers: sportKey prefix (+ optional marketKey). Unlisted = tier 2 (0). */
+  marketTiers: {
+    tier1: Array<{ sportPrefix: string; marketKey?: string }>;
+    tier3: Array<{ sportPrefix: string; marketKey?: string }>;
+    tier1Bonus: number; // +10
+    tier3Penalty: number; // -20
+  };
+  budgets: {
+    maxArbsPerDay: number; // 3
+    maxArbsPerWeek: number; // 12
+    hotStreakCount: number; // 5
+    cooldownDays: number; // 3
+  };
+  /** Camouflage stake rounding increment in dollars (5). */
+  roundTo: number;
+}
+
+/** Server-computed Cost of Safety (Hub readout). Everything hypothetical is labeled. */
+export interface SafetyCostReport {
+  simulated: true;
+  week: SafetyCostWindow;
+  lifetime: SafetyCostWindow;
+}
+
+export interface SafetyCostWindow {
+  /** Confirmed opportunities the gate filtered (score < threshold or hard reject). */
+  filteredCount: number;
+  /** Σ hypothetical profit at the default stake, dollars. */
+  forgoneProfit: number;
+  /** Σ headline edge of filtered records, percentage points. */
+  forgoneEdgePp: number;
+  byReason: Array<{ reason: string; count: number; forgoneProfit: number }>;
 }
