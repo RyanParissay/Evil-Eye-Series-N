@@ -234,6 +234,14 @@ export function ScanPage() {
       <footer className="footnote micro-label">
         Odds comparison and information only — verify prices at the book before staking anything.
       </footer>
+
+      {/* Analytics Hub entry point — a separate page, SIMULATED money only.
+          Self-contained block: touch only this when merging. */}
+      <div className="hub-nav">
+        <Link to="/hub" className="hub-nav-button">
+          Analytics Hub
+        </Link>
+      </div>
     </div>
   );
 }
