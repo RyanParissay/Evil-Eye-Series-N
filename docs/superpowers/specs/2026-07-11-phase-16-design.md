@@ -83,9 +83,23 @@ score polls queue and fire at 08:00. DST test: one PST date + one PDT date fixtu
 ## Part C — adaptive scheduling
 
 - **Schedule is data:** ops-store `scheduler.blocks: Array<{days, startMin,
-  endMin, intervalMins}>` in America/Vancouver local time. Seed (subject to the
-  research agent's findings; else this prior, PT): dense 08:00–11:00 and
-  14:00–19:00, moderate 11:00–14:00 and 19:00–01:00, quiet 01:00–08:00.
+  endMin, intervalMins}>` in America/Vancouver local time. Seed (revised per the
+  2026-07-11 research pass — sourced where possible, inference flagged):
+  - 08:00–14:00 **moderate** (EU trading desks active, MLB pitcher/lineup
+    confirmations, weekend-soccer tail; the original "overnight catch-up"
+    rationale was wrong — US overnight lines post ~21:00–00:00 PT).
+  - 14:00–19:00 **dense** (best-sourced block: arb density peaks in the final
+    ~4h and 8–14h before events; most NBA/NHL/MLB evening slates sit here).
+  - 19:00–23:00 **dense** (West Coast primetime pre-game + fresh next-day lines
+    begin posting ~21:00 PT — fresh lines are the volatile, mispriced ones).
+  - 23:00–01:00 **moderate** (overnight-line posting tail).
+  - 01:00–08:00 **quiet — hard, spec-mandated** (research notes EU soccer
+    kickoffs from ~04:30 PT on weekends; Ryan's "zero calls of any kind"
+    rule deliberately overrides this — revisit only if he relaxes it).
+  The weekly optimizer's own measured density-by-hour beats all external
+  sources once a week of paired-scan history exists; the seed only has to be
+  sane for week one. Per-sport schedules noted as a scheduler-v2 candidate
+  (soccer/tennis run on foreign-market clocks), NOT built now.
 - **Dense data-gathering week:** user-started mode (`denseWeek.startedAt`),
   replaces normal cadence for 7 days: pairs at elevated frequency across allowed
   hours; the scheduler DERIVES the interval from measured per-pair cost so the
