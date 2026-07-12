@@ -100,6 +100,38 @@ export const CONFIRMATION_HIT_RATE_WINDOW_MS = 14 * 24 * 3_600_000;
 export const CONFIRMATION_HIT_RATE_MIN_SAMPLES = 50;
 export const CONFIRMATION_ASSUMED_HIT_RATE = 0.3;
 
+/* ————— Dense data-gathering week (Phase 16 Part C.3) ————— */
+
+/** A dense week runs this many days from `denseWeek.startedAt`, then the
+ *  scheduler falls back to normal blocks automatically. */
+export const DENSE_WEEK_DAYS = 7;
+
+/** Hard cap on scan-history credits spent per Vancouver-local day while a
+ *  dense week is active. Reaching it stops scheduled scanning for that local
+ *  day (manual scans stay allowed); it resumes at the next local midnight. */
+export const DENSE_WEEK_DAY_CAP = 4_500;
+
+/** Hard cap on scan-history credits spent across the whole dense week.
+ *  Reaching it stops scheduled scanning for the remainder of the week. */
+export const DENSE_WEEK_WEEK_CAP = 30_000;
+
+/** The dense-week interval never drops below this many minutes, however
+ *  cheap a pair window is — the elevated-frequency floor. */
+export const DENSE_WEEK_MIN_INTERVAL_MINS = 5;
+
+/* ————— Weekly deterministic optimizer (Phase 16 Part C.4) ————— */
+
+/** The optimizer proposes blocks only once this many days of scan history
+ *  exist; GET /api/scheduler/proposal 409s below it. */
+export const PROPOSAL_MIN_HISTORY_DAYS = 7;
+
+/** The proposal's projected monthly spend must fit under this fraction of
+ *  the monthly budget — the 10% reserve. */
+export const PROPOSAL_SPEND_CEILING_FRACTION = 0.9;
+
+/** The optimizer's shortest proposed block interval (busiest cells). */
+export const PROPOSAL_MIN_INTERVAL_MINS = 10;
+
 /** Where last-scan metadata persists across server restarts (gitignored). */
 export const LAST_SCAN_FILE = 'data/last-scan.json';
 

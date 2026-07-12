@@ -117,6 +117,29 @@ export function vancouverEpochOf(
   return epoch;
 }
 
+/**
+ * Epoch ms of the next America/Vancouver local midnight strictly after `at`
+ * — the instant a Vancouver-local calendar day rolls over. The dense-week
+ * daily cap resets here (Phase 16 Part C.3).
+ */
+export function nextVancouverMidnightMs(at: Date): number {
+  const loc = vancouverLocal(at);
+  const tomorrow = new Date(Date.UTC(loc.year, loc.month - 1, loc.day + 1));
+  return vancouverEpochOf(
+    tomorrow.getUTCFullYear(),
+    tomorrow.getUTCMonth() + 1,
+    tomorrow.getUTCDate(),
+    0,
+  );
+}
+
+/** True when `a` and `b` fall on the same America/Vancouver calendar day. */
+export function sameVancouverDay(a: Date, b: Date): boolean {
+  const la = vancouverLocal(a);
+  const lb = vancouverLocal(b);
+  return la.year === lb.year && la.month === lb.month && la.day === lb.day;
+}
+
 /** True while `at` is inside quiet hours (01:00 inclusive – 08:00 exclusive). */
 export function isQuietHours(at: Date): boolean {
   const m = vancouverLocal(at).minutesOfDay;

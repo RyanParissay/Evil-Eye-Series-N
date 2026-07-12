@@ -647,6 +647,33 @@ export interface SchedulerSettings {
   denseWeek?: { startedAt: string } | null;
 }
 
+/**
+ * Phase 16 Part C.3: the dense data-gathering week's live status, served by
+ * GET/POST/DELETE /api/scheduler/dense-week. Day/week credits are computed
+ * from scan-history lines (creditsComputed), scoped to the dense week; the
+ * `stopped` banner is set when a hard cap is reached (scheduled scanning
+ * halts, manual scans stay allowed).
+ */
+export interface DenseWeekStatus {
+  active: boolean;
+  /** Absent when no dense week is running. */
+  startedAt: string | null;
+  /** startedAt + 7 days; absent when not running. */
+  endsAt: string | null;
+  /** 1–7 while active. */
+  dayNumber: number;
+  /** Credits spent this Vancouver-local day within the dense week. */
+  dayCreditsUsed: number;
+  /** Credits spent across the whole dense week so far. */
+  weekCreditsUsed: number;
+  dayCap: number;
+  weekCap: number;
+  /** The scheduler's derived scan interval (minutes) while dense. */
+  intervalMins: number;
+  /** Set when a hard cap halted scheduled scanning; null while running. */
+  stopped: { scope: 'day' | 'week'; message: string } | null;
+}
+
 export interface MiddlesSettings {
   /** Candidates costing more than this % of stake never surface. */
   maxCostPct: number;

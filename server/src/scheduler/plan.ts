@@ -24,8 +24,16 @@ import type { SchedulerBlock, SchedulerSettings } from '@shared/types';
 import {
   CONFIRMATION_GRACE_INTERVALS,
   DEFAULT_CONFIRMATION_INTERVAL_SECS,
+  DENSE_WEEK_DAY_CAP,
+  DENSE_WEEK_WEEK_CAP,
 } from '../config/constants';
-import { isQuietHours, nextQuietEndMs, vancouverEpochOf, vancouverLocal } from './vancouverTime';
+import {
+  isQuietHours,
+  nextQuietEndMs,
+  nextVancouverMidnightMs,
+  vancouverEpochOf,
+  vancouverLocal,
+} from './vancouverTime';
 
 export type SchedulerAction =
   | { kind: 'scan'; params: { regionTab: string; topN: number } }
@@ -62,6 +70,25 @@ export interface PlanInput {
     /** The last completed scan's fetch scope — scan B uses the same. */
     lastScanParams: { regionTab: string; topN: number } | null;
   };
+  /**
+   * Phase 16 Part C.3: the dense data-gathering week, already resolved from
+   * scan history (spend) + measured cost (interval) by the caller — plan
+   * stays pure. Null/absent (or expired) ⇒ normal block cadence. When active
+   * it OVERRIDES the enabled gate (it is user-authorized, like scan B), but
+   * the 95% monthly auto-stop and quiet hours still bind, plus its own hard
+   * daily/weekly credit caps.
+   */
+  denseWeek?: {
+    active: boolean;
+    /** Epoch ms the dense week ends — the week-cap sleep target. */
+    endsAtMs: number;
+    /** Derived elevated interval, whole minutes. */
+    intervalMins: number;
+    /** Credits spent this Vancouver-local day (scan history). */
+    dayCreditsUsed: number;
+    /** Credits spent across the whole dense week so far (scan history). */
+    weekCreditsUsed: number;
+  } | null;
 }
 
 /** When there's nothing to do soon, sleep this far and let the tick loop's
@@ -95,6 +122,42 @@ export function plan(input: PlanInput): SchedulerAction {
   // Nothing below may sleep past a pending pair's due time.
   const wakeCapMs = pair ? pair.dueAtMs : Infinity;
 
+  const scorePollDue =
+    input.lastScorePollAtMs == null ||
+    nowMs - input.lastScorePollAtMs >= input.scorePollIntervalMs;
+  const nextScorePollMs =
+    input.lastScorePollAtMs == null ? nowMs : input.lastScorePollAtMs + input.scorePollIntervalMs;
+
+  // ————— Dense data-gathering week (Part C.3) —————
+  // Overrides the enabled gate (user-authorized), but the monthly auto-stop
+  // and its own hard credit caps still bind; quiet hours already returned above.
+  const dense = input.denseWeek;
+  if (dense && dense.active) {
+    // The 95% monthly auto-stop still applies on top of the dense caps.
+    if (budgetStopped(input.budget)) {
+      return { kind: 'sleep', untilMs: Math.min(nowMs + IDLE_SLEEP_MS, wakeCapMs) };
+    }
+    // Weekly hard cap: stop scheduled scanning for the rest of the dense week.
+    if (dense.weekCreditsUsed >= DENSE_WEEK_WEEK_CAP) {
+      return { kind: 'sleep', untilMs: Math.min(dense.endsAtMs, wakeCapMs) };
+    }
+    // Daily hard cap: stop until the next Vancouver-local day resets the count.
+    if (dense.dayCreditsUsed >= DENSE_WEEK_DAY_CAP) {
+      return {
+        kind: 'sleep',
+        untilMs: Math.min(nextVancouverMidnightMs(now), dense.endsAtMs, wakeCapMs),
+      };
+    }
+    const scanDueAtMs =
+      input.lastScanAtMs == null ? nowMs : input.lastScanAtMs + dense.intervalMins * 60_000;
+    if (scanDueAtMs <= nowMs) return { kind: 'scan', params: settings.scanParams };
+    if (scorePollDue) return { kind: 'scorePoll' };
+    return {
+      kind: 'sleep',
+      untilMs: Math.min(scanDueAtMs, nextScorePollMs, dense.endsAtMs, wakeCapMs),
+    };
+  }
+
   // ————— Global gates (order matters; every one blocks provider calls) —————
 
   // Disabled: dormant (except the scan-B wake above). The tick loop clamps
@@ -108,12 +171,6 @@ export function plan(input: PlanInput): SchedulerAction {
   if (budgetStopped(input.budget)) {
     return { kind: 'sleep', untilMs: Math.min(nowMs + IDLE_SLEEP_MS, wakeCapMs) };
   }
-
-  const scorePollDue =
-    input.lastScorePollAtMs == null ||
-    nowMs - input.lastScorePollAtMs >= input.scorePollIntervalMs;
-  const nextScorePollMs =
-    input.lastScorePollAtMs == null ? nowMs : input.lastScorePollAtMs + input.scorePollIntervalMs;
 
   // ————— Inside an active scan block —————
   const active = activeBlock(settings.blocks, now);

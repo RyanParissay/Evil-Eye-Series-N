@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { SchedulerSettings } from '@shared/types';
 import { SEED_SCHEDULER_BLOCKS } from '../ops/opsStore';
 import { plan, type PlanInput } from './plan';
-import { isQuietHours, nextQuietEndMs, vancouverEpochOf } from './vancouverTime';
+import { denseWeekEndMs } from './denseWeek';
+import {
+  isQuietHours,
+  nextQuietEndMs,
+  nextVancouverMidnightMs,
+  vancouverEpochOf,
+} from './vancouverTime';
 
 const SCORE_POLL_MS = 5 * 60_000;
 
@@ -244,6 +250,91 @@ describe('plan — confirmation pairs (Phase 16 Part A)', () => {
       }),
     );
     expect(action).toEqual({ kind: 'resolveConfirmations' });
+  });
+});
+
+describe('plan — dense data-gathering week (Phase 16 Part C.3)', () => {
+  const startedAtMs = at(8 * 60).getTime(); // 08:00 Jan 15
+  const endsAtMs = denseWeekEndMs(startedAtMs);
+
+  /** Dense-week input, active by default, at 15:00 (inside a normal block). */
+  function denseInput(over: Partial<PlanInput> = {}, dense: Partial<NonNullable<PlanInput['denseWeek']>> = {}): PlanInput {
+    const now = at(15 * 60);
+    return input({
+      now,
+      lastScanAtMs: null,
+      lastScorePollAtMs: now.getTime(),
+      denseWeek: {
+        active: true,
+        endsAtMs,
+        intervalMins: 9,
+        dayCreditsUsed: 0,
+        weekCreditsUsed: 0,
+        ...dense,
+      },
+      ...over,
+    });
+  }
+
+  it('scans at the derived interval, overriding the normal block cadence', () => {
+    const action = plan(denseInput());
+    expect(action).toEqual({ kind: 'scan', params: { regionTab: 'ca_us', topN: 5 } });
+  });
+
+  it('overrides the enabled gate — runs even while the scheduler is DISABLED', () => {
+    const action = plan(denseInput({ settings: settings({ enabled: false }) }));
+    expect(action.kind).toBe('scan');
+  });
+
+  it('sleeps to exactly the derived interval when a scan is not yet due', () => {
+    const now = at(15 * 60);
+    const action = plan(
+      denseInput({ now, lastScanAtMs: now.getTime() - 4 * 60_000 }), // due in 5 min (interval 9)
+    );
+    expect(action).toEqual({ kind: 'sleep', untilMs: now.getTime() - 4 * 60_000 + 9 * 60_000 });
+  });
+
+  it('daily hard cap (≥4,500/day) → stops, sleeping to the next local midnight', () => {
+    const now = at(15 * 60);
+    const action = plan(denseInput({ now }, { dayCreditsUsed: 4_500 }));
+    expect(action).toEqual({ kind: 'sleep', untilMs: nextVancouverMidnightMs(now) });
+  });
+
+  it('resumes the next local day — a fresh day’s zero spend scans again', () => {
+    // Same fixture, but now it is the next local day and the day counter reset.
+    const nextDay = at(9 * 60, [2026, 1, 16]);
+    const action = plan(denseInput({ now: nextDay }, { dayCreditsUsed: 0, weekCreditsUsed: 4_500 }));
+    expect(action.kind).toBe('scan');
+  });
+
+  it('weekly hard cap (≥30,000/week) → stops for the week, sleeping to the dense-week end', () => {
+    const action = plan(denseInput({}, { weekCreditsUsed: 30_000, dayCreditsUsed: 100 }));
+    expect(action).toEqual({ kind: 'sleep', untilMs: endsAtMs });
+  });
+
+  it('the 95% monthly auto-stop still applies on top of the dense caps', () => {
+    const action = plan(
+      denseInput({
+        budget: { monthlyCreditBudget: 20_000, autoStopPct: 95, usedTotal: 19_500 },
+      }),
+    );
+    expect(action.kind).toBe('sleep');
+  });
+
+  it('quiet hours stay absolute during a dense week', () => {
+    const now = at(3 * 60); // 03:00, inside quiet hours
+    const action = plan(denseInput({ now, lastScorePollAtMs: null }));
+    expect(action).toEqual({ kind: 'sleep', untilMs: nextQuietEndMs(now) });
+  });
+
+  it('an expired/absent dense week falls back to normal block cadence', () => {
+    const inactive = plan(denseInput({}, { active: false }));
+    expect(inactive.kind).toBe('scan'); // 15:00 is inside a normal block, so it still scans
+    // but a normal-mode DISABLED scheduler with no dense week stays dormant:
+    const dormant = plan(
+      denseInput({ settings: settings({ enabled: false }) }, { active: false }),
+    );
+    expect(dormant.kind).toBe('sleep');
   });
 });
 
