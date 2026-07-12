@@ -5,6 +5,7 @@ import { ApiError, fetchScanBrowser } from '../api';
 import { EyeGlyph } from '../components/EyeGlyph';
 import { OpportunityCard } from '../components/OpportunityCard';
 import { errorHint, errorTitle } from '../errorCopy';
+import { useSafetySettings } from '../useSafetySettings';
 
 const LAST_N_OPTIONS = [10, 20, 50, 100] as const;
 
@@ -19,6 +20,10 @@ export function ScanHistoryPage() {
   const [scans, setScans] = useState<ScanBrowserEntry[] | null>(null);
   const [error, setError] = useState<{ code: ApiErrorCode; message: string } | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Real persisted records — the ones that reached 'confirmed' after
+  // Phase 17 carry `safety`, including gate-filtered ones. This is where
+  // the FILTERED chip earns its keep.
+  const safetySettings = useSafetySettings();
 
   useEffect(() => {
     let cancelled = false;
@@ -164,7 +169,11 @@ export function ScanHistoryPage() {
                             <td colSpan={10}>
                               <div className="scan-drill">
                                 {scan.opportunities.map((record) => (
-                                  <OpportunityCard key={record.id} arb={record} />
+                                  <OpportunityCard
+                                    key={record.id}
+                                    arb={record}
+                                    safetySettings={safetySettings}
+                                  />
                                 ))}
                               </div>
                             </td>

@@ -2804,3 +2804,263 @@ select.bm-input {
     gap: 10px;
   }
 }
+
+/* ————————————————————————————————————————————————
+   SAFETY SCORE — Phase 17. Namespace: .safety-*
+   The gate is informational chrome, not a new color family: the score
+   badge/breakdown/settings ride the existing black/white/hairline system
+   (chip-amber for the FILTERED state — the same "caution, not a hard
+   failure" color the credit-spend widget already uses), never red (arb) or
+   yellow (EV/simulated).
+   ———————————————————————————————————————————————— */
+
+.safety-badge {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.safety-badge-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.safety-badge-summary::-webkit-details-marker {
+  display: none;
+}
+
+.safety-badge-summary::after {
+  content: '▾';
+  font-size: 9px;
+  color: var(--grey);
+}
+
+.safety-badge[open] > .safety-badge-summary::after {
+  content: '▴';
+}
+
+.safety-score {
+  display: inline-block;
+  border: 1px solid var(--hairline);
+  color: var(--white);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+}
+
+.safety-score.is-rejected {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.safety-badge-compact .safety-score {
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
+.safety-breakdown {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline-faint);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 480px;
+}
+
+.safety-reasons {
+  color: var(--red);
+}
+
+.safety-components {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--grey);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ————— Rounded (camouflage) stakes — cockpit primary/secondary ————— */
+
+.cockpit-ticket-figures .is-secondary {
+  color: var(--grey);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cockpit-rounding-note {
+  max-width: 46ch;
+}
+
+/* ————— Rotation advisory hint (cockpit) ————— */
+
+.cockpit-rotation-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--amber);
+  padding: 12px 14px;
+}
+
+.cockpit-rotation-hint-title {
+  color: var(--amber);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+/* ————— Safety settings panel (Advanced page) ————— */
+
+.safety-panel {
+  border-bottom: 1px solid var(--hairline);
+  padding: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.safety-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.safety-panel-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.safety-panel-settings label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.safety-panel-settings input[type='number'] {
+  background: var(--black);
+  border: 1px solid var(--hairline);
+  color: var(--white);
+  font-family: inherit;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  padding: 7px 9px;
+  width: 90px;
+  border-radius: 0;
+}
+
+.safety-panel-settings input[type='number']:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
+}
+
+.safety-panel-slider {
+  min-width: 220px;
+}
+
+.safety-panel-slider input[type='range'] {
+  width: 100%;
+  accent-color: var(--red);
+}
+
+.safety-panel-slider-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.safety-panel-copy {
+  max-width: 60ch;
+  color: var(--grey);
+}
+
+.safety-panel-books {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 520px;
+}
+
+.safety-panel-book-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.safety-panel-book-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--hairline);
+  padding: 4px 4px 4px 10px;
+  font-size: 12px;
+}
+
+.safety-panel-book-remove {
+  background: none;
+  border: none;
+  color: var(--grey);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 6px;
+}
+
+.safety-panel-book-remove:hover,
+.safety-panel-book-remove:focus-visible {
+  color: var(--red);
+  outline: none;
+}
+
+.safety-panel-book-add {
+  display: flex;
+  gap: 8px;
+}
+
+.safety-panel-error {
+  color: var(--red);
+}
+
+/* ————— Hub Cost of Safety readout ————— */
+
+.safety-cost-window {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.safety-cost-by-reason td:first-child,
+.safety-cost-by-strategy td:first-child {
+  text-transform: capitalize;
+}
+
+.safety-cost-tag {
+  font-size: 9px;
+  border: 1px solid var(--grey);
+  color: var(--grey);
+  padding: 1px 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-left: 6px;
+}
+
+@media (max-width: 720px) {
+  .safety-panel-settings {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .safety-breakdown {
+    max-width: 100%;
+  }
+}

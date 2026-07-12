@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import type { ArbOpportunity, BookmakerStatusValue } from '../../../shared/types';
+import type { ArbOpportunity, BookmakerStatusValue, SafetySettings } from '../../../shared/types';
+import { SafetyBadge } from './SafetyBadge';
 
 /**
  * One guaranteed-profit opportunity: the event, the profit, and one row per
@@ -11,11 +12,19 @@ export function OpportunityCard({
   arb,
   bookStatus,
   cockpitLink = true,
+  safetySettings = null,
 }: {
   arb: ArbOpportunity;
   bookStatus?: Map<string, BookmakerStatusValue>;
   /** Advanced mode passes false for snapshot-only results with no record. */
   cockpitLink?: boolean;
+  /**
+   * Phase 17: current SafetySettings (safeMode/threshold), for the FILTERED
+   * chip. Only Scan History's drill-down carries records with a `safety`
+   * field today (scoring happens at confirmation, not in scan/recompute
+   * responses) — SafetyBadge renders nothing when `arb.safety` is absent.
+   */
+  safetySettings?: Pick<SafetySettings, 'safeMode' | 'safetyThreshold'> | null;
 }) {
   return (
     <article className="card">
@@ -42,6 +51,7 @@ export function OpportunityCard({
                 ⚠ Too good — verify
               </span>
             )}
+            {arb.safety && <SafetyBadge safety={arb.safety} settings={safetySettings} compact />}
           </div>
         </div>
         <div className="card-profit">

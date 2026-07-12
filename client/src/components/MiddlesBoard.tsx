@@ -1,13 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import type { SafetySettings } from '../../../shared/types';
 import { ApiError, fetchMiddlesBoard, patchMiddlesSettings, type MiddlesBoard as Board } from '../api';
+import { SafetyBadge } from './SafetyBadge';
 
 /**
  * The MIDDLES segment of Risk Mode: two opposite bets on different lines,
  * gapped so both can win. Costs money when it misses — the breakeven
  * column is a fact; the hit chance is your judgment.
  */
-export function MiddlesBoard() {
+export function MiddlesBoard({
+  safetySettings = null,
+}: {
+  safetySettings?: Pick<SafetySettings, 'safeMode' | 'safetyThreshold'> | null;
+}) {
   const [board, setBoard] = useState<Board | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -122,6 +128,7 @@ export function MiddlesBoard() {
                   <th>Pays</th>
                   <th>Breakeven</th>
                   <th></th>
+                  <th>Safety</th>
                   <th></th>
                 </tr>
               </thead>
@@ -171,6 +178,9 @@ export function MiddlesBoard() {
                           </span>
                         )}
                         {bet.sameBookmaker && <span className="chip chip-warn">⚠ same book</span>}
+                      </td>
+                      <td>
+                        <SafetyBadge safety={bet.safety} settings={safetySettings} compact />
                       </td>
                       <td>
                         <Link className="card-cockpit-link micro-label" to={`/opportunity/${bet.id}`}>

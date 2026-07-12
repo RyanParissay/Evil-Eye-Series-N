@@ -27,6 +27,7 @@ import { FundPanel } from '../components/FundPanel';
 import { OpportunityCard } from '../components/OpportunityCard';
 import { WhatsAppPanel } from '../components/WhatsAppPanel';
 import { errorHint, errorTitle } from '../errorCopy';
+import { useSafetySettings } from '../useSafetySettings';
 
 type ScanState =
   | { status: 'idle' }
@@ -96,6 +97,11 @@ export function ScanPage() {
     () => new Map(books?.map((b) => [b.key, b.status]) ?? []),
     [books],
   );
+
+  // Scan responses never carry a safety score (scoring happens only at the
+  // confirmation transition) — this is fetched for consistency with the
+  // other opportunity-card surfaces; SafetyBadge renders nothing without it.
+  const safetySettings = useSafetySettings();
 
   // Hydrate the usage panel from the server's persisted last-scan record.
   useEffect(() => {
@@ -225,6 +231,7 @@ export function ScanPage() {
                 key={`${arb.eventId}-${arb.marketKey}`}
                 arb={arb}
                 bookStatus={bookStatus}
+                safetySettings={safetySettings}
               />
             ))}
           </>

@@ -4,7 +4,9 @@ import type { ApiErrorCode } from '../../../shared/types';
 import { ApiError, fetchEvBoard, patchEvSettings, type EvBoard } from '../api';
 import { EyeGlyph } from '../components/EyeGlyph';
 import { MiddlesBoard } from '../components/MiddlesBoard';
+import { SafetyBadge } from '../components/SafetyBadge';
 import { errorHint, errorTitle } from '../errorCopy';
+import { useSafetySettings } from '../useSafetySettings';
 
 /**
  * RISK MODE — the best upcoming EV bets. Yellow means exactly one thing
@@ -17,6 +19,7 @@ export function RiskModePage() {
   const [board, setBoard] = useState<EvBoard | null>(null);
   const [error, setError] = useState<{ code: ApiErrorCode; message: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const safetySettings = useSafetySettings();
 
   async function load() {
     try {
@@ -75,7 +78,7 @@ export function RiskModePage() {
         ))}
       </div>
 
-      {segment === 'middles' && <MiddlesBoard />}
+      {segment === 'middles' && <MiddlesBoard safetySettings={safetySettings} />}
 
       {segment === 'edges' && board && (
         <section className="risk-controls micro-label">
@@ -190,6 +193,7 @@ export function RiskModePage() {
                     <th>Stake</th>
                     <th>Expected</th>
                     <th>Bench age</th>
+                    <th>Safety</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -218,6 +222,9 @@ export function RiskModePage() {
                         <td className="num">${board.defaultStake.toFixed(0)}</td>
                         <td className="num">+${expected.toFixed(2)}</td>
                         <td className="num">{benchAge(ev.benchmarkLastUpdate)}</td>
+                        <td>
+                          <SafetyBadge safety={bet.safety} settings={safetySettings} compact />
+                        </td>
                         <td>
                           <Link className="card-cockpit-link micro-label" to={`/opportunity/${bet.id}`}>
                             Cockpit →
