@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { OpportunityRecord, OpsSettings, ScanLogEntry } from '@shared/types';
 import { buildScanBrowser } from './scanBrowser';
+import { DEFAULT_SCHEDULER_SETTINGS } from './opsStore';
 
 const SETTINGS: OpsSettings = {
   weekday: { startMinutes: 9 * 60, endMinutes: 23 * 60 },
@@ -11,6 +12,7 @@ const SETTINGS: OpsSettings = {
   autoStopPct: 95,
   markets: { totals: false, spreads: false },
   confirmSecondSighting: false,
+  scheduler: DEFAULT_SCHEDULER_SETTINGS,
 };
 
 /** Local wall-clock time on a fixed date, matching gapDetector.test.ts. */

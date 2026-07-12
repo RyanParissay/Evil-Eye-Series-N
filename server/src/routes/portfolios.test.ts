@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { GradeResult, OpportunityRecord, OpsSettings, RecordGrading } from '@shared/types';
 import { apiErrorHandler } from './api';
 import { createPortfolioRouter, type PortfolioRouterDeps } from './portfolios';
+import { DEFAULT_SCHEDULER_SETTINGS } from '../ops/opsStore';
 
 const OPS_SETTINGS: OpsSettings = {
   weekday: { startMinutes: 0, endMinutes: 1440 },
@@ -14,6 +15,7 @@ const OPS_SETTINGS: OpsSettings = {
   autoStopPct: 95,
   markets: { totals: false, spreads: false },
   confirmSecondSighting: false,
+  scheduler: DEFAULT_SCHEDULER_SETTINGS,
 };
 
 function grading(result: GradeResult, pnlPer100: number): RecordGrading {

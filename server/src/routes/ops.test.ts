@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { OpsSettings, ScanLogEntry } from '@shared/types';
 import { apiErrorHandler } from './api';
 import { createOpsRouter, type OpsRouterDeps } from './ops';
+import { DEFAULT_SCHEDULER_SETTINGS } from '../ops/opsStore';
 
 const NOW = new Date('2026-07-20T12:00:00Z');
 
@@ -30,6 +31,7 @@ const DEFAULTS: OpsSettings = {
   autoStopPct: 95,
   markets: { totals: false, spreads: false },
   confirmSecondSighting: false,
+  scheduler: DEFAULT_SCHEDULER_SETTINGS,
 };
 
 function harness(scans: ScanLogEntry[] = []) {

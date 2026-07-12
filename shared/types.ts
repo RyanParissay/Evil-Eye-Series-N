@@ -571,6 +571,50 @@ export interface OpsSettings {
    * next scan. Applies to arb, EV, and middle alerts alike.
    */
   confirmSecondSighting: boolean;
+  /**
+   * Phase 16 adaptive scheduler — the ONE owner of all server-side scan +
+   * score-poll timing (server/src/scheduler/). The legacy weekday/weekend
+   * windows + inWindowMins/outWindowMins above are retained for back-compat
+   * but the scheduler ignores them (gap detection now derives its expected
+   * cadence from scheduler.blocks).
+   */
+  scheduler: SchedulerSettings;
+}
+
+/**
+ * One adaptive-scheduling block in America/Vancouver local time. The
+ * scheduler runs a scan every `intervalMins` while `now` sits inside an
+ * active block; quiet hours (01:00–08:00 America/Vancouver) are a hard
+ * guard, never expressed as a block. Blocks stay within a single local day
+ * (startMin < endMin) — a schedule that "spans midnight" is two blocks.
+ */
+export interface SchedulerBlock {
+  /** Days of week this block covers: 0=Sunday … 6=Saturday (Vancouver local). */
+  days: number[];
+  /** Minutes from local midnight, inclusive (0..1440). */
+  startMin: number;
+  /** Minutes from local midnight, exclusive; startMin < endMin. */
+  endMin: number;
+  /** Scan cadence inside the block, whole minutes. */
+  intervalMins: number;
+}
+
+/**
+ * Server-side adaptive scheduler settings (Phase 16). `enabled` DEFAULTS
+ * FALSE and migrations must never flip it — the dev server hot-reloads
+ * against real credits. See server/src/scheduler/.
+ */
+export interface SchedulerSettings {
+  enabled: boolean;
+  blocks: SchedulerBlock[];
+  /** Fetch scope for scheduled scans (regionTab is a RegionTabKey). */
+  scanParams: { regionTab: string; topN: number };
+  /**
+   * Set when the scheduler self-disabled after an unrecoverable provider
+   * error (spent quota / rejected key); null while healthy. The scanner
+   * page surfaces it and lets the user re-enable, which clears it.
+   */
+  disabledReason: string | null;
 }
 
 export interface MiddlesSettings {

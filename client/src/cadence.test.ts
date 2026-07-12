@@ -16,6 +16,12 @@ function settings(overrides: Partial<OpsSettings> = {}): OpsSettings {
     autoStopPct: 95,
     markets: { totals: false, spreads: false },
     confirmSecondSighting: false,
+    scheduler: {
+      enabled: false,
+      blocks: [],
+      scanParams: { regionTab: 'ca_us', topN: 5 },
+      disabledReason: null,
+    },
     ...overrides,
   };
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { OpsSettings, ScanLogEntry } from '@shared/types';
 import { detectScanGaps } from './gapDetector';
+import { DEFAULT_SCHEDULER_SETTINGS } from './opsStore';
 
 // Weekday and weekend windows deliberately identical (09:00–23:00 local) so
 // the test doesn't depend on which day of the week it happens to run on.
@@ -13,6 +14,7 @@ const SETTINGS: OpsSettings = {
   autoStopPct: 95,
   markets: { totals: false, spreads: false },
   confirmSecondSighting: false,
+  scheduler: DEFAULT_SCHEDULER_SETTINGS,
 };
 
 /** Local wall-clock time on a fixed date, round-tripped through ISO — safe
