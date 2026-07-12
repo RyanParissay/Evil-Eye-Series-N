@@ -43,6 +43,10 @@ export const DEFAULT_SCHEDULER_SETTINGS: SchedulerSettings = {
   scanParams: { regionTab: 'ca_us', topN: 5 },
   disabledReason: null,
   confirmationIntervalSecs: DEFAULT_CONFIRMATION_INTERVAL_SECS,
+  // Phase 16 Part C: denseWeek is DELIBERATELY absent by default and never
+  // migrated in (it would burn credits on the hot-reloading dev server);
+  // proposalAppliedAt starts null (the optimizer has never been applied).
+  proposalAppliedAt: null,
 };
 
 /** confirmationIntervalSecs must stay well under the smallest block cadence

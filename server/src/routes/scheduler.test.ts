@@ -1,7 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import type { OpsSettings, ScanLogEntry } from '@shared/types';
+import type { OpportunityRecord, OpsSettings, ScanLogEntry } from '@shared/types';
 import { DENSE_WEEK_DAY_CAP } from '../config/constants';
 import { DEFAULT_OPS_SETTINGS } from '../ops/opsStore';
 import { vancouverEpochOf } from '../scheduler/vancouverTime';
@@ -37,7 +37,12 @@ function line(atMs: number, credits: number): ScanLogEntry {
   };
 }
 
-function harness(scans: ScanLogEntry[] = [], opsOver: Partial<OpsSettings> = {}, now: Date = NOW) {
+function harness(
+  scans: ScanLogEntry[] = [],
+  opsOver: Partial<OpsSettings> = {},
+  now: Date = NOW,
+  records: OpportunityRecord[] = [],
+) {
   const store = new MemOpsStore({ ...DEFAULT_OPS_SETTINGS, ...opsOver });
   let woke = 0;
   const deps: SchedulerRouterDeps = {
@@ -47,6 +52,7 @@ function harness(scans: ScanLogEntry[] = [], opsOver: Partial<OpsSettings> = {},
         for (const s of scans) yield s;
       },
     },
+    records: async () => records,
     onSchedulerChange: () => {
       woke += 1;
     },
@@ -57,6 +63,36 @@ function harness(scans: ScanLogEntry[] = [], opsOver: Partial<OpsSettings> = {},
   app.use('/api/scheduler', createSchedulerRouter(deps));
   app.use(apiErrorHandler);
   return { app, store, woke: () => woke };
+}
+
+/** A confirmed arb record detected at a Vancouver-local (date, hour). */
+function confirmedRec(date: [number, number, number], hour: number): OpportunityRecord {
+  const at = new Date(vancouverEpochOf(date[0], date[1], date[2], hour * 60)).toISOString();
+  return {
+    id: `${date.join('')}-${hour}`,
+    fingerprint: `${date.join('')}-${hour}`,
+    strategy: 'arb',
+    eventId: 'e',
+    sportKey: 'basketball_nba',
+    sportTitle: 'NBA',
+    eventName: 'A @ B',
+    commenceTime: at,
+    marketKey: 'h2h',
+    legs: [],
+    profitPctAtDetection: 3,
+    profitPct: 3,
+    arbIndex: 0.97,
+    status: 'active',
+    suspicious: false,
+    sameBookmaker: false,
+    regionTab: 'ca_us',
+    detectedAt: at,
+    lastSeenAt: at,
+    statusChangedAt: at,
+    alerted: false,
+    alertedAt: null,
+    confirmation: { status: 'confirmed', scanAAt: at, scanBAt: at, edgeDeltaPp: 0 },
+  };
 }
 
 describe('/api/scheduler/dense-week', () => {
@@ -129,5 +165,68 @@ describe('/api/scheduler/dense-week', () => {
     const res = await request(h.app).get('/api/scheduler/dense-week');
     expect(res.body.active).toBe(false);
     expect(h.store.data.scheduler.denseWeek).toBeNull();
+  });
+});
+
+/** 8 days of scan history (Jan 8 → Jan 15). */
+const WEEK_HISTORY: ScanLogEntry[] = Array.from({ length: 8 }, (_, i) =>
+  line(vancouverEpochOf(2026, 1, 8 + i, 12 * 60), 10),
+);
+
+describe('/api/scheduler/proposal', () => {
+  it('409s with a clear message when there are fewer than 7 days of history', async () => {
+    const short = Array.from({ length: 3 }, (_, i) => line(vancouverEpochOf(2026, 1, 13 + i, 12 * 60), 10));
+    const h = harness(short);
+    const res = await request(h.app).get('/api/scheduler/proposal');
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('conflict');
+    expect(res.body.error.message).toMatch(/7 days/);
+  });
+
+  it('GET returns a MODEL proposal with density, blocks, and projected ≤ ceiling', async () => {
+    const records = [confirmedRec([2026, 1, 15], 15), confirmedRec([2026, 1, 15], 15)];
+    const h = harness(WEEK_HISTORY, {}, NOW, records);
+    const res = await request(h.app).get('/api/scheduler/proposal');
+    expect(res.status).toBe(200);
+    expect(res.body.model).toBe(true);
+    expect(res.body.density).toEqual([{ day: 4, hour: 15, arb: 2, ev: 0, middle: 0 }]);
+    expect(res.body.blocks.length).toBeGreaterThan(0);
+    expect(res.body.projectedMonthlyCredits).toBeLessThanOrEqual(res.body.spendCeiling);
+    expect(res.body.spendCeiling).toBe(18_000);
+  });
+
+  it('POST /proposal/apply writes blocks + stamps proposalAppliedAt + wakes; GET alone never writes', async () => {
+    const h = harness(WEEK_HISTORY);
+    // A read never mutates blocks.
+    const before = [...h.store.data.scheduler.blocks];
+    await request(h.app).get('/api/scheduler/proposal');
+    expect(h.store.data.scheduler.blocks).toEqual(before);
+    expect(h.store.data.scheduler.proposalAppliedAt).toBeNull();
+    expect(h.woke()).toBe(0);
+
+    const blocks = [{ days: [1, 3, 5], startMin: 8 * 60, endMin: 14 * 60, intervalMins: 20 }];
+    const res = await request(h.app).post('/api/scheduler/proposal/apply').send({ blocks });
+    expect(res.status).toBe(200);
+    expect(res.body.scheduler.blocks).toEqual(blocks);
+    expect(h.store.data.scheduler.blocks).toEqual(blocks);
+    expect(h.store.data.scheduler.proposalAppliedAt).toBe(NOW.toISOString());
+    expect(h.woke()).toBe(1);
+  });
+
+  it('POST /proposal/apply rejects malformed blocks (400)', async () => {
+    const h = harness(WEEK_HISTORY);
+    for (const blocks of [
+      undefined,
+      [],
+      [{ days: [], startMin: 0, endMin: 60, intervalMins: 10 }],
+      [{ days: [7], startMin: 0, endMin: 60, intervalMins: 10 }],
+      [{ days: [1], startMin: 60, endMin: 60, intervalMins: 10 }],
+      [{ days: [1], startMin: 0, endMin: 60, intervalMins: 0 }],
+    ]) {
+      const res = await request(h.app).post('/api/scheduler/proposal/apply').send({ blocks });
+      expect(res.status).toBe(400);
+    }
+    // Nothing was written.
+    expect(h.store.data.scheduler.proposalAppliedAt).toBeNull();
   });
 });

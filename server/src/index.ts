@@ -230,6 +230,7 @@ app.use(
   createSchedulerRouter({
     settings: opsStore,
     scanHistory: scanHistoryStore,
+    records: () => ledgerService.allRecordsList(),
     onSchedulerChange: () => scheduler?.wake(),
   }),
 );

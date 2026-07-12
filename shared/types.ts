@@ -645,6 +645,12 @@ export interface SchedulerSettings {
    * at 4,500 credits/day and 30,000/week. Absent = not running.
    */
   denseWeek?: { startedAt: string } | null;
+  /**
+   * Phase 16 Part C.4: when the weekly optimizer's proposal was last APPLIED
+   * to `blocks` (POST /api/scheduler/proposal/apply). Drives the ">7 days old,
+   * re-run weekly" nudge. Absent/null = never applied.
+   */
+  proposalAppliedAt?: string | null;
 }
 
 /**

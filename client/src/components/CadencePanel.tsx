@@ -3,13 +3,16 @@ import type {
   DenseWeekStatus,
   OpsSettings,
   SchedulerBlock,
+  SchedulerProposal,
   SurvivalStats,
 } from '../../../shared/types';
 import { describePairCost } from '../creditWidget';
 import {
+  applyProposal,
   cancelDenseWeek,
   fetchCostEstimate,
   fetchDenseWeek,
+  fetchProposal,
   fetchSurvival,
   patchOpsSettings,
   patchScheduler,
@@ -71,6 +74,39 @@ export function CadencePanel({
       setError('Could not cancel the dense week.');
     } finally {
       setDenseBusy(false);
+    }
+  }
+
+  // Weekly deterministic proposal (Phase 16 Part C.4): MODEL, propose-only.
+  const [proposal, setProposal] = useState<SchedulerProposal | null>(null);
+  const [proposalMsg, setProposalMsg] = useState<string | null>(null);
+  const [proposalBusy, setProposalBusy] = useState(false);
+
+  async function loadProposal() {
+    setProposalMsg(null);
+    setProposalBusy(true);
+    try {
+      setProposal(await fetchProposal());
+    } catch (err) {
+      setProposal(null);
+      setProposalMsg(err instanceof Error ? err.message : 'Could not compute a proposal.');
+    } finally {
+      setProposalBusy(false);
+    }
+  }
+
+  async function applyThisProposal() {
+    if (!proposal) return;
+    if (!window.confirm('Apply this proposed schedule? It replaces your current blocks.')) return;
+    setProposalBusy(true);
+    try {
+      onSettings(await applyProposal(proposal.blocks));
+      setProposal(null);
+      setProposalMsg('Applied — the scheduler now runs the proposed schedule.');
+    } catch {
+      setProposalMsg('Could not apply the proposal.');
+    } finally {
+      setProposalBusy(false);
     }
   }
 
@@ -157,6 +193,19 @@ export function CadencePanel({
             </ul>
             <span>01:00–08:00 quiet — no scans or re-verifies of any kind</span>
           </div>
+
+          <ProposalControl
+            proposal={proposal}
+            message={proposalMsg}
+            busy={proposalBusy}
+            appliedAt={sched.proposalAppliedAt ?? null}
+            onLoad={loadProposal}
+            onApply={applyThisProposal}
+            onDismiss={() => {
+              setProposal(null);
+              setProposalMsg(null);
+            }}
+          />
           <label className="micro-label">
             monthly budget
             <input
@@ -296,6 +345,133 @@ function DenseWeekControl({
       </button>
     </div>
   );
+}
+
+const DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const WEEK_MS = 7 * 24 * 3_600_000;
+
+/**
+ * The weekly deterministic proposal (Phase 16 Part C.4): MODEL-labeled, never
+ * auto-applied. Shows a "get proposal" button (with the ">7 days old, re-run
+ * weekly" nudge), then the confirmed-opportunity density table (hour × day per
+ * strategy), the projected spend vs ceiling, and an Apply button behind a
+ * confirmation.
+ */
+function ProposalControl({
+  proposal,
+  message,
+  busy,
+  appliedAt,
+  onLoad,
+  onApply,
+  onDismiss,
+}: {
+  proposal: SchedulerProposal | null;
+  message: string | null;
+  busy: boolean;
+  appliedAt: string | null;
+  onLoad: () => void;
+  onApply: () => void;
+  onDismiss: () => void;
+}) {
+  const appliedMs = appliedAt ? Date.parse(appliedAt) : null;
+  const stale = appliedMs == null || Date.now() - appliedMs > WEEK_MS;
+
+  return (
+    <div className="cadence-proposal micro-label">
+      <div className="cadence-proposal-head">
+        <span className="cadence-proposal-tag">MODEL</span>
+        <span>weekly optimizer — proposes blocks from confirmed-opportunity density; never auto-applied</span>
+        <button type="button" className="cadence-edit" disabled={busy} onClick={proposal ? onDismiss : onLoad}>
+          {proposal ? 'dismiss' : busy ? '…' : 'get weekly proposal'}
+        </button>
+      </div>
+
+      {!proposal && appliedAt && (
+        <span className="cadence-proposal-nudge">
+          last applied {daysAgo(appliedMs!)}
+          {stale ? ' — a week has passed; re-run the optimizer' : ''}
+        </span>
+      )}
+      {!proposal && !appliedAt && (
+        <span className="cadence-proposal-nudge">optimizer has never been applied — the seed schedule is running</span>
+      )}
+      {message && <span className="cadence-proposal-msg">{message}</span>}
+
+      {proposal && (
+        <>
+          <DensityTable proposal={proposal} />
+          <div className="cadence-proposal-spend">
+            projected{' '}
+            <strong className={proposal.projectedMonthlyCredits > proposal.spendCeiling ? 'over' : ''}>
+              {proposal.projectedMonthlyCredits.toLocaleString()}
+            </strong>{' '}
+            / {proposal.spendCeiling.toLocaleString()} credits/month (budget{' '}
+            {proposal.monthlyBudget.toLocaleString()}, 10% reserved) · from{' '}
+            {proposal.historyDays.toFixed(1)} days of history · {proposal.blocks.length} block
+            {proposal.blocks.length === 1 ? '' : 's'}
+          </div>
+          <button type="button" className="cadence-proposal-apply" disabled={busy} onClick={onApply}>
+            apply proposed schedule
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Confirmed-opportunity density as an hour × day heat table (counts). Only
+ *  hours that carry any confirmed opportunity are shown. */
+function DensityTable({ proposal }: { proposal: SchedulerProposal }) {
+  const hours = [...new Set(proposal.density.map((c) => c.hour))].sort((a, b) => a - b);
+  if (hours.length === 0) {
+    return <span className="cadence-proposal-empty">no confirmed opportunities in the history yet</span>;
+  }
+  const cell = (day: number, hour: number) =>
+    proposal.density.find((c) => c.day === day && c.hour === hour) ?? null;
+
+  return (
+    <div className="cadence-density-wrap">
+      <table className="cadence-density">
+        <thead>
+          <tr>
+            <th scope="col">PT</th>
+            {DAY_LABELS.map((d) => (
+              <th key={d} scope="col">
+                {d}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {hours.map((hour) => (
+            <tr key={hour}>
+              <th scope="row">{String(hour).padStart(2, '0')}</th>
+              {DAY_LABELS.map((_, day) => {
+                const c = cell(day, hour);
+                const total = c ? c.arb + c.ev + c.middle : 0;
+                return (
+                  <td
+                    key={day}
+                    className={total > 0 ? 'has' : ''}
+                    title={c ? `arb ${c.arb} · ev ${c.ev} · middle ${c.middle}` : 'none'}
+                  >
+                    {total > 0 ? total : ''}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function daysAgo(ms: number): string {
+  const days = Math.floor((Date.now() - ms) / (24 * 3_600_000));
+  if (days <= 0) return 'today';
+  return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
 function formatBlock(b: SchedulerBlock): string {

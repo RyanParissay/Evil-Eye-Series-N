@@ -2382,3 +2382,99 @@ select.bm-input {
   padding: 6px 10px;
   border-radius: 2px;
 }
+
+/* ————— Weekly deterministic proposal (Phase 16 Part C.4) ————— */
+.cadence-proposal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+}
+
+.cadence-proposal-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* MODEL = in-sample, not a live promise (same honesty label as portfolios). */
+.cadence-proposal-tag {
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  border: 1px solid var(--hairline);
+  padding: 1px 6px;
+  border-radius: 2px;
+  color: var(--grey);
+}
+
+.cadence-proposal-head .cadence-edit {
+  margin-left: auto;
+}
+
+.cadence-proposal-nudge,
+.cadence-proposal-msg,
+.cadence-proposal-empty {
+  color: var(--grey);
+}
+
+.cadence-density-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.cadence-density {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.cadence-density th,
+.cadence-density td {
+  border: 1px solid var(--hairline);
+  padding: 2px 6px;
+  text-align: center;
+  min-width: 26px;
+  color: var(--grey);
+}
+
+.cadence-density th {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+/* Green = live surveillance density, app-wide semantic. */
+.cadence-density td.has {
+  color: var(--green);
+  font-weight: 700;
+}
+
+.cadence-proposal-spend .over {
+  color: var(--amber);
+}
+
+.cadence-proposal-apply {
+  align-self: flex-start;
+  background: none;
+  border: 1px solid var(--hairline);
+  color: var(--grey);
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 11px;
+  padding: 4px 12px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.cadence-proposal-apply:hover:not(:disabled),
+.cadence-proposal-apply:focus-visible {
+  border-color: var(--green);
+  color: var(--green);
+  outline: none;
+}
+
+.cadence-proposal-apply:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
