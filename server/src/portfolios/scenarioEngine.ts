@@ -34,6 +34,7 @@
 import type { OpportunityRecord } from '@shared/types';
 import { csvEscape } from '../ledger/ledgerService';
 import type { ScanGap } from '../ops/gapDetector';
+import { maxDrawdownOf, pnlForStake } from './settlement';
 
 export const SERIES_STARTING_BANKROLL = 10_000;
 
@@ -148,8 +149,6 @@ export function runScenarios(records: OpportunityRecord[], scanGaps: ScanGap[]):
 
 function runOneSeries(def: SeriesDef, sorted: OpportunityRecord[]): PortfolioSeries {
   let bankroll = SERIES_STARTING_BANKROLL;
-  let peak = SERIES_STARTING_BANKROLL;
-  let maxDrawdown = 0;
   let placed = 0;
   let wins = 0;
   let losses = 0;
@@ -189,7 +188,7 @@ function runOneSeries(def: SeriesDef, sorted: OpportunityRecord[]): PortfolioSer
       continue;
     }
 
-    const pnl = round2((def.stake * record.grading.pnlPer100) / 100);
+    const pnl = pnlForStake(def.stake, record.grading);
     bankroll = round2(bankroll + pnl);
     placed += 1;
     if (record.grading.result === 'win') wins += 1;
@@ -197,10 +196,13 @@ function runOneSeries(def: SeriesDef, sorted: OpportunityRecord[]): PortfolioSer
     else if (record.grading.result === 'push') pushes += 1;
     else voids += 1;
 
-    peak = Math.max(peak, bankroll);
-    maxDrawdown = Math.max(maxDrawdown, round2(peak - bankroll));
     equity.push({ at: record.detectedAt, bankroll });
   }
+
+  const maxDrawdown = maxDrawdownOf([
+    SERIES_STARTING_BANKROLL,
+    ...equity.map((point) => point.bankroll),
+  ]);
 
   return {
     key: def.key,

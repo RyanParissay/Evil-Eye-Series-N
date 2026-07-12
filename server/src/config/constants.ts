@@ -156,6 +156,9 @@ export const LEADERBOARD_FILE = 'data/leaderboard.json';
 /** Score-polling ledger: daily credit spend + per-event poll state (gitignored). */
 export const GRADING_FILE = 'data/grading.json';
 
+/** Analytics Hub (Phase 16): profiles + immutable purchase/skip events (gitignored). */
+export const HUB_FILE = 'data/hub.json';
+
 /** Everything under here gets backed up daily (gitignored). */
 export const DATA_DIR = 'data';
 

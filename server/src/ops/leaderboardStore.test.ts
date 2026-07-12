@@ -139,3 +139,102 @@ describe('LeaderboardStore', () => {
     expect(report).toEqual({ createdAt: expect.any(String), totalScans: 0, books: [] });
   });
 });
+
+describe('LeaderboardStore.readHubLeaderboards (Phase 16 Hub boards)', () => {
+  let dir: string;
+  let file: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'hub-leaderboard-'));
+    file = join(dir, 'leaderboard.json');
+  });
+  afterEach(() => rm(dir, { recursive: true, force: true }));
+
+  it('occurrencePct = book appearances ÷ total opportunities of that strategy (two-leg double-credit)', async () => {
+    const store = new LeaderboardStore(file, () => NOW);
+    // Two arb opportunities; each two-leg arb credits BOTH its books.
+    await store.accrue({
+      events: [event([{ key: 'bet365', title: 'Bet365' }, { key: 'pinnacle', title: 'Pinnacle' }])],
+      opportunities: [
+        opp({}), // bet365 + pinnacle
+        opp({ legs: [
+          { outcome: 'A', bookmakerKey: 'bet365', bookmakerTitle: 'Bet365', odds: 2.1, stake: 48, link: null },
+          { outcome: 'B', bookmakerKey: 'draftkings', bookmakerTitle: 'DraftKings', odds: 2.05, stake: 52, link: null },
+        ] }),
+      ],
+    });
+
+    const boards = await store.readHubLeaderboards();
+    expect(boards.sinceAt).toBe(NOW.toISOString());
+    // 2 arb opportunities total. bet365 legged in both → 100%; the others once → 50%.
+    const bet365 = boards.arb.find((r) => r.bookmakerKey === 'bet365')!;
+    const pinnacle = boards.arb.find((r) => r.bookmakerKey === 'pinnacle')!;
+    const dk = boards.arb.find((r) => r.bookmakerKey === 'draftkings')!;
+    expect(bet365).toMatchObject({ count: 2, occurrencePct: 100 });
+    expect(pinnacle).toMatchObject({ count: 1, occurrencePct: 50 });
+    expect(dk).toMatchObject({ count: 1, occurrencePct: 50 });
+    // bet365 (2 legs) sorts ahead of the singles.
+    expect(boards.arb[0].bookmakerKey).toBe('bet365');
+    expect(boards.ev).toEqual([]);
+    expect(boards.middle).toEqual([]);
+  });
+
+  it('separates the three strategy boards and rounds odd ratios', async () => {
+    const store = new LeaderboardStore(file, () => NOW);
+    const evCtx = { benchmarkKey: 'pinnacle', benchmarkOdds: 2, fairProbability: 0.5, edgePct: 5, benchmarkLastUpdate: NOW.toISOString() };
+    const mid = { lowLine: 1.5, highLine: 2.5, windowSize: 1, costPct: -1, payoutPct: 2, breakevenPct: -1, freeMiddle: true, pushPossible: false, keyNumbers: [] };
+    await store.accrue({
+      events: [],
+      opportunities: [
+        // 3 arb opps: 'busy' in all three → 3/3 = 100%.
+        opp({ legs: [{ outcome: 'A', bookmakerKey: 'busy', bookmakerTitle: 'Busy', odds: 2, stake: 50, link: null }] }),
+        opp({ legs: [{ outcome: 'A', bookmakerKey: 'busy', bookmakerTitle: 'Busy', odds: 2, stake: 50, link: null }] }),
+        opp({ legs: [{ outcome: 'A', bookmakerKey: 'busy', bookmakerTitle: 'Busy', odds: 2, stake: 50, link: null }] }),
+        // 1 ev opp at fanduel → 1/1 = 100% on the EV board only.
+        opp({ ev: evCtx, legs: [{ outcome: 'A', bookmakerKey: 'fanduel', bookmakerTitle: 'FanDuel', odds: 2.2, stake: 100, link: null }] }),
+        // 2 middle opps, one leg each at pointsbet → 2/2 = 100% on the middle board.
+        opp({ middle: mid, legs: [{ outcome: 'O', bookmakerKey: 'pointsbet', bookmakerTitle: 'PointsBet', odds: 2, stake: 50, link: null }] }),
+        opp({ middle: mid, legs: [{ outcome: 'O', bookmakerKey: 'pointsbet', bookmakerTitle: 'PointsBet', odds: 2, stake: 50, link: null }] }),
+      ],
+    });
+
+    const boards = await store.readHubLeaderboards();
+    expect(boards.arb).toEqual([{ bookmakerKey: 'busy', title: 'Busy', count: 3, occurrencePct: 100 }]);
+    expect(boards.ev).toEqual([{ bookmakerKey: 'fanduel', title: 'FanDuel', count: 1, occurrencePct: 100 }]);
+    expect(boards.middle).toEqual([{ bookmakerKey: 'pointsbet', title: 'PointsBet', count: 2, occurrencePct: 100 }]);
+  });
+
+  it('caps each board at the top 10 books', async () => {
+    const store = new LeaderboardStore(file, () => NOW);
+    // 12 distinct arb books, decreasing leg counts so ordering is unambiguous.
+    const opportunities: ArbOpportunity[] = [];
+    for (let i = 0; i < 12; i++) {
+      const key = `book${String(i).padStart(2, '0')}`;
+      for (let j = 0; j <= 12 - i; j++) {
+        opportunities.push(opp({ legs: [{ outcome: 'A', bookmakerKey: key, bookmakerTitle: key, odds: 2, stake: 50, link: null }] }));
+      }
+    }
+    await store.accrue({ events: [], opportunities });
+    const boards = await store.readHubLeaderboards();
+    expect(boards.arb).toHaveLength(10);
+    expect(boards.arb[0].bookmakerKey).toBe('book00');
+  });
+
+  it('serves a cached board and invalidates it on the next accrual', async () => {
+    const store = new LeaderboardStore(file, () => NOW);
+    await store.accrue({ events: [], opportunities: [opp({ legs: [{ outcome: 'A', bookmakerKey: 'busy', bookmakerTitle: 'Busy', odds: 2, stake: 50, link: null }] })] });
+    const first = await store.readHubLeaderboards();
+    const cached = await store.readHubLeaderboards();
+    expect(cached).toBe(first); // same object reference — served from cache
+
+    await store.accrue({ events: [], opportunities: [opp({ legs: [{ outcome: 'A', bookmakerKey: 'busy', bookmakerTitle: 'Busy', odds: 2, stake: 50, link: null }] })] });
+    const afterWrite = await store.readHubLeaderboards();
+    expect(afterWrite).not.toBe(first); // recomputed after the store write
+    expect(afterWrite.arb[0].count).toBe(2);
+  });
+
+  it('handles a fresh store with no opportunities (empty boards, since = createdAt)', async () => {
+    const store = new LeaderboardStore(file, () => NOW);
+    const boards = await store.readHubLeaderboards();
+    expect(boards).toEqual({ sinceAt: NOW.toISOString(), arb: [], ev: [], middle: [] });
+  });
+});

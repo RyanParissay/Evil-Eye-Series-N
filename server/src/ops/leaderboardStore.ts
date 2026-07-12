@@ -6,8 +6,17 @@
  * structurally — this file imports no provider, only @shared/types and the
  * generic JsonStore; it is fed exclusively by data a scan already fetched.
  */
-import type { ArbOpportunity, BookLeaderboardEntry, Leaderboard, OddsEvent } from '@shared/types';
+import type {
+  ArbOpportunity,
+  BookLeaderboardEntry,
+  HubLeaderboardRow,
+  HubLeaderboards,
+  Leaderboard,
+  OddsEvent,
+} from '@shared/types';
 import { JsonStore } from '../lib/jsonStore';
+
+type StrategyKey = 'arb' | 'ev' | 'middle';
 
 /** Persisted per-book counts, pre-share (share is a read-time ratio against
  *  the CURRENT totalScans, never frozen at accrual time). */
@@ -26,6 +35,11 @@ interface LeaderboardData {
   createdAt: string;
   totalScans: number;
   books: StoredBook[];
+  /** Phase 16 (additive): cumulative opportunity COUNT per strategy — the
+   *  denominator for the Hub boards' occurrencePct. Accrues forward, same as
+   *  everything else here (the raw snapshot is latest-only, so history can't
+   *  be recomputed). Absent on pre-Phase-16 files → migrated to zeros. */
+  oppTotals: { arb: number; ev: number; middle: number };
 }
 
 export interface LeaderboardScanInput {
@@ -39,6 +53,8 @@ export interface LeaderboardScanInput {
 
 export class LeaderboardStore {
   private readonly store: JsonStore<LeaderboardData>;
+  /** In-memory memo of the Hub boards; invalidated on every store write. */
+  private hubCache: HubLeaderboards | null = null;
 
   constructor(
     filePath: string,
@@ -46,13 +62,14 @@ export class LeaderboardStore {
   ) {
     this.store = new JsonStore<LeaderboardData>(
       filePath,
-      () => ({ createdAt: this.now().toISOString(), totalScans: 0, books: [] }),
+      () => ({ createdAt: this.now().toISOString(), totalScans: 0, books: [], oppTotals: blankTotals() }),
       (parsed) => {
         const data = (parsed ?? {}) as Partial<LeaderboardData>;
         return {
           createdAt: data.createdAt ?? this.now().toISOString(),
           totalScans: data.totalScans ?? 0,
           books: data.books ?? [],
+          oppTotals: { ...blankTotals(), ...(data.oppTotals ?? {}) },
         };
       },
     );
@@ -60,6 +77,14 @@ export class LeaderboardStore {
 
   async read(): Promise<Leaderboard> {
     return toLeaderboard(await this.store.read());
+  }
+
+  /** Phase 16 Hub boards — top 10 books per strategy with occurrencePct.
+   *  Served from an in-memory cache invalidated whenever accrue() writes. */
+  async readHubLeaderboards(): Promise<HubLeaderboards> {
+    if (this.hubCache) return this.hubCache;
+    this.hubCache = toHubLeaderboards(await this.store.read());
+    return this.hubCache;
   }
 
   /** One accrual per scan: feed presence (appearances) plus every detected
@@ -89,8 +114,10 @@ export class LeaderboardStore {
         byKey.set(key, entry);
       }
 
+      const oppTotals = { ...data.oppTotals };
       for (const opp of input.opportunities) {
         const strategy = opp.ev ? 'ev' : opp.middle ? 'middle' : 'arb';
+        oppTotals[strategy] += 1;
         for (const leg of opp.legs) {
           const entry = byKey.get(leg.bookmakerKey) ?? blank(leg.bookmakerKey, leg.bookmakerTitle);
           entry.legCounts[strategy] += 1;
@@ -102,10 +129,18 @@ export class LeaderboardStore {
         createdAt: data.createdAt,
         totalScans: data.totalScans + 1,
         books: [...byKey.values()],
+        oppTotals,
       };
       return { data: next, result: undefined };
     });
+    // The store write above changed the accrued counts — drop the memo so the
+    // next Hub read recomputes.
+    this.hubCache = null;
   }
+}
+
+function blankTotals(): { arb: number; ev: number; middle: number } {
+  return { arb: 0, ev: 0, middle: 0 };
 }
 
 /** Pure: share is always computed against the CURRENT totalScans, sorted
@@ -120,4 +155,30 @@ function toLeaderboard(data: LeaderboardData): Leaderboard {
     }))
     .sort((a, b) => totalLegs(b) - totalLegs(a) || b.appearances - a.appearances);
   return { createdAt: data.createdAt, totalScans: data.totalScans, books };
+}
+
+/** Pure: one top-10 board per strategy. count = the book's leg appearances in
+ *  that strategy's opportunities (two-leg strategies credit both legs' books);
+ *  occurrencePct = count ÷ that strategy's total opportunity count × 100,
+ *  recomputed against the CURRENT totals (never frozen at accrual time). */
+function toHubLeaderboards(data: LeaderboardData): HubLeaderboards {
+  const board = (strategy: StrategyKey): HubLeaderboardRow[] => {
+    const total = data.oppTotals[strategy];
+    return data.books
+      .filter((b) => b.legCounts[strategy] > 0)
+      .map((b) => ({
+        bookmakerKey: b.key,
+        title: b.title,
+        count: b.legCounts[strategy],
+        occurrencePct: total > 0 ? Math.round((b.legCounts[strategy] / total) * 10000) / 100 : 0,
+      }))
+      .sort(
+        (a, b) =>
+          b.count - a.count ||
+          b.occurrencePct - a.occurrencePct ||
+          a.bookmakerKey.localeCompare(b.bookmakerKey),
+      )
+      .slice(0, 10);
+  };
+  return { sinceAt: data.createdAt, arb: board('arb'), ev: board('ev'), middle: board('middle') };
 }

@@ -15,6 +15,7 @@ import {
   DEFAULT_BACKUP_DIR,
   DEFAULT_PORT,
   GRADING_FILE,
+  HUB_FILE,
   LAST_SCAN_FILE,
   LAST_SNAPSHOT_FILE,
   LEADERBOARD_FILE,
@@ -33,6 +34,9 @@ import {
 } from './config/constants';
 import { BackupService } from './ops/backupService';
 import { LeaderboardStore } from './ops/leaderboardStore';
+import { HubService } from './hub/hubService';
+import { HubProfileStore } from './hub/profileStore';
+import { createHubRouter } from './routes/hub';
 import { GradingService } from './grading/gradingService';
 import { GradingStore } from './grading/gradingStore';
 import { createGradingRouter } from './routes/grading';
@@ -477,6 +481,42 @@ const scanDeps: ScanDeps = {
       }
     },
 };
+
+// ── PHASE-16 HUB CONSUMER ────────────────────────────────────────────────
+// Analytics Hub (Part B, SIMULATED): each profile is a parameterized engine
+// series that auto-purchases CONFIRMED opportunities. WP2 lands the
+// confirmation-pair pipeline plus an onConfirmed fan-out of confirmed
+// OpportunityRecords; that hook does NOT exist in this worktree yet, so we
+// drive the consumer with a no-op-safe DIRECT call path: wrap the scan
+// notifier and, after each scan, hand the Hub every CONFIRMED persisted
+// record (confirmation.status === 'confirmed', or absent = pre-confirmation
+// record, treated as confirmed per shared/types). onConfirmed is idempotent
+// (purchases/skips dedupe by recordId) and fire-and-forget — a Hub failure is
+// a console.warn, never a failed scan. MERGE NOTE FOR THE ORCHESTRATOR: once
+// WP2's onConfirmed fan-out has landed, delete the notifier wrapper below and
+// register `hubService.onConfirmed` on that fan-out instead — hubService and
+// the route are unchanged; only this driver swaps.
+const hubService = new HubService({
+  store: new HubProfileStore(path.join(serverRoot, HUB_FILE)),
+  records: () => ledgerService.allRecordsList(),
+});
+app.use(
+  '/api/hub',
+  createHubRouter({ hub: hubService, leaderboards: () => leaderboardStore.readHubLeaderboards() }),
+);
+const priorNotifier = scanDeps.notifier;
+scanDeps.notifier = async (opportunities) => {
+  await Promise.resolve(priorNotifier?.(opportunities));
+  try {
+    const confirmed = (await opportunityService.list()).filter(
+      (r) => r.confirmation == null || r.confirmation.status === 'confirmed',
+    );
+    await hubService.onConfirmed(confirmed);
+  } catch (err) {
+    console.warn('Hub purchase failed:', err);
+  }
+};
+// ─────────────────────────────────────────────────────────────────────────
 
 // Manual scans are blocked in quiet hours too (spec: "zero calls of any
 // kind"). Manual scans stay never-blocked by the credit budget — that guard
