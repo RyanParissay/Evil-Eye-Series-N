@@ -1,27 +1,31 @@
 /**
  * Safety Score HTTP boundary (Phase 17): the settings config object +
- * rotation telemetry. Provider-free by construction — settings are a store
- * read/write, rotation is a pure computation over persisted records.
+ * rotation telemetry + the Cost of Safety readout. Provider-free by
+ * construction — settings are a store read/write, rotation and cost are
+ * pure computations over persisted records (zero credits structurally).
  *
  *   GET   /api/safety/settings  → the SafetySettings object
  *   PATCH /api/safety/settings  → validate shapes, reject bad → 'bad_request'
  *   GET   /api/safety/rotation  → the advisory RotationReport
- *
- * WP-B owns the score-at-confirmation wiring and the gate; these routes are
- * read/settings-only (zero credits), safe to go live on the watch server.
+ *   GET   /api/safety/cost      → SafetyCostReport (simulated: true) — what
+ *                                 the gate declined at CURRENT settings,
+ *                                 priced at the fund default stake
  */
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import type { OpportunityRecord, SafetySettings } from '@shared/types';
 import type { SafetySettingsStore } from '../ops/safetyStore';
+import { computeSafetyCost } from '../safety/cost';
 import { computeRotation } from '../safety/rotation';
 import { errorBody } from './api';
 
 export interface SafetyRouterDeps {
   settings: SafetySettingsStore;
-  /** Full record stream (active + archived) — rotation's population. */
+  /** Full record stream (active + archived) — rotation's + cost's population. */
   records: () => Promise<OpportunityRecord[]>;
   /** Record ids with ≥1 Hub purchase (acted-on = alerted OR Hub-purchased). */
   hubPurchasedRecordIds: () => Promise<ReadonlySet<string>>;
+  /** Fund default stake in dollars — the Cost of Safety pricing basis. */
+  defaultStake: () => Promise<number>;
   now?: () => Date;
 }
 
@@ -49,6 +53,19 @@ export function createSafetyRouter(deps: SafetyRouterDeps): Router {
         return { data: nextSettings, result: nextSettings };
       });
       res.json(updated);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get('/cost', async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const [history, settings, defaultStake] = await Promise.all([
+        deps.records(),
+        deps.settings.read(),
+        deps.defaultStake(),
+      ]);
+      res.json(computeSafetyCost({ history, settings, defaultStake, now: now() }));
     } catch (err) {
       next(err);
     }

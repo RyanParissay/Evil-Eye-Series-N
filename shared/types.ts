@@ -1092,9 +1092,19 @@ export interface SafetyCostReport {
 export interface SafetyCostWindow {
   /** Confirmed opportunities the gate filtered (score < threshold or hard reject). */
   filteredCount: number;
-  /** Σ hypothetical profit at the default stake, dollars. */
+  /**
+   * Σ hypothetical profit at the fund default stake, dollars. Honesty rules:
+   * arb → profitPct × stake/100 (guaranteed-at-detection); EV → edgePct ×
+   * stake/100 (EXPECTED — a model, not money; label it so); middle → $0
+   * unless freeMiddle, whose locked floor −costPct × stake/100 is real.
+   */
   forgoneProfit: number;
-  /** Σ headline edge of filtered records, percentage points. */
+  /** Σ headline edge of filtered records, pp — same honesty rules (costed
+   *  middles contribute 0, never their cost). */
   forgoneEdgePp: number;
+  /** One bucket per record: its first hard-reject reason, else 'below_threshold'. */
   byReason: Array<{ reason: string; count: number; forgoneProfit: number }>;
+  /** Per-strategy split so the UI can label EV dollars EXPECTED and show
+   *  middles' count-but-$0 rule. Only strategies present appear. */
+  byStrategy?: Array<{ strategy: OpportunityStrategy; count: number; forgoneProfit: number }>;
 }

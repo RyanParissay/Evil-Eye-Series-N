@@ -66,6 +66,7 @@ function harness(records: OpportunityRecord[] = []) {
       settings: store,
       records: async () => records,
       hubPurchasedRecordIds: async () => new Set(),
+      defaultStake: async () => 500,
       now: () => new Date('2026-07-12T20:00:00Z'),
     }),
   );
@@ -111,6 +112,35 @@ describe('/api/safety/settings', () => {
       expect(res.status, JSON.stringify(body)).toBe(400);
       expect(res.body.error.code).toBe('bad_request');
     }
+  });
+});
+
+describe('/api/safety/cost', () => {
+  it('GET returns the SIMULATED Cost of Safety at current settings + fund stake', async () => {
+    // One confirmed-but-filtered arb (hard reject), scored an hour ago:
+    // 6% × $500/100 = $30 forgone, bucketed under its reject reason.
+    const filtered = {
+      ...arbRecord('bet365'),
+      profitPct: 6,
+      confirmation: { status: 'confirmed' as const, scanAAt: '2026-07-12T18:59:00Z' },
+      safety: {
+        score: 0,
+        components: [],
+        reasons: ['suspicious_edge'],
+        roundedStakes: [250, 250],
+        scoredAt: '2026-07-12T19:00:00Z',
+      },
+    };
+    const res = await request(harness([filtered]).app).get('/api/safety/cost');
+    expect(res.status).toBe(200);
+    expect(res.body.simulated).toBe(true);
+    expect(res.body.week).toMatchObject({
+      filteredCount: 1,
+      forgoneProfit: 30,
+      forgoneEdgePp: 6,
+      byReason: [{ reason: 'suspicious_edge', count: 1, forgoneProfit: 30 }],
+    });
+    expect(res.body.lifetime.filteredCount).toBe(1);
   });
 });
 

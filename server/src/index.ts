@@ -560,6 +560,7 @@ app.use(
     settings: safetyStore,
     records: () => ledgerService.allRecordsList(),
     hubPurchasedRecordIds,
+    defaultStake: async () => (await fundService.settings()).defaultStake,
   }),
 );
 
