@@ -29,6 +29,7 @@ import {
 } from '../autoScan';
 import { BookmakerPanel } from '../components/BookmakerPanel';
 import { ControlBar } from '../components/ControlBar';
+import { CreditSpendWidget } from '../components/CreditSpendWidget';
 import { EyeGlyph } from '../components/EyeGlyph';
 import { FundPanel } from '../components/FundPanel';
 import { OpportunityCard } from '../components/OpportunityCard';
@@ -231,6 +232,8 @@ export function ScanPage() {
       )}
 
       <FundPanel refreshKey={lastScanAt} />
+
+      <CreditSpendWidget refreshKey={lastScanAt} />
 
       <WhatsAppPanel />
 

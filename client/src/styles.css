@@ -1983,6 +1983,43 @@ select.bm-input {
   color: var(--red);
 }
 
+/* ————— Credit spend widget (Phase 15 #7) ————— */
+
+:root {
+  /* Numeric danger only (credit-spend widget) — NOT a reserved app-wide
+     semantic like red (arb) / green (live) / yellow (Risk Mode). */
+  --amber: #ffa500;
+}
+
+.credit-widget {
+  border-bottom: 1px solid var(--hairline);
+  padding: 16px 0;
+}
+
+.credit-widget-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-end;
+}
+
+.credit-widget-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.credit-widget-stat strong {
+  font-size: 22px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.chip-amber {
+  border: 1px solid var(--amber);
+  color: var(--amber);
+}
+
 /* ————— Evidence panel + scoreboard ————— */
 
 .scoreboard {
