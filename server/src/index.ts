@@ -27,6 +27,7 @@ import {
   OPS_FILE,
   PAPER_FILE,
   PRESETS_FILE,
+  SAFETY_FILE,
   SCAN_HISTORY_DIR,
   SCHEDULER_MAX_SLEEP_MS,
   SCHEDULER_SCORE_POLL_INTERVAL_MS,
@@ -37,6 +38,10 @@ import { LeaderboardStore } from './ops/leaderboardStore';
 import { HubService } from './hub/hubService';
 import { HubProfileStore } from './hub/profileStore';
 import { createHubRouter } from './routes/hub';
+import { SafetyStore } from './ops/safetyStore';
+import { createSafetyRouter } from './routes/safety';
+import { scoreConfirmedRecords, type ConfirmationScoringDeps } from './safety/scoring';
+import { passesSafetyGate } from './engine/safety';
 import { GradingService } from './grading/gradingService';
 import { GradingStore } from './grading/gradingStore';
 import { createGradingRouter } from './routes/grading';
@@ -130,6 +135,11 @@ const gradingStore = new GradingStore(path.join(serverRoot, GRADING_FILE));
 const gradingService = new GradingService(provider, opportunityService, gradingStore);
 
 const snapshotStore = new SnapshotStore(path.join(serverRoot, LAST_SNAPSHOT_FILE));
+
+// Phase 17: the one SafetySettings config object. Constructed early because
+// the confirmation fan-out consumers below gate on it (passesSafetyGate);
+// its routes mount further down with the rest of the safety surface.
+const safetyStore = new SafetyStore(path.join(serverRoot, SAFETY_FILE));
 
 // Where WhatsApp deep links point. Default matches the Vite dev client;
 // set APP_URL when the client lives anywhere else.
@@ -365,7 +375,16 @@ function onConfirmed(records: OpportunityRecord[]): void {
  * single_sighting and pending records can never reach here by construction.
  */
 async function dispatchConfirmedAlerts(records: OpportunityRecord[]): Promise<void> {
-  const opportunities = records.map(recordToOpportunity);
+  // Phase 17: THE safety gate — the one passesSafetyGate function, applied
+  // here and in the hub-purchases consumer (never restated). Filtered
+  // records are not alerted but stay fully persisted with score + reasons
+  // (Cost of Safety prices them); safeMode OFF passes everything, and a
+  // record with no safety (scoring failure / pre-Phase-17) is never
+  // retro-gated.
+  const safetySettings = await safetyStore.read();
+  const passed = records.filter((r) => passesSafetyGate(r, safetySettings));
+  if (passed.length === 0) return;
+  const opportunities = passed.map(recordToOpportunity);
   const alertable = await bookmakerService.filterAlertable(opportunities);
   if (alertable.length === 0) return;
   const arbs = alertable.filter((o) => !o.ev && !o.middle);
@@ -505,8 +524,9 @@ const scanDeps: ScanDeps = {
 // retro-purchased (mirror of the never-retro-alert rule). onConfirmed is
 // idempotent (purchases/skips dedupe by recordId); a Hub failure is a
 // console.warn, never a failed scan.
+const hubProfileStore = new HubProfileStore(path.join(serverRoot, HUB_FILE));
 const hubService = new HubService({
-  store: new HubProfileStore(path.join(serverRoot, HUB_FILE)),
+  store: hubProfileStore,
   records: () => ledgerService.allRecordsList(),
 });
 app.use(
@@ -515,8 +535,58 @@ app.use(
 );
 confirmedConsumers.push({
   name: 'hub-purchases',
-  consume: (records) => hubService.onConfirmed(records),
+  consume: async (records) => {
+    // Phase 17: the SAME safety gate alerts apply — one function, both
+    // paths, identical behavior. Filtered records are never purchased but
+    // stay persisted with score + reasons.
+    const safetySettings = await safetyStore.read();
+    await hubService.onConfirmed(records.filter((r) => passesSafetyGate(r, safetySettings)));
+  },
 });
+// ─────────────────────────────────────────────────────────────────────────
+
+// ── PHASE-17 SAFETY SCORE ────────────────────────────────────────────────
+// WP-A: settings + advisory rotation telemetry (zero credits). WP-B: the
+// scoring assembly (safety/scoring.ts) runs at the confirmation transition
+// inside the scheduler's runConfirmScan below, and passesSafetyGate is
+// applied inside BOTH fan-out consumers (dispatchConfirmedAlerts above, the
+// hub-purchases consumer). Rotation's/exposure's acted-on population =
+// alerted OR Hub-purchased (recordId set read from the hub store).
+const hubPurchasedRecordIds = async (): Promise<ReadonlySet<string>> =>
+  new Set((await hubProfileStore.read()).purchases.map((p) => p.recordId));
+app.use(
+  '/api/safety',
+  createSafetyRouter({
+    settings: safetyStore,
+    records: () => ledgerService.allRecordsList(),
+    hubPurchasedRecordIds,
+    defaultStake: async () => (await fundService.settings()).defaultStake,
+  }),
+);
+
+// What score-at-confirmation assembles the engine inputs from. A failure of
+// ANY of these must never block confirmation — scoreConfirmedRecords never
+// throws; it warns and the record confirms WITHOUT safety (ungated,
+// pre-Phase-17 semantics).
+const safetyScoringDeps: ConfirmationScoringDeps = {
+  snapshots: snapshotStore,
+  settings: safetyStore,
+  history: () => ledgerService.allRecordsList(),
+  hubPurchasedIds: hubPurchasedRecordIds,
+  fundSettings: () => fundService.settings(),
+  bookBalances: async () =>
+    new Map((await bookmakerService.list()).map((b) => [b.key, b.balance ?? null])),
+  // The arb alert min-profit threshold the $-rounding must preserve: the
+  // LOWEST verified+active subscription threshold (the edge below which no
+  // alert would fire anyway). No subscribers → 0, so rounding still may not
+  // eat the guarantee itself. EV/middles score with 0 (WP-A's arb-only rule).
+  arbMinEdgePct: async () => {
+    const thresholds = (await whatsappStore.read()).subscriptions
+      .filter((s) => s.verified && s.active)
+      .map((s) => s.thresholdPercent);
+    return thresholds.length > 0 ? Math.min(...thresholds) : 0;
+  },
+};
 // ─────────────────────────────────────────────────────────────────────────
 
 // Manual scans are blocked in quiet hours too (spec: "zero calls of any
@@ -566,10 +636,26 @@ scheduler = new Scheduler({
     if (!parsed.ok) throw new Error(`Invalid confirmation scanParams: ${parsed.message}`);
     await runScan(scanDeps, parsed.request);
     const after = await opportunityService.list();
-    const confirmed = await opportunityService.applyConfirmations(
-      matchConfirmationPair(before, after, new Date()),
+    const confirmedAt = new Date();
+    const outcomes = matchConfirmationPair(before, after, confirmedAt);
+    // Phase 17 (WP-B): score EVERY newly-confirming record — gate-filtered
+    // ones included — before the verdicts persist and the fan-out runs.
+    // scoreConfirmedRecords never throws: a scoring failure is a warn and
+    // the record confirms WITHOUT safety (ungated, pre-Phase-17 semantics).
+    const afterByFingerprint = new Map(after.map((r) => [r.fingerprint, r]));
+    const confirming = outcomes
+      .filter((o) => o.status === 'confirmed')
+      .map((o) => afterByFingerprint.get(o.fingerprint))
+      .filter((r): r is OpportunityRecord => r != null);
+    const safetyByFingerprint = await scoreConfirmedRecords(
+      safetyScoringDeps,
+      confirming,
+      confirmedAt,
     );
-    onConfirmed(confirmed); // alerts (and, come WP4a, Hub purchases)
+    const confirmed = await opportunityService.applyConfirmations(
+      outcomes.map((o) => ({ ...o, safety: safetyByFingerprint.get(o.fingerprint) })),
+    );
+    onConfirmed(confirmed); // alerts + Hub purchases, both safety-gated
   },
   // The pair's B window lapsed (quiet hours / stop / restart): resolve to
   // single_sighting — bookkeeping only, zero provider calls.

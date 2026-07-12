@@ -187,6 +187,24 @@ server/src/
                  yellow — the Hub button/page are part of the yellow=
                  speculative/simulated family). Leaderboard %-occurrence
                  boards ride ops/leaderboardStore accruals: zero credits.
+  safety/        Phase 17 — the Safety Score, a deterministic account-
+                 longevity filter (no ML, every score explainable).
+                 engine/safety.ts is the PURE scorer (50 base + components
+                 a–f from ONE settings object; any hard reject → 0) AND the
+                 ONE gate function passesSafetyGate (safeMode off → pass;
+                 no safety field → pass, never retro-gated; else score ≥
+                 threshold). safety/scoring.ts assembles the engine's inputs
+                 AT THE CONFIRMATION TRANSITION — snapshot consensus per
+                 EXACT outcome+line from last-snapshot.json, the same
+                 planStakes dollars alerts carry, the arb alert min-edge
+                 (0 for EV/middles) and the records-derived ExposureView
+                 (exposure.ts) — and runConfirmScan persists record.safety
+                 BEFORE the onConfirmed fan-out, gate-filtered records
+                 included. rotation.ts is the advisory side-imbalance hint;
+                 cost.ts prices what the gate declined at current settings
+                 (GET /api/safety/cost, simulated: true, zero credits).
+                 ops/safetyStore.ts holds the one SafetySettings object;
+                 routes/safety.ts (settings/rotation/cost) is the boundary.
   routes/        Express boundary: parse → runScan → JSON; ProviderError → HTTP status.
                  api.ts (/api/scan, /api/last-scan) + whatsapp.ts (/api/whatsapp/*).
   config/        constants.ts (every tunable) + bookmakerLinks.ts (homepage fallbacks)
@@ -287,6 +305,22 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   decision — paper wants max samples). No candidates → no scan B → zero
   extra credits. Pre-Phase-16 records have no confirmation field and are
   never retro-alerted.
+- **The safety gate sits AFTER confirmation, in exactly two consumers
+  (Phase 17).** Pipeline: scan → confirmation pair → score → gate → alert +
+  Hub purchase. Records are scored ONCE, at the confirmation transition,
+  and record.safety persists BEFORE the fan-out runs; passesSafetyGate (the
+  one function, engine/safety.ts) is applied inside dispatchConfirmedAlerts
+  AND the hub-purchases consumer — never restated, never anywhere else (the
+  paper fund and every telemetry surface stay ungated). Filtered records
+  stay fully persisted with score + itemized reasons — the Cost of Safety
+  readout prices them; safeMode OFF still computes and persists scores.
+  A scoring failure NEVER fails the scan or blocks confirmation: it is a
+  console.warn and the record confirms WITHOUT safety — and score-less
+  records always pass the gate (ungated, pre-Phase-17 semantics; the mirror
+  of the never-retro-alert rule). Rounded stakes (safety.roundedStakes,
+  camouflage $5 rounding) are the PRIMARY displayed/alerted dollar amounts
+  — arb alert profit is recomputed at those stakes — while exact-optimal
+  stakes stay cockpit-only.
 - **Scans still drive everything time-based.** The notifier fires only when
   a scan runs — manual OR scheduler-initiated (the scheduler's runScan
   reuses the SAME scanDeps/notifier: same paper fund, grading piggyback,

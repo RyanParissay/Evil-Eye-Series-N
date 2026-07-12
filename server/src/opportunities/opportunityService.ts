@@ -2,7 +2,13 @@
  * Store-backed façade over opportunity persistence — what scanService, the
  * routes, and the alert notifier composition talk to.
  */
-import type { ArbOpportunity, OpportunityRecord, OpportunityStatus, RecordGrading } from '@shared/types';
+import type {
+  ArbOpportunity,
+  OpportunityRecord,
+  OpportunityStatus,
+  RecordGrading,
+  RecordSafety,
+} from '@shared/types';
 import {
   applyExecution,
   applyScanToRecords,
@@ -310,6 +316,12 @@ export class OpportunityService {
    * still-pending records move — confirmed and single_sighting are terminal,
    * so a racing scan or double evaluation is a no-op. Returns the records
    * that reached 'confirmed' (the onConfirmed fan-out's payload).
+   *
+   * Phase 17: a confirming outcome may carry the record's safety score
+   * (safety/scoring.ts, computed at this very transition) — it persists HERE,
+   * before the fan-out ever sees the record, so gate-filtered records keep
+   * their score + reasons. No safety on a confirmed outcome = scoring failed;
+   * the record confirms ungated (pre-Phase-17 semantics, documented).
    */
   async applyConfirmations(
     outcomes: Array<{
@@ -317,6 +329,7 @@ export class OpportunityService {
       status: 'confirmed' | 'single_sighting';
       scanBAt: string;
       edgeDeltaPp?: number;
+      safety?: RecordSafety;
     }>,
   ): Promise<OpportunityRecord[]> {
     if (outcomes.length === 0) return [];
@@ -332,7 +345,10 @@ export class OpportunityService {
           scanBAt: outcome.scanBAt,
           ...(outcome.edgeDeltaPp != null && { edgeDeltaPp: outcome.edgeDeltaPp }),
         };
-        if (outcome.status === 'confirmed') confirmed.push(record);
+        if (outcome.status === 'confirmed') {
+          if (outcome.safety) record.safety = outcome.safety;
+          confirmed.push(record);
+        }
       }
       return { data, result: confirmed };
     });

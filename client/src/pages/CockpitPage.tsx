@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { ApiErrorCode, GradeResult, OpportunityRecord } from '../../../shared/types';
+import type {
+  ApiErrorCode,
+  GradeResult,
+  OpportunityRecord,
+  SafetySettings,
+} from '../../../shared/types';
 import { planStakes } from '../../../shared/stakePlanning';
 import {
   ApiError,
@@ -9,16 +14,21 @@ import {
   fetchBookmakers,
   fetchFundPosition,
   fetchOpportunity,
+  fetchSafetyRotation,
   gradeOpportunity,
   gradeOpportunityLegs,
   manualGradeOpportunity,
   pingFunnel,
   revertBalances,
   verifyOpportunity,
+  type SafetyRotationReport,
 } from '../api';
 import { loadBankroll, saveBankroll } from '../cockpit';
 import { EyeGlyph } from '../components/EyeGlyph';
+import { SafetyBadge } from '../components/SafetyBadge';
 import { errorHint, errorTitle } from '../errorCopy';
+import { hasUsableRoundedStakes, primaryStake } from '../safetyDisplay';
+import { useSafetySettings } from '../useSafetySettings';
 
 type PageState =
   | { status: 'loading' }
@@ -44,6 +54,8 @@ export function CockpitPage() {
   const [balances, setBalances] = useState<Map<string, number | null>>(new Map());
   const [busy, setBusy] = useState<'verify' | 'complete' | 'reconcile' | null>(null);
   const [note, setNote] = useState<VerifyNote | null>(null);
+  const [rotation, setRotation] = useState<SafetyRotationReport | null>(null);
+  const safetySettings = useSafetySettings();
 
   // Book balances cap the suggested stakes; fund settings supply the
   // default stake (a hand-edited bankroll always wins for this visit).
@@ -61,6 +73,13 @@ export function CockpitPage() {
       })
       .catch(() => {
         // No fund settings yet — localStorage default stands.
+      });
+    // Rotation telemetry (Phase 17): advisory only, never blocking — a
+    // single trailing-30d report, filtered to this record's books below.
+    fetchSafetyRotation()
+      .then(setRotation)
+      .catch(() => {
+        // No rotation data yet — the cockpit simply shows no hint.
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -198,6 +217,8 @@ export function CockpitPage() {
           record={page.record}
           bankroll={bankroll}
           balances={balances}
+          rotation={rotation}
+          safetySettings={safetySettings}
           onBankroll={updateBankroll}
           busy={busy}
           note={note}
@@ -218,6 +239,8 @@ function Cockpit({
   record,
   bankroll,
   balances,
+  rotation,
+  safetySettings,
   onBankroll,
   busy,
   note,
@@ -232,6 +255,8 @@ function Cockpit({
   record: OpportunityRecord;
   bankroll: number;
   balances: Map<string, number | null>;
+  rotation: SafetyRotationReport | null;
+  safetySettings: SafetySettings | null;
   onBankroll: (next: number) => void;
   busy: 'verify' | 'complete' | 'reconcile' | null;
   note: VerifyNote | null;
@@ -246,6 +271,14 @@ function Cockpit({
   const isEv = record.strategy === 'ev' && record.ev != null;
   const isMiddle = record.strategy === 'middle' && record.middle != null;
   const settled = record.status === 'dead' || record.status === 'completed';
+  const roundedUsable = hasUsableRoundedStakes(record.legs.length, record.safety);
+  const roundedTotal = roundedUsable
+    ? record.safety!.roundedStakes!.reduce((sum, v) => sum + v, 0)
+    : 0;
+  const bookKeysInRecord = new Set(record.legs.map((leg) => leg.bookmakerKey));
+  const rotationHints = (rotation?.books ?? []).filter(
+    (b) => b.imbalanced && bookKeysInRecord.has(b.bookmakerKey),
+  );
   const [legGradeDraft, setLegGradeDraft] = useState<Array<'won' | 'lost' | 'void' | null>>([]);
   // The same planStakes the alert path runs: ideal shares, whole-position
   // rescale when a book's recorded balance would be exceeded.
@@ -299,7 +332,24 @@ function Cockpit({
             </span>
           )}
         </p>
+        {record.safety && (
+          <div className="cockpit-safety-row">
+            <span className="micro-label">safety</span>
+            <SafetyBadge safety={record.safety} settings={safetySettings} />
+          </div>
+        )}
       </section>
+
+      {rotationHints.length > 0 && (
+        <section className="cockpit-rotation-hint" role="status" aria-label="Rotation advisory">
+          <span className="cockpit-rotation-hint-title">rotation advisory</span>
+          {rotationHints.map((hint) => (
+            <span key={hint.bookmakerKey} className="micro-label">
+              {hint.hint}
+            </span>
+          ))}
+        </section>
+      )}
 
       {record.grading && (
         <p className="micro-label">
@@ -602,8 +652,24 @@ function Cockpit({
           )}
         </div>
         <p className="micro-label">
-          split of ${totalStaked.toFixed(2)} across {record.legs.length} legs
+          {roundedUsable ? (
+            <>
+              split of ${roundedTotal.toFixed(2)} (rounded) across {record.legs.length} legs ·
+              exact ${totalStaked.toFixed(2)}
+            </>
+          ) : (
+            <>
+              split of ${totalStaked.toFixed(2)} across {record.legs.length} legs
+            </>
+          )}
         </p>
+        {roundedUsable && (
+          <p className="micro-label cockpit-rounding-note">
+            Stakes below are rounded to the nearest{' '}
+            {safetySettings ? `$${safetySettings.roundTo}` : 'camouflage increment'} — the
+            primary numbers to place. Exact-optimal amounts are shown secondary.
+          </p>
+        )}
         {capped && (
           <p className="micro-label cockpit-capped" role="status">
             ⚠ position rescaled — {cappedBy}'s recorded balance is the ceiling. Top it up or
@@ -630,7 +696,10 @@ function Cockpit({
               </span>
               <span>
                 <span className="micro-label">stake</span>
-                <strong>${stakes[i].toFixed(2)}</strong>
+                <strong>${primaryStake(i, stakes[i], record.safety).toFixed(2)}</strong>
+                {roundedUsable && (
+                  <span className="micro-label is-secondary">exact ${stakes[i].toFixed(2)}</span>
+                )}
               </span>
             </div>
             {leg.link && !settled && (
@@ -681,7 +750,7 @@ function Cockpit({
               setFills(
                 record.legs.map((leg, i) => ({
                   odds: leg.odds.toFixed(2),
-                  stake: stakes[i].toFixed(2),
+                  stake: primaryStake(i, stakes[i], record.safety).toFixed(2),
                 })),
               );
             }}

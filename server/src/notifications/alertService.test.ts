@@ -238,7 +238,7 @@ describe('alertWorthy (the strategy-agnostic selection core)', () => {
   });
 });
 
-describe('formatAlertMessage (Phase 15 exact arb copy)', () => {
+describe('formatAlertMessage (Phase 15 exact arb copy, AMENDED by Phase 17)', () => {
   const plan = {
     stakes: [246.99, 253.01],
     totalStaked: 500,
@@ -246,11 +246,39 @@ describe('formatAlertMessage (Phase 15 exact arb copy)', () => {
     capped: false,
     cappedBy: null,
   };
+  // A scored record's safety block: rounded stakes are the PRIMARY alerted
+  // amounts (camouflage $5 rounding); exact-optimal stays cockpit-only.
+  const SAFETY = {
+    score: 72,
+    components: [],
+    reasons: [],
+    roundedStakes: [245, 255],
+    scoredAt: '2026-07-09T12:01:00Z',
+  };
   // Constructed from local components (not a UTC ISO string) so the
   // expected HH:MM is identical no matter the host machine's timezone.
   const ODDS_AS_OF = new Date(2026, 6, 9, 14, 5);
 
-  it('produces the exact pinned format: legs, profit, odds time, cockpit link — nothing else', () => {
+  it('produces the exact pinned format (Phase 17): ROUNDED stakes, post-rounding profit, one Safety line — nothing else', () => {
+    const arb = makeArb({ safety: SAFETY });
+    const id = opportunityFingerprint(arb).slice(0, 16);
+    const message = formatAlertMessage(arb, 'http://localhost:5173', plan, ODDS_AS_OF);
+    // Profit recomputed at the displayed (rounded) stakes so dollars and %
+    // agree with the amounts on the page: worst payout min(245×2.1, 255×2.05)
+    // = 514.50 − 500 staked = $14.50 = 2.90%.
+    expect(message).toBe(
+      [
+        'Bet365 | Los Angeles Lakers @ 2.1 | $245.00',
+        'Pinnacle | Boston Celtics @ 2.05 | $255.00',
+        'Profit: $14.50 (2.90%)',
+        'Safety 72/100',
+        'odds as of 14:05',
+        `http://localhost:5173/opportunity/${id}`,
+      ].join('\n'),
+    );
+  });
+
+  it('produces the exact pinned pre-Phase-17 format for an unscored record — byte-identical to the Phase 15 pin', () => {
     const arb = makeArb();
     const id = opportunityFingerprint(arb).slice(0, 16);
     const message = formatAlertMessage(arb, 'http://localhost:5173', plan, ODDS_AS_OF);
@@ -263,6 +291,17 @@ describe('formatAlertMessage (Phase 15 exact arb copy)', () => {
         `http://localhost:5173/opportunity/${id}`,
       ].join('\n'),
     );
+  });
+
+  it('a rounding that zeroed a leg falls back to plan dollars (never $0 nonsense) — safety line intact', () => {
+    // Only reachable with safeMode OFF (rounding_kills_edge hard-rejects).
+    const arb = makeArb({
+      safety: { ...SAFETY, score: 0, reasons: ['rounding_kills_edge'], roundedStakes: [0, 255] },
+    });
+    const message = formatAlertMessage(arb, undefined, plan, ODDS_AS_OF);
+    expect(message).toContain('$246.99');
+    expect(message).not.toContain('$0.00');
+    expect(message).toContain('Safety 0/100');
   });
 
   it('omits the cockpit link line when no APP_URL is configured', () => {
@@ -303,13 +342,14 @@ describe('formatAlertMessage (Phase 15 exact arb copy)', () => {
     expect(message).toContain('+3.5');
   });
 
-  it('contains nothing else — no emoji, event name, sport, or the word "guaranteed"', () => {
-    const arb = makeArb();
-    const message = formatAlertMessage(arb, 'http://localhost:5173', plan, ODDS_AS_OF);
-    expect(message).not.toContain(arb.eventName);
-    expect(message).not.toContain(arb.sportTitle);
-    expect(message).not.toContain('🔔');
-    expect(message.toLowerCase()).not.toContain('guaranteed');
+  it('contains nothing else — no emoji, event name, sport, or the word "guaranteed" (scored or not)', () => {
+    for (const arb of [makeArb(), makeArb({ safety: SAFETY })]) {
+      const message = formatAlertMessage(arb, 'http://localhost:5173', plan, ODDS_AS_OF);
+      expect(message).not.toContain(arb.eventName);
+      expect(message).not.toContain(arb.sportTitle);
+      expect(message).not.toContain('🔔');
+      expect(message.toLowerCase()).not.toContain('guaranteed');
+    }
   });
 });
 
@@ -356,6 +396,18 @@ describe('notifyNewOpportunities', () => {
     expect(message).toContain('Not guaranteed');
     expect(message.toLowerCase()).not.toMatch(/(?<!not )guaranteed profit/);
     expect(message).toContain('/opportunity/');
+    expect(message).not.toContain('Safety'); // unscored → byte-identical Phase 15 copy
+
+    // Phase 17: a scored record gains EXACTLY one trailing Safety line.
+    const scored = formatEvAlertMessage(
+      {
+        ...evOpp,
+        safety: { score: 65, components: [], reasons: [], scoredAt: NOW.toISOString() },
+      },
+      400,
+      'http://localhost:5173',
+    );
+    expect(scored).toBe(`${message}\nSafety 65/100`);
 
     // Default subscription: EV disabled → nothing sends.
     const store = new FakeStore(makeData());
@@ -403,6 +455,27 @@ describe('notifyNewOpportunities', () => {
     expect(message).toContain('(220.5–224.5)');
     expect(message).toContain('hit 2.6%');
     expect(message.toLowerCase()).not.toContain('guaranteed');
+    expect(message).not.toContain('Safety'); // unscored → byte-identical Phase 15 copy
+
+    // Phase 17: a scored record uses the ROUNDED stakes as the leg dollar
+    // amounts and gains exactly one trailing Safety line.
+    const scored = formatMiddleAlertMessage(
+      {
+        ...middleOpp,
+        safety: {
+          score: 61,
+          components: [],
+          reasons: [],
+          roundedStakes: [250, 250],
+          scoredAt: NOW.toISOString(),
+        },
+      },
+      400,
+    );
+    expect(scored).toContain(
+      'Bet365: Over +220.5 @1.95 ($250.00) / Coolbet: Under +224.5 @1.95 ($250.00)',
+    );
+    expect(scored.endsWith('\nSafety 61/100')).toBe(true);
 
     // Costed middles need the opt-in; default subscription has none.
     const store = new FakeStore(makeData());

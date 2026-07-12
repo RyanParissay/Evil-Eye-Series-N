@@ -12,6 +12,7 @@ import {
   WHATSAPP_MAX_SEND_RETRIES,
   WHATSAPP_SENT_ALERT_RETENTION_MS,
 } from '../config/constants';
+import { lockedProfit } from '../engine/arbitrage';
 import { opportunityFingerprint, opportunityIdFromFingerprint } from '../opportunities/opportunityId';
 import type {
   WhatsAppData,
@@ -134,13 +135,32 @@ export function selectAlerts(
 }
 
 /**
- * Exact pinned format (Phase 15 design doc) — nothing else, no emoji, no
- * event line, no sport:
+ * Phase 17: the ROUNDED stakes (record.safety.roundedStakes — camouflage $5
+ * rounding, computed by the safety engine) are the PRIMARY alerted amounts;
+ * exact-optimal stays cockpit-only. Unusable rounding — absent, misaligned,
+ * or a zeroed leg (reachable only with safeMode OFF, since
+ * rounding_kills_edge hard-rejects) — falls back to the plan/engine dollars,
+ * mirroring the collapsed-plan rule below.
+ */
+function usableRoundedStakes(opportunity: ArbOpportunity): number[] | null {
+  const stakes = opportunity.safety?.roundedStakes;
+  if (!stakes || stakes.length !== opportunity.legs.length) return null;
+  if (!stakes.every((s) => Number.isFinite(s) && s > 0)) return null;
+  return stakes;
+}
+
+/**
+ * Exact pinned format (Phase 15 design doc, AMENDED by Phase 17) — nothing
+ * else, no emoji, no event line, no sport:
  *   <Book> | <side> @ <odds> | $<amount>
  *   <Book> | <side> @ <odds> | $<amount>
  *   Profit: $X.XX (Y.YY%)
+ *   Safety NN/100                (scored records only — Phase 17)
  *   odds as of HH:MM
  *   <APP_URL>/opportunity/<id>   (omitted when APP_URL is unset)
+ * Scored records show the ROUNDED stakes with profit recomputed at those
+ * amounts (dollars and % must describe the position on the page); unscored
+ * records render the pre-Phase-17 copy byte-identically.
  */
 export function formatAlertMessage(
   arb: ArbOpportunity,
@@ -151,17 +171,30 @@ export function formatAlertMessage(
   // A plan that collapsed to zero (a book's balance blocks any stake) — or
   // no plan at all — falls back to the engine's own $100-basis split
   // rather than printing $0 nonsense.
+  const rounded = usableRoundedStakes(arb);
   const stakeable = plan != null && plan.totalStaked > 0;
   const fallbackTotal = arb.legs.reduce((sum, leg) => sum + leg.stake, 0);
   const legLines = arb.legs.map((leg, i) => {
     const side = `${leg.outcome}${leg.point != null ? ` ${formatPoint(leg.point)}` : ''}`;
-    const amount = stakeable ? plan.stakes[i] : leg.stake;
+    const amount = rounded ? rounded[i] : stakeable ? plan.stakes[i] : leg.stake;
     return `${leg.bookmakerTitle} | ${side} @ ${leg.odds} | $${amount.toFixed(2)}`;
   });
-  const profitDollars = stakeable ? plan.guaranteedProfit : fallbackTotal * (arb.profitPct / 100);
+  let profitDollars: number;
+  let profitPct: number;
+  if (rounded) {
+    // Post-rounding numbers — the engine's lockedProfit rule at the
+    // displayed stakes (the safety gate already verified they hold the edge).
+    const totalStaked = rounded.reduce((sum, s) => sum + s, 0);
+    profitDollars = lockedProfit(arb.legs.map((leg, i) => ({ odds: leg.odds, stake: rounded[i] })));
+    profitPct = totalStaked > 0 ? (profitDollars / totalStaked) * 100 : arb.profitPct;
+  } else {
+    profitDollars = stakeable ? plan.guaranteedProfit : fallbackTotal * (arb.profitPct / 100);
+    profitPct = arb.profitPct;
+  }
   const lines = [
     ...legLines,
-    `Profit: $${profitDollars.toFixed(2)} (${arb.profitPct.toFixed(2)}%)`,
+    `Profit: $${profitDollars.toFixed(2)} (${profitPct.toFixed(2)}%)`,
+    ...(arb.safety ? [`Safety ${arb.safety.score}/100`] : []),
     `odds as of ${formatHHMM(oddsAsOf)}`,
   ];
   // The cockpit deep link: record ids are the fingerprint's 16-char prefix,
@@ -249,6 +282,14 @@ export async function notifyNewOpportunities(
   });
 }
 
+/** Phase 17: scored records gain EXACTLY one trailing `Safety NN/100` line.
+ *  (The single-line EV/middle formats have no Profit/odds-as-of anchors, so
+ *  the score is the message's own last line; the arb format positions it
+ *  between Profit and "odds as of".) */
+function safetyLineOf(opportunity: ArbOpportunity): string {
+  return opportunity.safety ? `\nSafety ${opportunity.safety.score}/100` : '';
+}
+
 /**
  * Risk Mode alert: honest by construction — edge and win probability up
  * front, "Not guaranteed" always, the word "guaranteed" never unqualified.
@@ -269,7 +310,8 @@ export function formatEvAlertMessage(
     `🎲 EV bet: ${opportunity.eventName} (${opportunity.marketKey}) — ` +
     `${leg.outcome}${line} @${leg.odds} at ${leg.bookmakerTitle}. ` +
     `Edge ${ev.edgePct.toFixed(1)}%, win probability ${Math.round(ev.fairProbability * 100)}%.` +
-    `${stakePart} Not guaranteed — expected value.${link}`
+    `${stakePart} Not guaranteed — expected value.${link}` +
+    safetyLineOf(opportunity)
   );
 }
 
@@ -344,6 +386,8 @@ export async function notifyEvBets(
 /**
  * Middle alert: cost/payout/breakeven framing. "Guaranteed" is banned —
  * except free middles, whose worst case genuinely is a locked floor.
+ * Phase 17: scored records show the ROUNDED stakes as the per-leg dollar
+ * amounts and gain the trailing Safety line.
  */
 export function formatMiddleAlertMessage(
   opportunity: ArbOpportunity,
@@ -351,10 +395,13 @@ export function formatMiddleAlertMessage(
   appUrl?: string,
 ): string {
   const middle = opportunity.middle!;
+  const rounded = usableRoundedStakes(opportunity);
   const legs = opportunity.legs
     .map(
-      (leg) =>
-        `${leg.bookmakerTitle}: ${leg.outcome}${leg.point != null ? ` ${formatPoint(leg.point)}` : ''} @${leg.odds}`,
+      (leg, i) =>
+        `${leg.bookmakerTitle}: ${leg.outcome}${leg.point != null ? ` ${formatPoint(leg.point)}` : ''} @${leg.odds}${
+          rounded ? ` ($${rounded[i].toFixed(2)})` : ''
+        }`,
     )
     .join(' / ');
   const link = appUrl
@@ -365,14 +412,15 @@ export function formatMiddleAlertMessage(
   if (middle.freeMiddle) {
     const floor = stake != null ? ` guaranteed +$${((stake * -middle.costPct) / 100).toFixed(2)} floor,` : ' guaranteed floor,';
     const pays = stake != null ? ` pays +$${((stake * middle.payoutPct) / 100).toFixed(2)}` : ' pays more';
-    return `🎯 Free middle: ${opportunity.eventName} (${opportunity.marketKey}) — ${legs}.${floor}${pays} if it lands in ${window}.${keys}${link}`;
+    return `🎯 Free middle: ${opportunity.eventName} (${opportunity.marketKey}) — ${legs}.${floor}${pays} if it lands in ${window}.${keys}${link}${safetyLineOf(opportunity)}`;
   }
   const cost = stake != null ? `$${((stake * middle.costPct) / 100).toFixed(2)}` : `${middle.costPct.toFixed(1)}% of stake`;
   const pays = stake != null ? `$${((stake * middle.payoutPct) / 100).toFixed(2)}` : `${middle.payoutPct.toFixed(0)}% of stake`;
   return (
     `🎯 Middle: ${opportunity.eventName} (${opportunity.marketKey}) — ${legs}. ` +
     `Costs ${cost} if it misses, pays ${pays} if it lands in ${window} — ` +
-    `needs to hit ${middle.breakevenPct.toFixed(1)}% of the time to profit.${keys}${link}`
+    `needs to hit ${middle.breakevenPct.toFixed(1)}% of the time to profit.${keys}${link}` +
+    safetyLineOf(opportunity)
   );
 }
 

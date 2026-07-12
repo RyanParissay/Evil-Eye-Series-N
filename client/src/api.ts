@@ -28,6 +28,8 @@ import type {
   OpsSettings,
   PaperSettings,
   PaperView,
+  SafetyCostReport,
+  SafetySettings,
   SchedulerProposal,
   SchedulerSettings,
   ScanBrowserEntry,
@@ -685,4 +687,63 @@ export async function deleteHubProfile(id: string): Promise<void> {
 
 export async function fetchHubLeaderboards(): Promise<HubLeaderboards> {
   return request<HubLeaderboards>('/api/hub/leaderboards');
+}
+
+/* ————— Safety Score (Phase 17 — deterministic account-longevity filter) ————— */
+
+/** Mirrors server/src/safety/rotation.ts's RotationBookStat — not in
+ *  shared/types (rotation is a server-computed report, not a domain type),
+ *  so the client shape is declared locally per the existing api.ts idiom
+ *  (EvBoard, MiddlesBoard, RecomputeResponse, …). */
+export interface SafetyRotationBookStat {
+  bookmakerKey: string;
+  samples: number;
+  sides: Array<{ side: string; count: number }>;
+  topSide: string;
+  topShare: number;
+  imbalanced: boolean;
+  hint: string | null;
+}
+
+export interface SafetyRotationReport {
+  windowDays: number;
+  minSamples: number;
+  imbalanceThreshold: number;
+  books: SafetyRotationBookStat[];
+}
+
+export async function fetchSafetySettings(): Promise<SafetySettings> {
+  return request<SafetySettings>('/api/safety/settings');
+}
+
+/** Deep-partial patch, mirroring routes/safety.ts's parseSafetyPatch. */
+export interface SafetySettingsPatch {
+  safeMode?: boolean;
+  safetyThreshold?: number;
+  maxSafeEdge?: number;
+  roundTo?: number;
+  neverLimitBooks?: string[];
+  consensus?: Partial<SafetySettings['consensus']>;
+  sharpAnchor?: Partial<SafetySettings['sharpAnchor']>;
+  budgets?: Partial<SafetySettings['budgets']>;
+  marketTiers?: Partial<SafetySettings['marketTiers']>;
+}
+
+export async function patchSafetySettings(patch: SafetySettingsPatch): Promise<SafetySettings> {
+  return request<SafetySettings>('/api/safety/settings', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+/** Advisory book-rotation telemetry — never blocking, never a score input. */
+export async function fetchSafetyRotation(): Promise<SafetyRotationReport> {
+  return request<SafetyRotationReport>('/api/safety/rotation');
+}
+
+/** What the safety gate declined at CURRENT settings, priced hypothetically
+ *  (simulated: true). Zero credits — reads persisted records only. */
+export async function fetchSafetyCost(): Promise<SafetyCostReport> {
+  return request<SafetyCostReport>('/api/safety/cost');
 }

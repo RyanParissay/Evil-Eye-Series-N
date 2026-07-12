@@ -1,58 +1,74 @@
-# HANDOFF — 2026-07-11 (Phase 16 complete — Fable orchestration session)
+# HANDOFF — 2026-07-12 (Phase 17 WP-B complete; WP-C UI next)
 
 ## For the incoming agent: read these first, in order
-1. CLAUDE.md  2. docs/superpowers/specs/2026-07-11-phase-16-design.md
-3. docs/PROGRESS.md  4. this file
+1. CLAUDE.md  2. docs/prompts/phase-17.md (Ryan's spec, verbatim, binding)
+3. docs/superpowers/specs/2026-07-12-phase-17-safety-design.md
+4. docs/PROGRESS.md  5. this file
 
 ## Where we are
 - Phases 1–16 COMPLETE except Phase 11 (Kelly — deliberately parked).
-- Tests: 578 server + 49 client, typecheck green, tree clean.
-- Phase 16 landed as: Gate 0 report → WP1 scheduler foundation (Opus) →
-  WP2 confirmation pairs (Fable) → WP4a Hub server (Opus, worktree) →
-  WP3 dense week + optimizer (Opus) → WP4b Hub client (Sonnet, worktree)
-  → merges + post-merge hardening (dense week never overrides a
-  self-disable). Full commit trail in git log from 0c0b653 forward.
-- Phase 17 spec saved VERBATIM at docs/prompts/phase-17.md — NOT started;
-  wait for Ryan's go.
+- Phase 17 (Safety Score) on branch `phase-17-safety` (merge at close-out):
+  - WP-A DONE (Opus): pure engine/safety.ts (components a–f, hard rejects,
+    passesSafetyGate), ops/safetyStore.ts settings, safety/exposure.ts +
+    rotation.ts, routes for settings + rotation.
+  - WP-B DONE (Fable, this session): score-at-confirmation
+    (safety/scoring.ts, persisted via applyConfirmations BEFORE the
+    fan-out), the gate in BOTH consumers (dispatchConfirmedAlerts +
+    hub-purchases — one function), WhatsApp `Safety NN/100` line + rounded
+    primary stakes (Phase 15 pins AMENDED), GET /api/safety/cost with a
+    hand-computed fixture week, gate-parity/safeMode-OFF/scoring-failure
+    acceptance fixtures (safety/gateParity.test.ts).
+  - WP-C NEXT (Sonnet): UI — score badge + expandable breakdown (cockpit +
+    opportunity rows), safety settings panel (Advanced page), Hub Cost of
+    Safety readout, rotation hint. Endpoints ready:
+    GET/PATCH /api/safety/settings, GET /api/safety/rotation,
+    GET /api/safety/cost (simulated: true; byStrategy split exists so EV
+    dollars are labeled EXPECTED and middles show count-but-$0).
+- Tests: 644 server + 49 client, typecheck green, tree clean.
 
 ## Live operations (the part that spends money)
-- :8787 runs tsx watch with the REAL key; :5173 Vite. Both untouched.
-- scheduler.enabled = FALSE (dormant). Ryan must flip the toggle on the
-  scanner page to start scheduled scan pairs. Quiet hours 01:00–08:00
-  America/Vancouver block EVERYTHING including manual scans (his spec).
-- Dense week: user-started only, 4,500/day / 30,000/week hard caps,
-  never survives a self-disable (dead key).
-- All three markets (h2h/totals/spreads) ON; 15–30 credits per scan,
-  ~×(1+hitRate) per window once pairs run; budget 100k, auto-stop 95%.
+- :8787 runs tsx watch with the REAL key; :5173 Vite. Untouched.
+- scheduler.enabled = FALSE (dormant); the safety gate only affects FUTURE
+  confirmations, so WP-B is inert in live ops until pairs run.
+- safeMode defaults ON, threshold 55 (data/safety.json seeds on first read).
+- Quiet hours 01:00–08:00 America/Vancouver block everything, manual scans
+  included. Dense week caps unchanged (4,500/day, 30,000/week).
 
-## In flight RIGHT NOW
-- Nothing. No background agents running.
-
-## Open questions saved for Ryan (decisions made provisionally)
-1. Quiet hours block MANUAL scans too (strict "zero calls of any kind").
-   Relax to scheduler-only if unintended.
-2. Premade Hub profiles: $1,000 start, flat $50 stake, minEdge 0 —
-   stake/filters editable in the UI; confirm the defaults.
-3. Dense week overrides the OFF toggle (starting it = authorization) but
-   never a self-disable. Confirm the override half matches intent.
-4. Alerts fire at the confirmation TRANSITION only; a record confirmed
-   below a subscriber's threshold never alerts later (terminal).
-5. Phase 14 series stakes ($200 flat) + manual-grade granularity
-   (one overall result, not per-leg) — carried over from the P13/14 handoff.
+## Field semantics WP-C must respect
+- record.safety: present only on records confirmed after Phase 17 —
+  including gate-filtered ones (badge them; 0 = REJECTED). Absent = never
+  scored (pre-P17 or scoring failure) → ungated, show nothing.
+- safety.roundedStakes are the PRIMARY dollars; exact-optimal (planStakes)
+  is the cockpit's secondary line.
+- SafetyCostReport is simulated/hypothetical — label it; EV forgone profit
+  is EXPECTED (model), middles contribute count but $0 unless freeMiddle.
+- With safeMode OFF the cost report is honestly zero (nothing is filtered).
 
 ## Traps for the incoming agent
 - Vitest from server/ dir (repo root loses @shared) — unchanged.
-- setTimeout is legal ONLY in server/src/scheduler/realTimer.ts
-  (timerScope.test.ts pins it). No test may sleep — inject the clock.
-- Scan B "rides scan A's authorization": it fires while the scheduler
-  toggle is off and past the budget stop — by design (WP2 report). Quiet
-  hours still block it; >5× interval late resolves single_sighting.
+- The Phase 15 alert-format pins were AMENDED by the Phase 17 spec: scored
+  records add exactly one `Safety NN/100` line (arb: between Profit and
+  "odds as of"; EV/middle: trailing line) and rounded stakes; unscored
+  records must stay byte-identical to the old pin. Don't "fix" either.
+- A scoring failure must never block confirmation — scoreConfirmedRecords
+  never throws; keep it that way (gateParity.test.ts pins the fallback).
 - The paper fund deliberately stays on the UNGATED stream; alerts + Hub
-  purchases are the only confirmation-gated consumers.
-- data/hub.json premades seed on first read; leaderboard %-occurrence
-  boards need accrued totals (they start at zero, forward-only).
+  purchases are the only gated consumers. Exposure/rotation derive from
+  records (alerted OR hub-purchased) — no new mutable state.
+- setTimeout is legal ONLY in server/src/scheduler/realTimer.ts; no test
+  may sleep — inject the clock (gateParity shows the harness pattern).
+
+## Open questions saved for Ryan
+1. arbMinEdgePct for the rounding check = LOWEST verified+active WhatsApp
+   subscription threshold (0 when none) — confirm that reading of "the
+   alert min-profit threshold".
+2. Cost of Safety uses the gate at CURRENT settings, so safeMode OFF →
+   zero report. If he wants "what WOULD the threshold filter" while OFF,
+   that's a one-line change in safety/cost.ts.
+3. Carried over: quiet hours block manual scans; premade Hub defaults;
+   dense-week override semantics; Phase 14 series stakes.
 
 ## First prompt to paste into a new agent
-"Read CLAUDE.md, docs/PROGRESS.md, and docs/HANDOFF.md. Phase 16 is
-complete; Phase 17's spec is docs/prompts/phase-17.md but do NOT start
-it without Ryan's explicit go."
+"Read CLAUDE.md, docs/prompts/phase-17.md, the 2026-07-12 design doc, and
+docs/HANDOFF.md. Phase 17 WP-A + WP-B are complete on phase-17-safety;
+build WP-C (UI only) per the design doc. Never touch :8787's real data."

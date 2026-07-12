@@ -13,7 +13,9 @@ import {
 } from '../api';
 import { EyeGlyph } from '../components/EyeGlyph';
 import { OpportunityCard } from '../components/OpportunityCard';
+import { SafetySettingsPanel } from '../components/SafetySettingsPanel';
 import { errorHint, errorTitle } from '../errorCopy';
+import { useSafetySettings } from '../useSafetySettings';
 
 /**
  * Advanced mode: recompute opportunities for any book subset from the
@@ -131,6 +133,10 @@ export function AdvancedPage() {
     [books],
   );
   const known = useMemo(() => new Set(result?.knownRecordIds ?? []), [result]);
+  // Recompute results are freshly detected from the snapshot, never a
+  // persisted record, so `safety` never carries here in practice — fetched
+  // for consistency with the other card surfaces.
+  const safetySettings = useSafetySettings();
 
   const visibleBooks = (books ?? []).filter(
     (b) =>
@@ -221,6 +227,8 @@ export function AdvancedPage() {
         </div>
       </section>
 
+      <SafetySettingsPanel />
+
       <main className="results">
         {error && (
           <div className="state-block state-error" role="alert">
@@ -263,6 +271,7 @@ export function AdvancedPage() {
                 arb={arb}
                 bookStatus={bookStatus}
                 cockpitLink={arb.id != null && known.has(arb.id)}
+                safetySettings={safetySettings}
               />
             ))}
           </>

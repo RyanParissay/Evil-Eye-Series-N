@@ -103,6 +103,9 @@ export function recordToOpportunity(record: OpportunityRecord): ArbOpportunity {
     id: record.id,
     ...(record.ev && { ev: record.ev }),
     ...(record.middle && { middle: record.middle }),
+    // Phase 17: the safety score rides along so alert copy can render the
+    // Safety line and the rounded (primary) stakes.
+    ...(record.safety && { safety: record.safety }),
     eventId: record.eventId,
     sportKey: record.sportKey,
     sportTitle: record.sportTitle,

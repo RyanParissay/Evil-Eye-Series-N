@@ -196,6 +196,9 @@ export const GRADING_FILE = 'data/grading.json';
 /** Analytics Hub (Phase 16): profiles + immutable purchase/skip events (gitignored). */
 export const HUB_FILE = 'data/hub.json';
 
+/** Safety Score settings (Phase 17): the one SafetySettings config object (gitignored). */
+export const SAFETY_FILE = 'data/safety.json';
+
 /** Everything under here gets backed up daily (gitignored). */
 export const DATA_DIR = 'data';
 
