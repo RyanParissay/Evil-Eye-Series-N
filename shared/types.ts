@@ -123,6 +123,13 @@ export interface ArbOpportunity {
   ev?: EvContext;
   /** Present on middle opportunities; absent on true arbs. */
   middle?: MiddleContext;
+  /**
+   * Phase 17: the safety score, carried when this view was built from a
+   * SCORED record (recordToOpportunity). Scan responses never contain it —
+   * scoring happens only at the confirmation transition. Alert copy reads
+   * the score line and the rounded (primary) stakes from here.
+   */
+  safety?: RecordSafety;
   eventId: string;
   sportKey: string;
   sportTitle: string;

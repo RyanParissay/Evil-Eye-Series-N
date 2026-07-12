@@ -499,7 +499,13 @@ describe('safety gate parity — acceptance fixtures (Phase 17)', () => {
     expect(safe.alerted).toBe(true);
     expect(w.sender.sent).toHaveLength(1);
     expect(w.sender.sent[0].body).toContain('Bet365');
-    expect(w.sender.sent[0].body).toContain('$250.00'); // fund $500 split
+    // The rendered alert carries the Phase 17 amendments end-to-end: the
+    // rounded (primary) stakes and exactly one Safety line between the
+    // Profit line and "odds as of".
+    expect(w.sender.sent[0].body).toContain('$250.00'); // fund $500, $5-rounded
+    const lines = w.sender.sent[0].body.split('\n');
+    expect(lines[lines.indexOf('Safety 80/100') - 1]).toMatch(/^Profit: /);
+    expect(lines[lines.indexOf('Safety 80/100') + 1]).toMatch(/^odds as of /);
     const purchases = w.hubStore.data.purchases;
     expect(purchases).toHaveLength(1);
     expect(purchases[0]).toMatchObject({ profileId: 'premade-arb', recordId: safe.id, stake: 50 });
