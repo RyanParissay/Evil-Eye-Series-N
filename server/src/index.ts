@@ -413,11 +413,9 @@ async function dispatchConfirmedAlerts(records: OpportunityRecord[]): Promise<vo
 }
 confirmedConsumers.push({ name: 'whatsapp-alerts', consume: dispatchConfirmedAlerts });
 
-// ————— Analytics Hub consumer registration point (Phase 16 WP4a) —————
-// Register the Hub's purchase consumer HERE, after the alert consumer:
-//   confirmedConsumers.push({ name: 'hub-purchases', consume: (records) => hubService.purchaseConfirmed(records) });
-// Purchases key off this fan-out ONLY — nothing short of 'confirmed' is
-// ever bought (design contract, Parts A + B).
+// The Analytics Hub's purchase consumer registers on this same fan-out
+// below, after its construction. Purchases key off the fan-out ONLY —
+// nothing short of 'confirmed' is ever bought (design contract, Parts A+B).
 
 // One ScanDeps, shared by the manual /api/scan route AND the scheduler, so a
 // scheduled scan fires the exact same notifier pipeline (paper fund, grading
@@ -484,18 +482,12 @@ const scanDeps: ScanDeps = {
 
 // ── PHASE-16 HUB CONSUMER ────────────────────────────────────────────────
 // Analytics Hub (Part B, SIMULATED): each profile is a parameterized engine
-// series that auto-purchases CONFIRMED opportunities. WP2 lands the
-// confirmation-pair pipeline plus an onConfirmed fan-out of confirmed
-// OpportunityRecords; that hook does NOT exist in this worktree yet, so we
-// drive the consumer with a no-op-safe DIRECT call path: wrap the scan
-// notifier and, after each scan, hand the Hub every CONFIRMED persisted
-// record (confirmation.status === 'confirmed', or absent = pre-confirmation
-// record, treated as confirmed per shared/types). onConfirmed is idempotent
-// (purchases/skips dedupe by recordId) and fire-and-forget — a Hub failure is
-// a console.warn, never a failed scan. MERGE NOTE FOR THE ORCHESTRATOR: once
-// WP2's onConfirmed fan-out has landed, delete the notifier wrapper below and
-// register `hubService.onConfirmed` on that fan-out instead — hubService and
-// the route are unchanged; only this driver swaps.
+// series that auto-purchases CONFIRMED opportunities. It rides the same
+// onConfirmed fan-out as WhatsApp alerts — the fan-out emits records at the
+// confirmation TRANSITION only, so pre-Phase-16 records are never
+// retro-purchased (mirror of the never-retro-alert rule). onConfirmed is
+// idempotent (purchases/skips dedupe by recordId); a Hub failure is a
+// console.warn, never a failed scan.
 const hubService = new HubService({
   store: new HubProfileStore(path.join(serverRoot, HUB_FILE)),
   records: () => ledgerService.allRecordsList(),
@@ -504,18 +496,10 @@ app.use(
   '/api/hub',
   createHubRouter({ hub: hubService, leaderboards: () => leaderboardStore.readHubLeaderboards() }),
 );
-const priorNotifier = scanDeps.notifier;
-scanDeps.notifier = async (opportunities) => {
-  await Promise.resolve(priorNotifier?.(opportunities));
-  try {
-    const confirmed = (await opportunityService.list()).filter(
-      (r) => r.confirmation == null || r.confirmation.status === 'confirmed',
-    );
-    await hubService.onConfirmed(confirmed);
-  } catch (err) {
-    console.warn('Hub purchase failed:', err);
-  }
-};
+confirmedConsumers.push({
+  name: 'hub-purchases',
+  consume: (records) => hubService.onConfirmed(records),
+});
 // ─────────────────────────────────────────────────────────────────────────
 
 // Manual scans are blocked in quiet hours too (spec: "zero calls of any
