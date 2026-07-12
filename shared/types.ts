@@ -437,6 +437,12 @@ export interface WhatsAppStatus {
   middleEnabled: boolean;
   /** True when the server logs messages instead of sending via Twilio. */
   devMode: boolean;
+  /**
+   * Set after a Twilio send exhausts its retries; cleared by the next
+   * successful send. `detail` is sanitized — no SIDs, tokens, or full
+   * phone numbers (same credential-privacy rule as the odds key).
+   */
+  deliveryFailure: { at: string; detail: string } | null;
 }
 
 /* ————— Risk Mode / EV (Speculative phase 10) ————— */

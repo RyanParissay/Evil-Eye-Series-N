@@ -534,6 +534,24 @@ input[type='range']:disabled {
   border-bottom: 1px solid var(--hairline);
 }
 
+/* Persistent — stays up while deliveryFailure is set, not a toast. */
+.wa-delivery-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--red);
+  padding: 14px 16px;
+  margin-top: 20px;
+}
+
+.wa-delivery-banner-title {
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--red);
+}
+
 .wa-head {
   display: flex;
   align-items: center;

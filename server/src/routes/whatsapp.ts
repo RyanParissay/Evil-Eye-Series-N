@@ -13,6 +13,7 @@ import {
   type VerifyOutcome,
 } from '../notifications/verification';
 import type {
+  DeliveryFailure,
   WhatsAppDataStore,
   WhatsAppSubscription,
 } from '../notifications/subscriptionStore';
@@ -37,7 +38,8 @@ export function createWhatsAppRouter(deps: WhatsAppRouteDeps): Router {
 
   router.get('/status', async (_req: Request, res: Response, next: NextFunction) => {
     try {
-      res.json(statusOf(await currentSubscription(deps), deps.sender));
+      const data = await deps.store.read();
+      res.json(statusOf(data.subscriptions[0] ?? null, deps.sender, data.lastDeliveryFailure));
     } catch (err) {
       next(err);
     }
@@ -78,12 +80,14 @@ export function createWhatsAppRouter(deps: WhatsAppRouteDeps): Router {
       };
       const status = await deps.store.update((data) => {
         // Connect replaces whatever was there; dedup history survives only
-        // if the same number reconnects.
+        // if the same number reconnects. Delivery-failure state is
+        // channel-wide (not per-subscription) — it carries over.
         const next = {
           subscriptions: [subscription],
           sentAlerts: data.sentAlerts.filter((r) => r.phoneE164 === phoneE164),
+          lastDeliveryFailure: data.lastDeliveryFailure,
         };
-        return { data: next, result: statusOf(subscription, deps.sender) };
+        return { data: next, result: statusOf(subscription, deps.sender, next.lastDeliveryFailure) };
       });
       res.json(status);
     } catch (err) {
@@ -101,11 +105,15 @@ export function createWhatsAppRouter(deps: WhatsAppRouteDeps): Router {
       type VerifyResult = {
         kind: VerifyOutcome | 'no_pending';
         subscription: WhatsAppSubscription | null;
+        deliveryFailure: DeliveryFailure | null;
       };
       const outcome = await deps.store.update<VerifyResult>((data) => {
         const subscription = data.subscriptions[0];
         if (!subscription?.verification) {
-          return { data, result: { kind: 'no_pending', subscription: null } };
+          return {
+            data,
+            result: { kind: 'no_pending', subscription: null, deliveryFailure: data.lastDeliveryFailure },
+          };
         }
         const at = now();
         const check: VerifyOutcome = checkVerificationCode(
@@ -121,11 +129,11 @@ export function createWhatsAppRouter(deps: WhatsAppRouteDeps): Router {
           subscription.verification.attempts += 1;
         }
         subscription.updatedAt = at.toISOString();
-        return { data, result: { kind: check, subscription } };
+        return { data, result: { kind: check, subscription, deliveryFailure: data.lastDeliveryFailure } };
       });
 
       if (outcome.kind === 'ok') {
-        res.json(statusOf(outcome.subscription, deps.sender));
+        res.json(statusOf(outcome.subscription, deps.sender, outcome.deliveryFailure));
         return;
       }
       res.status(400).json(errorBody('bad_request', verifyFailureMessage(outcome)));
@@ -147,7 +155,10 @@ export function createWhatsAppRouter(deps: WhatsAppRouteDeps): Router {
           subscription.thresholdPercent = parsed.value.thresholdPercent;
           subscription.updatedAt = now().toISOString();
         }
-        return { data, result: subscription ? statusOf(subscription, deps.sender) : null };
+        return {
+          data,
+          result: subscription ? statusOf(subscription, deps.sender, data.lastDeliveryFailure) : null,
+        };
       });
       if (!status) {
         res.status(400).json(errorBody('bad_request', 'No WhatsApp number connected'));
@@ -174,7 +185,10 @@ export function createWhatsAppRouter(deps: WhatsAppRouteDeps): Router {
           subscription.evEnabled = enabled;
           subscription.updatedAt = now().toISOString();
         }
-        return { data, result: subscription ? statusOf(subscription, deps.sender) : null };
+        return {
+          data,
+          result: subscription ? statusOf(subscription, deps.sender, data.lastDeliveryFailure) : null,
+        };
       });
       if (!status) {
         res.status(400).json(errorBody('bad_request', 'No WhatsApp number connected'));
@@ -200,7 +214,10 @@ export function createWhatsAppRouter(deps: WhatsAppRouteDeps): Router {
           subscription.middleEnabled = enabled;
           subscription.updatedAt = now().toISOString();
         }
-        return { data, result: subscription ? statusOf(subscription, deps.sender) : null };
+        return {
+          data,
+          result: subscription ? statusOf(subscription, deps.sender, data.lastDeliveryFailure) : null,
+        };
       });
       if (!status) {
         res.status(400).json(errorBody('bad_request', 'No WhatsApp number connected'));
@@ -238,9 +255,12 @@ export function createWhatsAppRouter(deps: WhatsAppRouteDeps): Router {
           sub.active = true;
           sub.updatedAt = now().toISOString();
         }
-        return { data, result: sub ? statusOf(sub, deps.sender) : null };
+        // A successful send is a successful send — clears the same
+        // channel-wide failure an alert dispatch would.
+        data.lastDeliveryFailure = null;
+        return { data, result: sub ? statusOf(sub, deps.sender, data.lastDeliveryFailure) : null };
       });
-      res.json(status ?? statusOf(null, deps.sender));
+      res.json(status ?? statusOf(null, deps.sender, null));
     } catch (err) {
       next(err);
     }
@@ -249,8 +269,8 @@ export function createWhatsAppRouter(deps: WhatsAppRouteDeps): Router {
   router.delete('/disconnect', async (_req: Request, res: Response, next: NextFunction) => {
     try {
       const status = await deps.store.update(() => ({
-        data: { subscriptions: [], sentAlerts: [] },
-        result: statusOf(null, deps.sender),
+        data: { subscriptions: [], sentAlerts: [], lastDeliveryFailure: null },
+        result: statusOf(null, deps.sender, null),
       }));
       res.json(status);
     } catch (err) {
@@ -270,6 +290,7 @@ async function currentSubscription(
 function statusOf(
   subscription: WhatsAppSubscription | null,
   sender: WhatsAppSender,
+  deliveryFailure: DeliveryFailure | null = null,
 ): WhatsAppStatus {
   return {
     connected: !!subscription?.verified,
@@ -280,6 +301,7 @@ function statusOf(
     evEnabled: subscription?.evEnabled ?? false,
     middleEnabled: subscription?.middleEnabled ?? false,
     devMode: sender.mode === 'console',
+    deliveryFailure,
   };
 }
 

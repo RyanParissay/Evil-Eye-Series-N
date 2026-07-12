@@ -101,7 +101,20 @@ export function WhatsAppPanel() {
   const phase = status.connected ? 'connected' : status.pendingVerification ? 'code' : 'form';
 
   return (
-    <section className="wa-panel" aria-label="WhatsApp alerts">
+    <>
+      {status.deliveryFailure && (
+        <div className="wa-delivery-banner" role="alert" aria-label="WhatsApp delivery failing">
+          <p className="wa-delivery-banner-title">WhatsApp delivery is failing.</p>
+          <p className="wa-note wa-note-error">
+            Most likely fix: re-join the Twilio sandbox — send the join code to the sandbox
+            number again.
+          </p>
+          <p className="micro-label">
+            Last failure: {new Date(status.deliveryFailure.at).toLocaleString()}
+          </p>
+        </div>
+      )}
+      <section className="wa-panel" aria-label="WhatsApp alerts">
       <div className="wa-head">
         <span className="micro-label">WhatsApp alerts</span>
         {status.devMode && (
@@ -299,6 +312,7 @@ export function WhatsAppPanel() {
           {status.thresholdPercent}%.
         </p>
       )}
-    </section>
+      </section>
+    </>
   );
 }

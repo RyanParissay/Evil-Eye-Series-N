@@ -37,9 +37,17 @@ export interface SentAlertRecord {
   sentAt: string;
 }
 
+/** Sanitized record of the most recent Twilio delivery failure. */
+export interface DeliveryFailure {
+  at: string;
+  detail: string;
+}
+
 export interface WhatsAppData {
   subscriptions: WhatsAppSubscription[];
   sentAlerts: SentAlertRecord[];
+  /** Channel-wide, not per-subscription; cleared by the next successful send. */
+  lastDeliveryFailure: DeliveryFailure | null;
 }
 
 /**
@@ -59,12 +67,13 @@ export class WhatsAppStore extends JsonStore<WhatsAppData> implements WhatsAppDa
   constructor(filePath: string) {
     super(
       filePath,
-      () => ({ subscriptions: [], sentAlerts: [] }),
+      () => ({ subscriptions: [], sentAlerts: [], lastDeliveryFailure: null }),
       (parsed) => {
         const partial = (parsed ?? {}) as Partial<WhatsAppData>;
         return {
           subscriptions: partial.subscriptions ?? [],
           sentAlerts: partial.sentAlerts ?? [],
+          lastDeliveryFailure: partial.lastDeliveryFailure ?? null,
         };
       },
     );

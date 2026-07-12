@@ -17,7 +17,11 @@ afterEach(async () => {
 describe('WhatsAppStore', () => {
   it('reads empty data when the file does not exist', async () => {
     const store = new WhatsAppStore(join(dir, 'whatsapp.json'));
-    expect(await store.read()).toEqual({ subscriptions: [], sentAlerts: [] });
+    expect(await store.read()).toEqual({
+      subscriptions: [],
+      sentAlerts: [],
+      lastDeliveryFailure: null,
+    });
   });
 
   it('reads empty data when the file is corrupt', async () => {
@@ -26,6 +30,7 @@ describe('WhatsAppStore', () => {
     expect(await new WhatsAppStore(file).read()).toEqual({
       subscriptions: [],
       sentAlerts: [],
+      lastDeliveryFailure: null,
     });
   });
 
@@ -72,6 +77,10 @@ describe('WhatsAppStore', () => {
       }),
     ).rejects.toThrow('boom');
     await store.update((data) => ({ data, result: undefined }));
-    expect(await store.read()).toEqual({ subscriptions: [], sentAlerts: [] });
+    expect(await store.read()).toEqual({
+      subscriptions: [],
+      sentAlerts: [],
+      lastDeliveryFailure: null,
+    });
   });
 });

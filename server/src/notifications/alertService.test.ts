@@ -3,6 +3,7 @@ import type { ArbOpportunity } from '@shared/types';
 import {
   WHATSAPP_MAX_ALERTS_PER_HOUR,
   WHATSAPP_MAX_CONSECUTIVE_FAILURES,
+  WHATSAPP_MAX_SEND_RETRIES,
   WHATSAPP_SENT_ALERT_RETENTION_MS,
 } from '../config/constants';
 import {
@@ -14,6 +15,7 @@ import {
   notifyMiddleBets,
   notifyNewOpportunities,
   opportunityFingerprint,
+  sanitizeFailureDetail,
   selectAlerts,
 } from './alertService';
 import type {
@@ -77,7 +79,12 @@ function makeSubscription(
 }
 
 function makeData(overrides: Partial<WhatsAppData> = {}): WhatsAppData {
-  return { subscriptions: [makeSubscription()], sentAlerts: [], ...overrides };
+  return {
+    subscriptions: [makeSubscription()],
+    sentAlerts: [],
+    lastDeliveryFailure: null,
+    ...overrides,
+  };
 }
 
 /** In-memory stand-in for WhatsAppStore. */
@@ -104,7 +111,12 @@ class FakeSender implements WhatsAppSender {
   async send(to: string, body: string): Promise<void> {
     if (this.failNext > 0) {
       this.failNext -= 1;
-      throw new Error('simulated send failure');
+      // A realistic-looking Twilio error: embeds the full "to" number and a
+      // SID-shaped token, both of which the sanitizer must strip.
+      throw new Error(
+        `WhatsApp send failed: HTTP 400 — Twilio 21211: The 'To' number ${to} is not ` +
+          `a valid phone number for account AC1234567890abcdef1234567890abcd.`,
+      );
     }
     this.sent.push({ to, body });
   }
@@ -436,10 +448,10 @@ describe('notifyNewOpportunities', () => {
     );
   });
 
-  it('reports a failed send as not sent', async () => {
+  it('reports a failed send as not sent once retries are exhausted', async () => {
     const store = new FakeStore(makeData());
     const sender = new FakeSender();
-    sender.failNext = 1;
+    sender.failNext = WHATSAPP_MAX_SEND_RETRIES + 1; // every attempt fails
     const { sentFingerprints } = await notifyNewOpportunities(
       { store, sender, now: () => NOW },
       [makeArb()],
@@ -447,10 +459,24 @@ describe('notifyNewOpportunities', () => {
     expect(sentFingerprints).toEqual([]);
   });
 
+  it('retries a transient failure up to the cap and still delivers', async () => {
+    const store = new FakeStore(makeData());
+    const sender = new FakeSender();
+    sender.failNext = WHATSAPP_MAX_SEND_RETRIES; // fails every attempt but the last
+    const { sentFingerprints } = await notifyNewOpportunities(
+      { store, sender, now: () => NOW },
+      [makeArb()],
+    );
+    expect(sentFingerprints).toEqual([opportunityFingerprint(makeArb())]);
+    expect(sender.sent).toHaveLength(1);
+    // A recovered send is a success — no lingering failure record.
+    expect(store.data.lastDeliveryFailure).toBeNull();
+  });
+
   it('deactivates the subscription after consecutive send failures', async () => {
     const store = new FakeStore(makeData());
     const sender = new FakeSender();
-    sender.failNext = WHATSAPP_MAX_CONSECUTIVE_FAILURES;
+    sender.failNext = WHATSAPP_MAX_CONSECUTIVE_FAILURES * (WHATSAPP_MAX_SEND_RETRIES + 1);
     const deps = { store, sender, now: () => NOW };
 
     for (let i = 0; i < WHATSAPP_MAX_CONSECUTIVE_FAILURES; i++) {
@@ -466,7 +492,7 @@ describe('notifyNewOpportunities', () => {
   it('a success resets the consecutive-failure count', async () => {
     const store = new FakeStore(makeData());
     const sender = new FakeSender();
-    sender.failNext = 1;
+    sender.failNext = WHATSAPP_MAX_SEND_RETRIES + 1;
     const deps = { store, sender, now: () => NOW };
 
     await notifyNewOpportunities(deps, [makeArb({ eventId: 'evt-fail' })]);
@@ -475,6 +501,21 @@ describe('notifyNewOpportunities', () => {
     await notifyNewOpportunities(deps, [makeArb({ eventId: 'evt-ok' })]);
     expect(store.data.subscriptions[0].failedSendCount).toBe(0);
     expect(store.data.subscriptions[0].active).toBe(true);
+  });
+
+  it('persists a sanitized lastDeliveryFailure once retries are exhausted, cleared by the next success', async () => {
+    const store = new FakeStore(makeData());
+    const sender = new FakeSender();
+    sender.failNext = WHATSAPP_MAX_SEND_RETRIES + 1;
+    const deps = { store, sender, now: () => NOW };
+
+    await notifyNewOpportunities(deps, [makeArb({ eventId: 'evt-fail' })]);
+    expect(store.data.lastDeliveryFailure).not.toBeNull();
+    expect(store.data.lastDeliveryFailure!.at).toBe(NOW.toISOString());
+    expect(store.data.lastDeliveryFailure!.detail).not.toContain('+14165551234');
+
+    await notifyNewOpportunities(deps, [makeArb({ eventId: 'evt-ok' })]);
+    expect(store.data.lastDeliveryFailure).toBeNull();
   });
 
   it('prunes sent-alert records past the retention window', async () => {
@@ -491,5 +532,23 @@ describe('notifyNewOpportunities', () => {
     const deps = { store, sender: new FakeSender(), now: () => NOW };
     await notifyNewOpportunities(deps, []);
     expect(store.data.sentAlerts).toHaveLength(0);
+  });
+});
+
+describe('sanitizeFailureDetail', () => {
+  it('strips phone numbers and SID/token-shaped strings, keeps the rest', () => {
+    const detail = sanitizeFailureDetail(
+      new Error(
+        "WhatsApp send failed: HTTP 400 — Twilio 21211: The 'To' number +14165551234 is " +
+          'not a valid phone number for account AC1234567890abcdef1234567890abcd.',
+      ),
+    );
+    expect(detail).not.toContain('+14165551234');
+    expect(detail).not.toContain('AC1234567890abcdef1234567890abcd');
+    expect(detail).toContain('not a valid phone number');
+  });
+
+  it('handles non-Error throwables', () => {
+    expect(sanitizeFailureDetail('plain string failure')).toContain('plain string failure');
   });
 });

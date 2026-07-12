@@ -9,6 +9,7 @@ import type { StakePlan } from '@shared/stakePlanning';
 import {
   WHATSAPP_MAX_ALERTS_PER_HOUR,
   WHATSAPP_MAX_CONSECUTIVE_FAILURES,
+  WHATSAPP_MAX_SEND_RETRIES,
   WHATSAPP_SENT_ALERT_RETENTION_MS,
 } from '../config/constants';
 import { opportunityFingerprint, opportunityIdFromFingerprint } from '../opportunities/opportunityId';
@@ -25,6 +26,38 @@ const HOUR_MS = 3_600_000;
 // Identity lives in opportunities/opportunityId.ts (persistence shares it);
 // re-exported here because it IS this module's dedup key.
 export { opportunityFingerprint } from '../opportunities/opportunityId';
+
+/**
+ * Same-message immediate retries (no delay — no server-side timers) before
+ * a send counts as a delivery failure for this dispatch. Lives inside the
+ * existing fire-and-forget notifier call, not a scheduler.
+ */
+async function sendWithRetries(sender: WhatsAppSender, toE164: string, body: string): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= WHATSAPP_MAX_SEND_RETRIES; attempt++) {
+    try {
+      await sender.send(toE164, body);
+      return;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * Strips anything that looks like a phone number, Twilio SID, or token from
+ * a delivery-failure detail before it's persisted — same credential-privacy
+ * rule as the odds key (CLAUDE.md). Kept short so it stays a status blurb,
+ * not a log dump.
+ */
+export function sanitizeFailureDetail(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  return raw
+    .replace(/\+?\d{7,15}/g, '[number]')
+    .replace(/\b[A-Za-z0-9]{20,}\b/g, '[id]')
+    .slice(0, 300);
+}
 
 export interface PlannedAlert {
   subscription: WhatsAppSubscription;
@@ -173,12 +206,14 @@ export async function notifyNewOpportunities(
       // An earlier failure in this batch may have deactivated it.
       if (!subscription.active) continue;
       try {
-        await deps.sender.send(
+        await sendWithRetries(
+          deps.sender,
           subscription.phoneE164,
           formatAlertMessage(opportunity, deps.appUrl, deps.planStakes?.(opportunity), now),
         );
         subscription.failedSendCount = 0;
         subscription.sendTimestamps.push(now.toISOString());
+        data.lastDeliveryFailure = null;
         sent.add(fingerprint);
         data.sentAlerts.push({
           phoneE164: subscription.phoneE164,
@@ -188,6 +223,7 @@ export async function notifyNewOpportunities(
         });
       } catch (err) {
         subscription.failedSendCount += 1;
+        data.lastDeliveryFailure = { at: now.toISOString(), detail: sanitizeFailureDetail(err) };
         console.warn(`WhatsApp send failed for ${maskPhone(subscription.phoneE164)}:`, err);
         if (subscription.failedSendCount >= WHATSAPP_MAX_CONSECUTIVE_FAILURES) {
           subscription.active = false;
@@ -264,13 +300,15 @@ export async function notifyEvBets(
         if (budget <= 0) break;
         if (!subscription.active) break;
         try {
-          await deps.sender.send(
+          await sendWithRetries(
+            deps.sender,
             subscription.phoneE164,
             formatEvAlertMessage(opportunity, deps.stake, deps.appUrl),
           );
           budget -= 1;
           subscription.failedSendCount = 0;
           subscription.sendTimestamps.push(now.toISOString());
+          data.lastDeliveryFailure = null;
           sent.add(fingerprint);
           data.sentAlerts.push({
             phoneE164: subscription.phoneE164,
@@ -280,6 +318,7 @@ export async function notifyEvBets(
           });
         } catch (err) {
           subscription.failedSendCount += 1;
+          data.lastDeliveryFailure = { at: now.toISOString(), detail: sanitizeFailureDetail(err) };
           console.warn(`WhatsApp EV send failed for ${maskPhone(subscription.phoneE164)}:`, err);
           if (subscription.failedSendCount >= WHATSAPP_MAX_CONSECUTIVE_FAILURES) {
             subscription.active = false;
@@ -368,13 +407,15 @@ export async function notifyMiddleBets(
         if (alreadySent.has(`${subscription.phoneE164}|${fingerprint}`)) continue;
         if (budget <= 0) break;
         try {
-          await deps.sender.send(
+          await sendWithRetries(
+            deps.sender,
             subscription.phoneE164,
             formatMiddleAlertMessage(opportunity, deps.stake, deps.appUrl),
           );
           budget -= 1;
           subscription.failedSendCount = 0;
           subscription.sendTimestamps.push(now.toISOString());
+          data.lastDeliveryFailure = null;
           sent.add(fingerprint);
           data.sentAlerts.push({
             phoneE164: subscription.phoneE164,
@@ -384,6 +425,7 @@ export async function notifyMiddleBets(
           });
         } catch (err) {
           subscription.failedSendCount += 1;
+          data.lastDeliveryFailure = { at: now.toISOString(), detail: sanitizeFailureDetail(err) };
           console.warn(`WhatsApp middle send failed for ${maskPhone(subscription.phoneE164)}:`, err);
           if (subscription.failedSendCount >= WHATSAPP_MAX_CONSECUTIVE_FAILURES) {
             subscription.active = false;
