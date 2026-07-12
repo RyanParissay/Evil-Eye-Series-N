@@ -1,11 +1,11 @@
 /**
  * Daily backup of server/data/ (Phase 15 #6). One dated directory per
  * calendar day under BACKUP_DIR, copying everything under the data dir
- * EXCEPT the backups dir itself, pruned to the newest 14 dailies. No
- * server-side timers, ever (CLAUDE.md: "scans are on-demand only" extends
- * here) — this only runs when explicitly triggered (server startup,
- * fire-and-forget after each scan) and no-ops if today's dir already
- * exists. Never throws: a backup failure must not break startup or a scan.
+ * EXCEPT the backups dir itself, pruned to the newest 14 dailies. Owns no
+ * timer (Phase 16: timers live ONLY in server/src/scheduler/) — this only
+ * runs when explicitly triggered (server startup, fire-and-forget after each
+ * scan) and no-ops if today's dir already exists. Never throws: a backup
+ * failure must not break startup or a scan.
  */
 import { cp, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';

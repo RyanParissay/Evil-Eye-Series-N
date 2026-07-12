@@ -163,8 +163,9 @@ export const WHATSAPP_MAX_ALERTS_PER_HOUR = 10;
 export const WHATSAPP_MAX_CONSECUTIVE_FAILURES = 3;
 
 /**
- * Same-message immediate retries (no delay — no server-side timers; see
- * CLAUDE.md) before a send counts as a delivery failure for this dispatch.
+ * Same-message immediate retries (no delay — this path owns no timer; the
+ * only timer in server/src is the scheduler's) before a send counts as a
+ * delivery failure for this dispatch.
  */
 export const WHATSAPP_MAX_SEND_RETRIES = 2;
 

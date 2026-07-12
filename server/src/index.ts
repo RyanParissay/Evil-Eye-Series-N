@@ -415,8 +415,9 @@ const scanDeps: ScanDeps = {
       }
       await opportunityService.markAlerted([...sentFingerprints, ...evSent, ...middleSent]);
 
-      // Grading piggybacks on scans too (same "no server-side scheduler"
-      // rule alerts follow) — fire-and-forget, never fails the scan.
+      // Grading piggybacks on every scan (same fire-and-forget rule alerts
+      // follow) — never fails the scan. Phase 16 adds the scheduler's own
+      // score-poll ticks on top; this piggyback stays for manual scans.
       try {
         void gradingService.poll().catch((err) => {
           console.warn('Grading poll failed:', err);

@@ -367,9 +367,9 @@ export interface GradingPollResult {
   cap: number;
 }
 
-/** The client-side grading tick — mirrors the "timers live in the client"
- *  rule the scan cadence follows. Never throws into a caller that doesn't
- *  await it; callers should still .catch() since this is a real fetch. */
+/** Manual score-poll trigger. The Phase-16 scheduler drives grading polls
+ *  server-side now (the client grading tick was retired), but this endpoint
+ *  stays for on-demand polling. Callers should .catch() — it's a real fetch. */
 export async function pollGrading(): Promise<GradingPollResult> {
   return request<GradingPollResult>('/api/grading/poll', { method: 'POST' });
 }

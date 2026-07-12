@@ -63,9 +63,11 @@ server/src/
                  rules math; gradingService.ts is the I/O shell — what's due,
                  one fetchScores call per sport, writes land via
                  OpportunityService.applyGrading/setGradingFlag — and
-                 gradingStore.ts (scores-spend ledger). Piggybacks on scans
-                 like everything else here: fire-and-forget after the
-                 notifier, never a server-side scheduler.
+                 gradingStore.ts (scores-spend ledger). Runs both ways now
+                 (Phase 16): still fire-and-forget after each scan's notifier,
+                 AND on the scheduler's own score-poll ticks (the replacement
+                 for the retired client grading tick). Quiet hours block score
+                 polls; overdue ones fire at/after 08:00.
   presets/       Advanced-mode book presets. presetStore.ts (JsonStore),
                  presetService.ts (CRUD + seeding + pure resolvePresetKeys —
                  dynamic presets resolve all_enabled/funded against the
@@ -85,15 +87,21 @@ server/src/
   ops/           Phase-8 evidence layer, all zero-credit by construction:
                  scanHistoryStore.ts (append-only per-scan JSONL, monthly —
                  runScan's scanLog dep writes one line per scan),
-                 opsStore.ts (scan windows/cadence/budget settings — the
-                 TIMERS live in the client, always), coverageService.ts
+                 opsStore.ts (credit budget + markets + the Phase-16
+                 scheduler config: scheduler.blocks/enabled/scanParams,
+                 enabled DEFAULT FALSE, migrated in via the normalize pattern;
+                 the legacy weekday/weekend windows + inWindowMins/outWindowMins
+                 are back-compat only — the scheduler ignores them),
+                 coverageService.ts
                  (funded-book feed audit), survivalService.ts (survival at
                  next covering scan + gone-lifetimes + the measured-haircut
                  mapping), telemetryService.ts (reaction funnel + verify
                  outcome aggregation; missing steps excluded, never zeroed),
-                 gapDetector.ts (Phase 13, pure: flags in-window stretches
-                 > 2× cadence between scans — detection only, reused as-is
-                 by scanBrowser/portfolios/grading, never reimplemented).
+                 gapDetector.ts (Phase 13, pure: flags stretches whose START
+                 sits inside a scheduler block and runs > 2× THAT block's
+                 cadence — rewired off the legacy inWindowMins onto
+                 scheduler.blocks in Phase 16, reusing plan.ts's activeBlock;
+                 detection only, reused as-is by scanBrowser/portfolios/grading).
                  Phase 15: scanBrowser.ts (pairs each scanHistoryStore line
                  with its opportunities, matched by detection/sighting
                  timestamp falling in that scan's slot, plus the inline gap
@@ -121,6 +129,21 @@ server/src/
                  days per representative series — MODEL fit to history,
                  never a forecast). Zero provider deps, same structural
                  zero-credit shape as ops/ and advanced mode.
+  scheduler/     Phase 16: THE one owner of wall-clock scheduling — the module
+                 that retired "no server-side schedulers". plan.ts (PURE,
+                 engine-grade) maps (settings, now, scan history, score polls,
+                 budget) → ONE next action: run scan / run score poll / sleep
+                 until T; its global gates make it budget-, cap-, and
+                 quiet-hours-aware by construction. scheduler.ts is the single
+                 self-rescheduling setTimeout chain (injectable clock/timer so
+                 no test sleeps), started from index.ts; it self-disables
+                 persistently on spent-quota / rejected-key errors.
+                 vancouverTime.ts is the DST-safe America/Vancouver clock via
+                 Intl/IANA (local fields, quiet-hours predicate, next-08:00
+                 boundary, local→epoch). realTimer.ts holds the ONLY real
+                 setTimeout in server/src (timerScope.test enforces the scope).
+                 routes/quietHoursGuard.ts is the route-level half of quiet
+                 hours (manual scan + cockpit re-verify).
   routes/        Express boundary: parse → runScan → JSON; ProviderError → HTTP status.
                  api.ts (/api/scan, /api/last-scan) + whatsapp.ts (/api/whatsapp/*).
   config/        constants.ts (every tunable) + bookmakerLinks.ts (homepage fallbacks)
@@ -154,17 +177,36 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
 - **Credits are real money.** Every odds call costs markets × regions
   credits. Anything that adds calls or regions must be reflected in the
   usage math (scanService step 5) and is worth flagging to the user.
-- **Scans are on-demand only** — no polling, no timers. That's a product
-  decision (credit spend), not an accident.
+- **All wall-clock scheduling lives in `server/src/scheduler/`** (Phase 16;
+  this REPLACES the retired "scans are on-demand only / no server-side
+  schedulers / timers live in the client" invariant). Exactly one
+  self-rescheduling tick (a setTimeout chain), started from index.ts, with an
+  injectable clock/timer so no test ever sleeps. No timers anywhere else in
+  server/src — only `scheduler/realTimer.ts` calls setTimeout, and
+  `scheduler/timerScope.test.ts` pins that. The scheduler is budget-, cap-,
+  and quiet-hours-aware BY CONSTRUCTION: every provider call it initiates
+  flows through the existing credit accounting and the 95% auto-stop, and
+  `plan.ts`'s global gates refuse to emit any scan/score-poll in quiet hours
+  or past the cap. Scheduling decisions are PURE (`scheduler/plan.ts`,
+  engine-grade: no fs/env/Express/provider imports). `scheduler.enabled`
+  DEFAULTS FALSE — the dev server hot-reloads against real credits, so the
+  migration must never flip it and the tick no-ops harmlessly while disabled.
+- **Quiet hours are absolute** — zero Odds API calls of ANY kind 01:00–08:00
+  America/Vancouver, DST-safe via Intl/IANA (never a fixed UTC offset).
+  `plan.ts` blocks scheduler scans AND score polls; a route guard 503s manual
+  scans and cockpit re-verify with the `quiet_hours` code. Overdue score polls
+  queue and fire at/after 08:00.
 - **Suspicious/same-book arbs are flagged, never hidden.** The user decides.
   (Exception: they're never PUSHED — WhatsApp alerts skip them by design.)
 - **Twilio credentials never leave the server process** — same rule as the
   odds key. The client sees the phone number only masked (`/api/whatsapp/status`).
 - **Alert dispatch is fire-and-forget.** runScan's notifier hook must never
   slow or fail a scan; a Twilio outage is a console.warn, not a 500.
-- **Alerts piggyback on scans.** The notifier fires only when a scan runs
-  (manual or client auto-scan) — it must not become a server-side scheduler
-  (that's the "scans are on-demand only" invariant wearing another hat).
+- **Alerts piggyback on scans.** The notifier fires only when a scan runs —
+  manual OR scheduler-initiated (the scheduler's runScan reuses the SAME
+  scanDeps/notifier, so a scheduled scan is indistinguishable from a manual
+  one: same alerts, paper fund, grading piggyback, backup). It still must not
+  grow a timer of its own — all scan timing is the scheduler's, via the one tick.
 
 ## Extension recipes
 
@@ -243,10 +285,12 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   MEASURED = 100 × (1 − survival) only after ≥14 days of scan history
   and ≥50 samples — anything else is labeled ASSUMED. Funnel timestamps
   are first-write-wins; verifyPressedAt is stamped server-side.
-- The credit budget guard is CLIENT-side and only ever gates auto-scan
-  (manual scans are never blocked). Stop = used ≥ autoStopPct% × budget,
-  from the provider's own month counter; it releases when the counter
-  resets or the budget moves.
+- The credit budget auto-stop lives in the scheduler's plan.ts (Phase 16
+  moved it off the client). It gates scheduler scans AND score polls, never
+  manual scans (those are blocked only by quiet hours). Stop = used ≥
+  autoStopPct% × budget, from the provider's own month counter; it releases
+  when the counter resets (learned on the next scan that refreshes usage) or
+  the budget moves.
 - Benchmark books (BENCHMARK_BOOKS, currently pinnacle) are DUAL-ROLE:
   always carried in the fetch (planFetch unions them into the books
   param; the strictly-cheaper rule uses the union count, so crossing a
@@ -308,10 +352,10 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   only for events still present in the latest snapshot; records from older
   scans are simply not recomputable. Accepted limitation — don't build
   per-scan snapshot files to "fix" it.
-- backupService.ts NEVER uses setInterval/setTimeout — same "scans are
-  on-demand only" invariant wearing another hat. It only runs when
-  explicitly triggered (server startup, fire-and-forget after each scan)
-  and no-ops if today's dated BACKUP_DIR directory already exists.
+- backupService.ts NEVER uses setInterval/setTimeout — timers live ONLY in
+  server/src/scheduler/ (Phase 16). It only runs when explicitly triggered
+  (server startup, fire-and-forget after each scan) and no-ops if today's
+  dated BACKUP_DIR directory already exists.
 - The book leaderboard (ops/leaderboardStore.ts) ACCRUES per scan, forward
   only — it is not, and cannot be, recomputed from history, because
   last-snapshot.json is latest-only. Zero credits is structural (no

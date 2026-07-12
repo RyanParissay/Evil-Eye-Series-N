@@ -28,9 +28,9 @@ const HOUR_MS = 3_600_000;
 export { opportunityFingerprint } from '../opportunities/opportunityId';
 
 /**
- * Same-message immediate retries (no delay — no server-side timers) before
+ * Same-message immediate retries (no delay — this path owns no timer) before
  * a send counts as a delivery failure for this dispatch. Lives inside the
- * existing fire-and-forget notifier call, not a scheduler.
+ * existing fire-and-forget notifier call, not the scheduler.
  */
 async function sendWithRetries(sender: WhatsAppSender, toE164: string, body: string): Promise<void> {
   let lastError: unknown;
