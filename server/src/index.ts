@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 import express from 'express';
+import type { OpportunityRecord } from '@shared/types';
 import { BookmakerService } from './bookmakers/bookmakerService';
 import { BookmakerStore } from './bookmakers/bookmakerStore';
 import {
@@ -35,10 +36,14 @@ import { LeaderboardStore } from './ops/leaderboardStore';
 import { GradingService } from './grading/gradingService';
 import { GradingStore } from './grading/gradingStore';
 import { createGradingRouter } from './routes/grading';
-import { filterConfirmedSightings, notifyNewOpportunities } from './notifications/alertService';
+import { notifyNewOpportunities } from './notifications/alertService';
 import { WhatsAppStore } from './notifications/subscriptionStore';
 import { senderFromEnv } from './notifications/whatsappSender';
-import { isPendingCandidate, matchConfirmationPair } from './opportunities/confirmation';
+import {
+  isPendingCandidate,
+  matchConfirmationPair,
+  recordToOpportunity,
+} from './opportunities/confirmation';
 import { OpportunityService } from './opportunities/opportunityService';
 import { OpportunityArchive, OpportunityStore } from './opportunities/opportunityStore';
 import { verifyOpportunity } from './opportunities/verifyService';
@@ -304,9 +309,117 @@ app.use(
     },
   ),
 );
+/* ————— Confirmation fan-out (Phase 16 Part A) ————— */
+
+/**
+ * Records are ACTED ON only at the moment they reach 'confirmed' — scan B
+ * re-sighted the same identity within ±0.5 pp. Consumers fire-and-forget
+ * with a console.warn on failure (the notifier's discipline): one consumer
+ * failing never starves another, and none may slow the scan-B pipeline.
+ */
+type ConfirmedConsumer = {
+  name: string;
+  consume: (records: OpportunityRecord[]) => void | Promise<void>;
+};
+const confirmedConsumers: ConfirmedConsumer[] = [];
+function onConfirmed(records: OpportunityRecord[]): void {
+  if (records.length === 0) return;
+  for (const { name, consume } of confirmedConsumers) {
+    try {
+      void Promise.resolve(consume(records)).catch((err) =>
+        console.warn(`Confirmed-record consumer '${name}' failed:`, err),
+      );
+    } catch (err) {
+      console.warn(`Confirmed-record consumer '${name}' failed:`, err);
+    }
+  }
+}
+
+/**
+ * Consumer #1 — WhatsApp alert dispatch (arb, EV, middle; free middles
+ * included). The pipeline is unchanged from Phase 15 — limited/dead-book
+ * filter → per-strategy dispatch → markAlerted — only its TRIGGER moved:
+ * it used to fire per scan, it now fires per confirmation, so alertWorthy's
+ * at-most-once fingerprint dedup composes with the confirmed-only gate.
+ * single_sighting and pending records can never reach here by construction.
+ */
+async function dispatchConfirmedAlerts(records: OpportunityRecord[]): Promise<void> {
+  const opportunities = records.map(recordToOpportunity);
+  const alertable = await bookmakerService.filterAlertable(opportunities);
+  if (alertable.length === 0) return;
+  const arbs = alertable.filter((o) => !o.ev && !o.middle);
+  const evBets = alertable.filter((o) => o.ev);
+  const middleBets = alertable.filter((o) => o.middle);
+  const [fundSettings, books, evSettings, middlesSettings] = await Promise.all([
+    fundService.settings(),
+    bookmakerService.list(),
+    evStore.read(),
+    middlesStore.read(),
+  ]);
+  const balances = new Map(books.map((b) => [b.key, b.balance ?? null]));
+  const { sentFingerprints } = await notifyNewOpportunities(
+    {
+      store: whatsappStore,
+      sender: whatsappSender,
+      appUrl,
+      planStakes:
+        fundSettings.defaultStake > 0
+          ? (arb) => planStakes(arb.legs, fundSettings.defaultStake, balances)
+          : undefined,
+    },
+    arbs,
+  );
+  let evSent: string[] = [];
+  if (evBets.length > 0) {
+    try {
+      const result = await notifyEvBets(
+        {
+          store: whatsappStore,
+          sender: whatsappSender,
+          appUrl,
+          evThresholdPercent: evSettings.alertMinEdgePct,
+          stake: fundSettings.defaultStake > 0 ? fundSettings.defaultStake : undefined,
+        },
+        evBets,
+      );
+      evSent = result.sentFingerprints;
+    } catch (err) {
+      console.warn('EV alert dispatch failed:', err);
+    }
+  }
+  let middleSent: string[] = [];
+  if (middleBets.length > 0) {
+    try {
+      const result = await notifyMiddleBets(
+        {
+          store: whatsappStore,
+          sender: whatsappSender,
+          appUrl,
+          maxBreakevenPct: middlesSettings.alertMaxBreakevenPct,
+          stake: fundSettings.defaultStake > 0 ? fundSettings.defaultStake : undefined,
+        },
+        middleBets,
+      );
+      middleSent = result.sentFingerprints;
+    } catch (err) {
+      console.warn('Middle alert dispatch failed:', err);
+    }
+  }
+  await opportunityService.markAlerted([...sentFingerprints, ...evSent, ...middleSent]);
+}
+confirmedConsumers.push({ name: 'whatsapp-alerts', consume: dispatchConfirmedAlerts });
+
+// ————— Analytics Hub consumer registration point (Phase 16 WP4a) —————
+// Register the Hub's purchase consumer HERE, after the alert consumer:
+//   confirmedConsumers.push({ name: 'hub-purchases', consume: (records) => hubService.purchaseConfirmed(records) });
+// Purchases key off this fan-out ONLY — nothing short of 'confirmed' is
+// ever bought (design contract, Parts A + B).
+
 // One ScanDeps, shared by the manual /api/scan route AND the scheduler, so a
-// scheduled scan fires the exact same notifier pipeline (alerts, paper fund,
-// grading piggyback, backup) a manual scan does.
+// scheduled scan fires the exact same notifier pipeline (paper fund, grading
+// piggyback, backup) a manual scan does. WhatsApp dispatch no longer lives
+// here — alerts fire from the onConfirmed fan-out above when scan B confirms
+// (Phase 16 Part A superseded the Phase 15 second-sighting toggle).
 const scanDeps: ScanDeps = {
     provider,
     store,
@@ -318,9 +431,6 @@ const scanDeps: ScanDeps = {
     ev: { settings: () => evStore.read() },
     middles: { settings: () => middlesStore.read() },
     marketSettings: { read: async () => (await opsStore.read()).markets },
-    // Limited/dead/disabled books never page the phone — filter before
-    // dispatch; whatever actually sent gets flagged on its stored record.
-    // The stream carries BOTH strategies; arbs and EV bets split here.
     notifier: async (opportunities) => {
       // Phase 16 Part A: recordScan (already done by now) may have left
       // candidates pending — wake the scheduler so their scan B is armed
@@ -328,99 +438,22 @@ const scanDeps: ScanDeps = {
       // when a wake lands mid-tick.
       scheduler?.wake();
 
-      const alertable = await bookmakerService.filterAlertable(opportunities);
-      const arbs = alertable.filter((o) => !o.ev && !o.middle);
-      const evBets = alertable.filter((o) => o.ev);
-      const middleBets = alertable.filter((o) => o.middle);
-      const [fundSettings, books, evSettings, middlesSettings, opsSettings] = await Promise.all([
-        fundService.settings(),
-        bookmakerService.list(),
-        evStore.read(),
-        middlesStore.read(),
-        opsStore.read(),
-      ]);
-      // The paper fund watches the SAME alertable stream a phone would when
-      // second-sighting confirmation is off (its default) — arbs at the
-      // paper threshold, middles at the alert breakeven cap (stored at
-      // their worst-case FLOOR). EV proof stays grading-only. Paper entry
-      // timing is intentionally NOT gated by confirmSecondSighting — that
-      // toggle is scoped to phone alerts (Phase 15 #3).
+      // The paper fund stays on the UNGATED per-scan stream (recorded
+      // decision: paper wants max samples; the confirmation gate applies to
+      // alerts and Hub purchases only). Same rules as ever: the alertable
+      // (limited/dead-filtered) stream, arbs at the paper threshold, middles
+      // at the alert breakeven cap (stored at their worst-case FLOOR); EV
+      // proof stays grading-only.
       try {
+        const alertable = await bookmakerService.filterAlertable(opportunities);
+        const middlesSettings = await middlesStore.read();
         await paperService.considerEntries(
-          [...arbs, ...middleBets],
+          alertable.filter((o) => !o.ev),
           middlesSettings.alertMaxBreakevenPct,
         );
       } catch (err) {
         console.warn('Paper fund entry failed:', err);
       }
-
-      // Second-sighting confirmation (ops toggle, default off): an
-      // opportunity may reach a phone alert only once it's been seen in ≥2
-      // scans, filtering ghosts that vanish before the next one. The
-      // candidate set becomes records SEEN THIS SCAN not yet confirmed —
-      // applies uniformly to arb, EV, and middle candidates.
-      let alertArbs = arbs;
-      let alertEvBets = evBets;
-      let alertMiddleBets = middleBets;
-      if (opsSettings.confirmSecondSighting) {
-        const records = await opportunityService.list();
-        const sightingByFingerprint = new Map(records.map((r) => [r.fingerprint, r]));
-        const sightingOf = (fingerprint: string) => sightingByFingerprint.get(fingerprint);
-        alertArbs = filterConfirmedSightings(arbs, true, sightingOf);
-        alertEvBets = filterConfirmedSightings(evBets, true, sightingOf);
-        alertMiddleBets = filterConfirmedSightings(middleBets, true, sightingOf);
-      }
-
-      const balances = new Map(books.map((b) => [b.key, b.balance ?? null]));
-      const { sentFingerprints } = await notifyNewOpportunities(
-        {
-          store: whatsappStore,
-          sender: whatsappSender,
-          appUrl,
-          planStakes:
-            fundSettings.defaultStake > 0
-              ? (arb) => planStakes(arb.legs, fundSettings.defaultStake, balances)
-              : undefined,
-        },
-        alertArbs,
-      );
-      let evSent: string[] = [];
-      if (alertEvBets.length > 0) {
-        try {
-          const result = await notifyEvBets(
-            {
-              store: whatsappStore,
-              sender: whatsappSender,
-              appUrl,
-              evThresholdPercent: evSettings.alertMinEdgePct,
-              stake: fundSettings.defaultStake > 0 ? fundSettings.defaultStake : undefined,
-            },
-            alertEvBets,
-          );
-          evSent = result.sentFingerprints;
-        } catch (err) {
-          console.warn('EV alert dispatch failed:', err);
-        }
-      }
-      let middleSent: string[] = [];
-      if (alertMiddleBets.length > 0) {
-        try {
-          const result = await notifyMiddleBets(
-            {
-              store: whatsappStore,
-              sender: whatsappSender,
-              appUrl,
-              maxBreakevenPct: middlesSettings.alertMaxBreakevenPct,
-              stake: fundSettings.defaultStake > 0 ? fundSettings.defaultStake : undefined,
-            },
-            alertMiddleBets,
-          );
-          middleSent = result.sentFingerprints;
-        } catch (err) {
-          console.warn('Middle alert dispatch failed:', err);
-        }
-      }
-      await opportunityService.markAlerted([...sentFingerprints, ...evSent, ...middleSent]);
 
       // Grading piggybacks on every scan (same fire-and-forget rule alerts
       // follow) — never fails the scan. Phase 16 adds the scheduler's own
@@ -492,7 +525,10 @@ scheduler = new Scheduler({
     if (!parsed.ok) throw new Error(`Invalid confirmation scanParams: ${parsed.message}`);
     await runScan(scanDeps, parsed.request);
     const after = await opportunityService.list();
-    await opportunityService.applyConfirmations(matchConfirmationPair(before, after, new Date()));
+    const confirmed = await opportunityService.applyConfirmations(
+      matchConfirmationPair(before, after, new Date()),
+    );
+    onConfirmed(confirmed); // alerts (and, come WP4a, Hub purchases)
   },
   // The pair's B window lapsed (quiet hours / stop / restart): resolve to
   // single_sighting — bookkeeping only, zero provider calls.

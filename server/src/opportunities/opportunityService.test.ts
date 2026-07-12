@@ -376,6 +376,25 @@ describe('OpportunityService — confirmation pipeline (Phase 16 Part A)', () =>
     expect(pending[0].eventId).toBe('evt-1');
   });
 
+  it('pendingConfirmations returns SNAPSHOTS — a later scan mutating the store never rewrites the pre-B copy', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    await service.recordScan([makeArb({ profitPct: 2.0 })], SCOPE);
+
+    const [snapshot] = await service.pendingConfirmations();
+    // Scan B re-sights it with a different edge, mutating the live record.
+    const later = new OpportunityService(
+      store,
+      new FakeArchive(),
+      () => new Date(NOW.getTime() + 60_000),
+    );
+    await later.recordScan([makeArb({ profitPct: 9.9 })], SCOPE);
+
+    expect(store.data.records[0].profitPct).toBe(9.9);
+    expect(snapshot.profitPct).toBe(2.0); // scan A's edge, preserved
+    expect(snapshot.lastSeenAt).toBe(NOW.toISOString());
+  });
+
   it('applyConfirmations moves only still-pending records and returns the confirmed ones', async () => {
     const store = new FakeStore();
     const service = new OpportunityService(store, new FakeArchive(), () => NOW);

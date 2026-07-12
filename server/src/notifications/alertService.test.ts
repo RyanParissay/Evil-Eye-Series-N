@@ -6,10 +6,8 @@ import {
   WHATSAPP_MAX_SEND_RETRIES,
   WHATSAPP_SENT_ALERT_RETENTION_MS,
 } from '../config/constants';
-import { applyScanToRecords } from '../opportunities/opportunityLifecycle';
 import {
   alertWorthy,
-  filterConfirmedSightings,
   formatAlertMessage,
   formatEvAlertMessage,
   formatMiddleAlertMessage,
@@ -552,65 +550,5 @@ describe('sanitizeFailureDetail', () => {
 
   it('handles non-Error throwables', () => {
     expect(sanitizeFailureDetail('plain string failure')).toContain('plain string failure');
-  });
-});
-
-describe('filterConfirmedSightings (Phase 15 #3 second-sighting confirmation)', () => {
-  it('is a no-op when the toggle is off', () => {
-    const opportunities = [makeArb()];
-    expect(filterConfirmedSightings(opportunities, false, () => undefined)).toBe(opportunities);
-  });
-
-  it('blocks a first sighting and allows a confirmed second sighting', () => {
-    const arb = makeArb();
-    const fp = opportunityFingerprint(arb);
-    const firstSighting = new Map([[fp, { detectedAt: 'T1', lastSeenAt: 'T1' }]]);
-    expect(filterConfirmedSightings([arb], true, (f) => firstSighting.get(f))).toHaveLength(0);
-
-    const secondSighting = new Map([[fp, { detectedAt: 'T1', lastSeenAt: 'T2' }]]);
-    expect(filterConfirmedSightings([arb], true, (f) => secondSighting.get(f))).toEqual([arb]);
-  });
-
-  it('excludes an opportunity with no known sighting history — never guess', () => {
-    expect(filterConfirmedSightings([makeArb()], true, () => undefined)).toHaveLength(0);
-  });
-});
-
-describe('second-sighting fixture (Phase 15 #3 acceptance scenario)', () => {
-  it('scan1 detect → no alert; scan2 re-sight → exactly one alert; a ghost that vanishes before scan2 → never alerted', async () => {
-    const scope = { sportsScanned: ['basketball_nba'], regionTab: 'ca_us' };
-    const T1 = new Date('2026-07-09T12:00:00Z');
-    const T2 = new Date('2026-07-09T12:05:00Z');
-
-    const keeper = makeArb({ eventId: 'evt-keep' });
-    const ghost = makeArb({ eventId: 'evt-ghost' });
-
-    const store = new FakeStore(makeData());
-    const sender = new FakeSender();
-
-    // Scan 1: both detected for the first time — persistence stamps
-    // detectedAt === lastSeenAt for both, so the gate blocks them.
-    const scan1 = applyScanToRecords([], [keeper, ghost], scope, T1);
-    let sighting = new Map(scan1.records.map((r) => [r.fingerprint, r]));
-    let candidates = filterConfirmedSightings([keeper, ghost], true, (fp) => sighting.get(fp));
-    expect(candidates).toHaveLength(0);
-    const alert1 = await notifyNewOpportunities({ store, sender, now: () => T1 }, candidates);
-    expect(alert1.sentFingerprints).toEqual([]);
-    expect(sender.sent).toHaveLength(0);
-
-    // Scan 2: only `keeper` is re-detected — its lastSeenAt moves past
-    // detectedAt, clearing the gate. The ghost never reappears, so it's
-    // simply absent from this scan's candidate set.
-    const scan2 = applyScanToRecords(scan1.records, [keeper], scope, T2);
-    sighting = new Map(scan2.records.map((r) => [r.fingerprint, r]));
-    candidates = filterConfirmedSightings([keeper], true, (fp) => sighting.get(fp));
-    expect(candidates.map((o) => o.eventId)).toEqual(['evt-keep']);
-    const alert2 = await notifyNewOpportunities({ store, sender, now: () => T2 }, candidates);
-    expect(alert2.sentFingerprints).toEqual([opportunityFingerprint(keeper)]);
-    expect(sender.sent).toHaveLength(1);
-
-    // The ghost's fingerprint is never among any sent alert, across either scan.
-    const ghostFp = opportunityFingerprint(ghost);
-    expect(store.data.sentAlerts.some((r) => r.fingerprint === ghostFp)).toBe(false);
   });
 });

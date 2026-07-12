@@ -292,10 +292,17 @@ export class OpportunityService {
     });
   }
 
-  /** Records awaiting their confirmation scan B (Phase 16 Part A). */
+  /**
+   * Records awaiting their confirmation scan B (Phase 16 Part A). Returns
+   * DEEP COPIES: the pair matcher snapshots these BEFORE scan B and judges
+   * presence/drift against the post-B store, so the snapshot must never
+   * alias live record objects a store may hand out and mutate in place.
+   */
   async pendingConfirmations(): Promise<OpportunityRecord[]> {
     const { records } = await this.store.read();
-    return records.filter((r) => r.confirmation?.status === 'pending');
+    return records
+      .filter((r) => r.confirmation?.status === 'pending')
+      .map((r) => structuredClone(r));
   }
 
   /**
