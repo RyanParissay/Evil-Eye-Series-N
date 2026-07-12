@@ -16,6 +16,27 @@
       one real bug: the /scans Sports column was unbounded and made rows unreadable
       on scans covering 20+ leagues, now truncated with a hover title.
 
+- [x] Phase 16 — Analytics Hub + confirmation scanning + adaptive scheduling.
+      Gate 0 report delivered pre-code. WP1: server/src/scheduler/ (THE invariant
+      flip — one timer-owning module, pure plan.ts, injectable clock, DST-safe
+      quiet hours 01:00–08:00 America/Vancouver blocking scans + score polls +
+      manual scans + re-verify, quota self-disable, client timers retired,
+      CLAUDE.md rewritten). WP2: confirmation pairs (scan B fires 60s after scan
+      A only when candidates exist; ±0.5pp match; single_sighting terminal flag;
+      alerts moved behind the onConfirmed fan-out; conditional-pair cost model
+      MEASURED/ASSUMED; supersedes Phase 15's confirmSecondSighting). WP4a/4b:
+      Analytics Hub (/hub, neon-yellow bottom button; three $1,000 premade
+      profiles + custom CRUD; purchases ride the onConfirmed fan-out; settlement
+      via extracted portfolios/settlement.ts — P&L math exists once; three
+      top-10 %-occurrence leaderboards; all SIMULATED-labeled). WP3: dense
+      data-gathering week (4,500/day + 30,000/week hard caps with banner, 95%
+      auto-stop on top, interval derived from measured per-pair cost, 5-min
+      floor) + deterministic MODEL weekly proposal (density → blocks under
+      quiet-hours/2h-floor/90%-budget-ceiling constraints; applied ONLY via
+      explicit user confirmation). Post-merge hardening: dense week never
+      overrides a SELF-disable (dead key stops dense scans too). 578 server +
+      49 client tests green.
+
 Known issues / accepted limitations:
 - Leaderboard cannot backfill history — last-snapshot.json is latest-only, so
   counts only accrue forward from when leaderboard.json is first created.
@@ -28,15 +49,18 @@ Known issues / accepted limitations:
 - Optimizer gates (Phase 14) still need ≥30 graded records + 14 days per group
   before /portfolios/optimize unlocks; grading data accrues only from live scans.
 
+Hub v2 (deferred from Phase 16 by spec — do not build unprompted):
+- Multi-profile overlay charts; density heatmap UI polish; profile
+  archiving/cloning. Also noted: EquityChart's hi/$0 axis labels collide
+  when a profile's peak profit is within ~$2 of zero (pre-existing shared
+  component geometry, cosmetic).
+
 Candidate next phases:
-- Phase 16 — Analytics Hub + confirmation scanning + adaptive scheduling: design
-  DONE at docs/superpowers/specs/2026-07-11-phase-16-design.md, build NOT started.
-  This is the phase that retires "no server-side schedulers" (CLAUDE.md invariant
-  rewrite is part of WP1) in favor of one self-rescheduling tick in
-  server/src/scheduler/, plus scan-A/scan-B confirmation (supersedes Phase 15's
-  confirmSecondSighting toggle) and a Hub extending leaderboardStore into
-  per-strategy top-10 boards. Next task: Gate 0 + WP1 per that design doc.
-- Kelly + stochastic risk models (Phase 11, still unbuilt).
+- Phase 17 — Safety Score (spec saved VERBATIM at docs/prompts/phase-17.md,
+  Ryan-provided; gates alerts + Hub purchases on a deterministic 0–100
+  account-longevity score, sits AFTER confirmation in the pipeline).
+- Kelly + stochastic risk models (Phase 11, still unbuilt; real graded
+  distributions now accruing).
 - Props probe (out of scope through Phase 16).
 
-Next task: Phase 16 Gate 0 + WP1 (docs/superpowers/specs/2026-07-11-phase-16-design.md).
+Next task: Phase 17 Gate 0 (docs/prompts/phase-17.md) — after Ryan reviews Phase 16.

@@ -172,6 +172,21 @@ server/src/
                  enforces the scope). routes/quietHoursGuard.ts is the
                  route-level half of quiet hours (manual scan + cockpit
                  re-verify).
+  hub/           Phase 16 Part B — the Analytics Hub, all SIMULATED. Each
+                 profile is a PARAMETERIZED ENGINE SERIES: hubService.ts
+                 auto-purchases CONFIRMED opportunities (it registers on the
+                 onConfirmed fan-out in index.ts — the same gate alerts use;
+                 nothing short of 'confirmed' is ever bought) and settles via
+                 portfolios/settlement.ts primitives (pnlForStake,
+                 maxDrawdownOf — extracted so P&L math exists ONCE).
+                 profileStore.ts (JsonStore, data/hub.json: profiles +
+                 immutable purchase events + skipped events; premades
+                 premade-arb|ev|middle seeded on first read, never deletable).
+                 §5 stake discipline: flat-$ or %-of-STARTING bankroll, never
+                 compounds. routes/hub.ts + the /hub client page (neon
+                 yellow — the Hub button/page are part of the yellow=
+                 speculative/simulated family). Leaderboard %-occurrence
+                 boards ride ops/leaderboardStore accruals: zero credits.
   routes/        Express boundary: parse → runScan → JSON; ProviderError → HTTP status.
                  api.ts (/api/scan, /api/last-scan) + whatsapp.ts (/api/whatsapp/*).
   config/        constants.ts (every tunable) + bookmakerLinks.ts (homepage fallbacks)
@@ -377,8 +392,10 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   group; a benchmark missing a side or quoting a different line is a
   typed rejection. Never infer fair prices from soft-book consensus.
 - YELLOW is reserved app-wide for exactly one meaning: speculative /
-  expected value / NOT guaranteed (Risk Mode). Red stays "guaranteed
-  arb", green stays "surveillance live". EV surfaces never use the word
+  expected value / simulated / NOT guaranteed (Risk Mode, and Phase 16's
+  Analytics Hub — the neon #E8FF00 Hub button/page are deliberately in
+  this family: Hub money is simulated). Red stays "guaranteed arb",
+  green stays "surveillance live". EV/Hub surfaces never use the word
   "guaranteed" unnegated — the alert format test pins it.
 - EV records (strategy 'ev', single leg + ev context) ride every shared
   rail: same fingerprints, lifecycle, cockpit, ledger, alertWorthy. But:
