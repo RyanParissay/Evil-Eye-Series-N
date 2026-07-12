@@ -286,6 +286,15 @@ describe('plan — dense data-gathering week (Phase 16 Part C.3)', () => {
     expect(action.kind).toBe('scan');
   });
 
+  it('never overrides a SELF-disable — a dead key (disabledReason set) stops dense scans too', () => {
+    const action = plan(
+      denseInput({
+        settings: settings({ enabled: false, disabledReason: 'quota_exhausted' }),
+      }),
+    );
+    expect(action.kind).toBe('sleep');
+  });
+
   it('sleeps to exactly the derived interval when a scan is not yet due', () => {
     const now = at(15 * 60);
     const action = plan(

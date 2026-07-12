@@ -131,8 +131,10 @@ export function plan(input: PlanInput): SchedulerAction {
   // ————— Dense data-gathering week (Part C.3) —————
   // Overrides the enabled gate (user-authorized), but the monthly auto-stop
   // and its own hard credit caps still bind; quiet hours already returned above.
+  // A SELF-disable (disabledReason set — dead/spent key) is never overridden:
+  // user authorization doesn't extend past an unrecoverable provider state.
   const dense = input.denseWeek;
-  if (dense && dense.active) {
+  if (dense && dense.active && settings.disabledReason == null) {
     // The 95% monthly auto-stop still applies on top of the dense caps.
     if (budgetStopped(input.budget)) {
       return { kind: 'sleep', untilMs: Math.min(nowMs + IDLE_SLEEP_MS, wakeCapMs) };
