@@ -136,7 +136,9 @@ export function ScanHistoryPage() {
                         <tr key={scan.scannedAt}>
                           <td>{new Date(scan.scannedAt).toLocaleString()}</td>
                           <td>{scan.regionTab}</td>
-                          <td>{scan.sportsScanned.join(', ') || '—'}</td>
+                          <td className="scan-sports-cell" title={scan.sportsScanned.join(', ')}>
+                            {summarizeSports(scan.sportsScanned)}
+                          </td>
                           <td className="num">{scan.creditsComputed}</td>
                           <td className="num">{scan.eventCount}</td>
                           <td className="num">{scan.distinctBooks.length}</td>
@@ -184,4 +186,13 @@ export function ScanHistoryPage() {
       </footer>
     </div>
   );
+}
+
+/** A broad scan can cover 20+ leagues — keep the row compact; the full list
+ *  is still available on hover via the cell's title attribute. */
+function summarizeSports(sports: string[]): string {
+  if (sports.length === 0) return '—';
+  const SHOWN = 3;
+  if (sports.length <= SHOWN) return sports.join(', ');
+  return `${sports.slice(0, SHOWN).join(', ')} +${sports.length - SHOWN} more`;
 }

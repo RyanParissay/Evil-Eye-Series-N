@@ -1585,6 +1585,10 @@ select.bm-input {
   padding-bottom: 10px;
 }
 
+.scan-sports-cell {
+  max-width: 320px;
+}
+
 .scan-row-toggle {
   background: none;
   border: none;

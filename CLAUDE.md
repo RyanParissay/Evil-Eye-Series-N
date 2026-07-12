@@ -56,6 +56,16 @@ server/src/
                  file + JSONL archives line-by-line (never whole-file reads)
                  into server-computed aggregates; CSV export is Excel-safe
                  (quoted, formula-defanged). The client does ZERO money math.
+  grading/       Phase 13 auto-grading orchestration (docs/GRADING_RULES.md
+                 is binding). config/gradingRules.ts (rules table + poll
+                 policy: first poll, retry interval, give-up, daily scores
+                 cap) and engine/grading.ts (pure gradeRecord) do the actual
+                 rules math; gradingService.ts is the I/O shell — what's due,
+                 one fetchScores call per sport, writes land via
+                 OpportunityService.applyGrading/setGradingFlag — and
+                 gradingStore.ts (scores-spend ledger). Piggybacks on scans
+                 like everything else here: fire-and-forget after the
+                 notifier, never a server-side scheduler.
   presets/       Advanced-mode book presets. presetStore.ts (JsonStore),
                  presetService.ts (CRUD + seeding + pure resolvePresetKeys —
                  dynamic presets resolve all_enabled/funded against the
@@ -80,12 +90,37 @@ server/src/
                  (funded-book feed audit), survivalService.ts (survival at
                  next covering scan + gone-lifetimes + the measured-haircut
                  mapping), telemetryService.ts (reaction funnel + verify
-                 outcome aggregation; missing steps excluded, never zeroed).
+                 outcome aggregation; missing steps excluded, never zeroed),
+                 gapDetector.ts (Phase 13, pure: flags in-window stretches
+                 > 2× cadence between scans — detection only, reused as-is
+                 by scanBrowser/portfolios/grading, never reimplemented).
+                 Phase 15: scanBrowser.ts (pairs each scanHistoryStore line
+                 with its opportunities, matched by detection/sighting
+                 timestamp falling in that scan's slot, plus the inline gap
+                 indicator — feeds GET /api/ops/scans, the /scans page),
+                 leaderboardStore.ts (per-book appearances + opportunity-leg
+                 counts by strategy — ACCRUES per scan, since the raw
+                 snapshot is latest-only and historic re-detection is
+                 impossible; zero credits, no provider in its import graph),
+                 backupService.ts (daily copy of server/data/ to BACKUP_DIR,
+                 pruned to 14 dailies — NEVER a timer; triggered at server
+                 startup and fire-and-forget after each scan, both no-op if
+                 today's dated dir already exists).
   paper/         The SIMULATED shadow fund. paperStore.ts (own JsonStore,
                  facts only), paperMath.ts (pure deterministic settlement:
                  lazy at commence time, %-staking compounds off the settled
                  bankroll at entry, expectation-style haircut), paperService.ts
                  (entry via alertWorthy on the post-filterAlertable stream).
+  portfolios/    Phase 14 — 13 parallel SIMULATED paper series ($10,000 each,
+                 flat staked, no compounding; docs/GRADING_RULES.md §5 is
+                 binding). scenarioEngine.ts (pure: replays the full
+                 opportunity stream — LedgerService.allRecordsList — through
+                 every series; exportPortfoliosCsv is the CSV surface),
+                 optimizer.ts (deterministic grid-search combo weights,
+                 0–70% bounds per group, gated on ≥30 graded records and ≥14
+                 days per representative series — MODEL fit to history,
+                 never a forecast). Zero provider deps, same structural
+                 zero-credit shape as ops/ and advanced mode.
   routes/        Express boundary: parse → runScan → JSON; ProviderError → HTTP status.
                  api.ts (/api/scan, /api/last-scan) + whatsapp.ts (/api/whatsapp/*).
   config/        constants.ts (every tunable) + bookmakerLinks.ts (homepage fallbacks)
@@ -273,3 +308,21 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   only for events still present in the latest snapshot; records from older
   scans are simply not recomputable. Accepted limitation — don't build
   per-scan snapshot files to "fix" it.
+- backupService.ts NEVER uses setInterval/setTimeout — same "scans are
+  on-demand only" invariant wearing another hat. It only runs when
+  explicitly triggered (server startup, fire-and-forget after each scan)
+  and no-ops if today's dated BACKUP_DIR directory already exists.
+- The book leaderboard (ops/leaderboardStore.ts) ACCRUES per scan, forward
+  only — it is not, and cannot be, recomputed from history, because
+  last-snapshot.json is latest-only. Zero credits is structural (no
+  provider import anywhere in that file), not just behavioral. Share is
+  always recomputed against the CURRENT totalScans at read time, never
+  frozen at accrual time.
+- /scans (ops/scanBrowser.ts) attributes a record to a scan by matching
+  detection/sighting timestamps into that scan's SLOT (previous scan's
+  timestamp, this scan's timestamp], scoped to the same region tab and a
+  sport the scan actually covered — the same scoping "provenGone" uses
+  for dead-detection. A fingerprint re-detected under a DIFFERENT region
+  tab is correctly excluded from that scan's drill-down (its regionTab is
+  stamped at creation and never moves); this is intentional scope
+  discipline, not a bug to "fix" with looser matching.
