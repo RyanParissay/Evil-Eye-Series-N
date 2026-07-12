@@ -2477,6 +2477,8 @@ select.bm-input {
 .cadence-proposal-apply:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
 /* ————————————————————————————————————————————————
    ANALYTICS HUB — /hub. Namespace: .hub-*
    Brutalist black/yellow like Risk Mode: yellow stays the app-wide
@@ -2814,6 +2816,14 @@ select.bm-input {
    yellow (EV/simulated).
    ———————————————————————————————————————————————— */
 
+.cockpit-safety-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 2px;
+}
+
 .safety-badge {
   display: inline-block;
   vertical-align: middle;
@@ -3030,6 +3040,11 @@ select.bm-input {
 }
 
 /* ————— Hub Cost of Safety readout ————— */
+
+.safety-cost-intro {
+  max-width: 72ch;
+  padding: 16px 0 4px;
+}
 
 .safety-cost-window {
   display: flex;

@@ -61,7 +61,7 @@ export function SafetyCostPanel() {
 
   return (
     <section aria-label="Cost of Safety">
-      <p className="risk-note">
+      <p className="risk-note safety-cost-intro">
         What the safety gate declined <span className="hub-badge">SIMULATED</span> — every dollar
         here is HYPOTHETICAL: opportunities that confirmed but were never alerted or
         auto-purchased. This is the evidence for tuning the threshold, not realized money.

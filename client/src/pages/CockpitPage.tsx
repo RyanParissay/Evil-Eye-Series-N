@@ -333,9 +333,10 @@ function Cockpit({
           )}
         </p>
         {record.safety && (
-          <p className="micro-label">
-            safety <SafetyBadge safety={record.safety} settings={safetySettings} />
-          </p>
+          <div className="cockpit-safety-row">
+            <span className="micro-label">safety</span>
+            <SafetyBadge safety={record.safety} settings={safetySettings} />
+          </div>
         )}
       </section>
 

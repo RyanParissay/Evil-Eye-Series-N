@@ -107,6 +107,9 @@ export function ScanHistoryPage() {
                 No scans yet — run one from the Scanner and it shows up here.
               </p>
             ) : (
+              /* The drill-down cards can outgrow 390px — the table scrolls in
+                 its own container, never the page (the risk-table idiom). */
+              <div className="risk-table-wrap">
               <table className="ledger-table">
                 <thead>
                   <tr>
@@ -184,6 +187,7 @@ export function ScanHistoryPage() {
                   })}
                 </tbody>
               </table>
+              </div>
             )}
           </section>
         </main>
