@@ -1,4 +1,4 @@
-# HANDOFF — 2026-07-11 (Phase 16 WP1 complete — scheduler foundation; WP2 next)
+# HANDOFF — 2026-07-11 (Phase 16 WP2 complete — confirmation pairs; WP3 next)
 
 ## For the incoming agent: read these first, in order
 1. CLAUDE.md  2. docs/PROGRESS.md
@@ -6,97 +6,102 @@
 4. this file
 
 ## Where we are
-- Current phase & task: Phase 16 **WP1 (scheduler foundation) COMPLETE** — all
-  seven WP1 deliverables landed and committed. Next per the design doc's build
-  order: **WP2 (Opus)** — confirmation pairs (Part A) + cost model + Phase-15
-  filter conversion + single_sighting flag + alert/purchase gating. Not started.
-- Tests: **452 server + 34 client green** (was 411 + 34 at WP1 start — WP1 added
-  41 server tests: vancouverTime 10, plan 11, scheduler 7, timerScope 1, opsStore
-  6, quietHoursGuard 3, ops-route scheduler PATCH 2, gapDetector +1). Root
-  `npm run typecheck` green.
-- Last commits (this session, in order): scheduler core+plan+quiet-hours+tick;
-  quiet-hours route guards; enable-toggle + quota self-disable + gap rewire +
-  client timer retirement; this CLAUDE.md/HANDOFF sweep.
+- Current phase & task: Phase 16 **WP2 (confirmation pairs, Part A) COMPLETE**
+  — all eight deliverables landed and committed. Next per the design doc's
+  build order: **WP3 (Opus)** — dense week caps + banners + weekly optimizer +
+  proposal API/UI. WP4a (Hub server) was building in a PARALLEL worktree
+  against the same shared/types.ts contracts; its merge point in index.ts is
+  the marked "Analytics Hub consumer registration point" comment (search for
+  it) — one `confirmedConsumers.push(...)` line wires purchases.
+- Tests: **501 server + 36 client green** (was 452 + 34 at WP2 start — WP2
+  added 49 server: confirmation matcher 15, lifecycle +7, service +5,
+  scanService +2, plan +11, scheduler tick +5, pair acceptance fixtures 3,
+  opsStore +2, ops routes net +3, minus 4 converted second-sighting tests;
+  client +2 pair-cost formatter). Root `npm run typecheck` green.
+- WP2 commits, in order: confirmation core (matcher/stamping/candidates);
+  scheduler owns scan B; onConfirmed fan-out + acceptance fixtures;
+  confirmSecondSighting retired for confirmationIntervalSecs; pair cost
+  model; this docs sweep.
 
-## In flight RIGHT NOW
-- Nothing in flight. Tree clean once the CLAUDE.md/HANDOFF commit lands.
-
-## Done this session (WP1)
-- **THE invariant flip.** "No server-side schedulers / scans on-demand only /
-  timers live in the client" is RETIRED. Replacement (now in CLAUDE.md): all
-  wall-clock scheduling lives in `server/src/scheduler/` — one self-rescheduling
-  tick, pure plan.ts, injectable clock/timer, budget/cap/quiet-hours-aware by
-  construction. Swept every stale reference (invariants list, ops/grading
-  layering entries, backupService + credit-budget gotchas, alerts-piggyback
-  invariant, and the code comments in index.ts / constants.ts / backupService.ts
-  / alertService.ts / client api.ts).
-- **`server/src/scheduler/`**: `plan.ts` (pure decision core — engine-grade),
-  `vancouverTime.ts` (DST-safe America/Vancouver via Intl/IANA — quiet-hours
-  predicate + next-08:00 + local→epoch), `scheduler.ts` (the one setTimeout
-  chain, injected clock/timer, self-disables on spent-quota / rejected-key),
-  `realTimer.ts` (the ONLY real setTimeout in server/src — `timerScope.test.ts`
-  enforces the scope). Started from index.ts, DEFAULT DISABLED.
-- **Scheduler settings in opsStore**: `scheduler { enabled(false), blocks[],
-  scanParams, disabledReason }`; seed blocks per the design's revised schedule
-  (moderate 08–14, dense 14–19 & 19–23, moderate 23–01 as two within-day blocks;
-  01–08 quiet = hard guard, not a block); legacy ops.json migrates in via the
-  normalize pattern. `seedScanParams` = last-scan meta else ca_us/topN 5.
-- **Quiet hours (01:00–08:00 America/Vancouver, DST-safe)**: plan.ts blocks
-  scheduler scans + score polls; `routes/quietHoursGuard.ts` 503s manual scans
-  and cockpit re-verify with the new `quiet_hours` ApiErrorCode. Overdue score
-  polls fire at 08:00. Proven by a simulated-24h test on a PST date AND a PDT
-  date (drives the real tick loop with a fake clock/timer, asserts zero provider
-  calls in 01:00–08:00 while work still happens outside it).
-- **Server enable toggle + quota self-disable**: PATCH /api/ops/settings takes a
-  partial `scheduler` patch; enabling clears the self-disable reason, seeds
-  scope from the last scan, and wakes the running scheduler. Quota/bad-key errors
-  self-disable persistently with a stored reason.
-- **Gap-detector rewire**: `detectScanGaps(entries, scheduler.blocks, now)` —
-  per-block cadence, Vancouver-local membership via plan.ts's activeBlock;
-  scanBrowser / portfolios / grading updated to pass `scheduler.blocks`.
-- **Client timer retirement**: ScanPage's auto-scan setTimeout loop + 30s cadence
-  tick + 5-min grading tick are gone. The auto-scan switch PATCHes
-  scheduler.enabled and renders enabled/disabledReason from the server;
-  AutoScanControl is a plain server switch; CadencePanel shows the read-only
-  block schedule + budget/markets settings (legacy window editors dropped). The
-  credit-budget auto-stop moved into plan.ts. Manual scan button, the manual
-  grading-poll endpoint, and every page fetch stay.
+## Done this session (WP2 — Part A)
+- **Pair orchestration.** Every scan is a scan A: `applyScanToRecords` stamps
+  eligible new records (non-suspicious/same-book) `confirmation: pending` and
+  reports the candidate count; runScan logs it per scan
+  (`ScanLogEntry.confirmationCandidates`). ≥1 candidate → the scheduler fires
+  scan B (same fetch scope, from last-scan meta) after
+  `scheduler.confirmationIntervalSecs` (normalized 60, PATCH range 10–600s).
+  No candidates → no B, zero extra credits. The pending pair is STORE-derived
+  (records with pending status + scan history), so it survives hot reloads;
+  the notifier wakes the scheduler so manual pairs arm precisely and complete
+  with the browser closed and the toggle off.
+- **Matching.** `opportunities/confirmation.ts` (pure): presence = same
+  fingerprint with lastSeenAt advanced past the pre-B snapshot (the converted
+  Phase 15 machinery), confirmed iff headline edge within ±0.5 pp inclusive
+  (arb→profitPct, EV→ev.edgePct, middle→middle.costPct); else terminal
+  single_sighting (scanBAt always stamped; edgeDeltaPp only when re-sighted).
+  `pendingConfirmations()` returns DEEP COPIES — the pre-B snapshot must not
+  alias store objects (a real bug the acceptance fixture caught).
+- **Quiet-hours/lapse rule.** plan.ts: a due B outranks the enabled/budget
+  gates (rides scan A's authorization) but never quiet hours; if B can't fire
+  within 5× the interval of its due time → `resolveConfirmations` (all
+  pendings → single_sighting, zero credits, allowed even in quiet hours /
+  disabled). Due anchors to the last scan ATTEMPT (bounded ~5 retries on
+  provider failure), expiry to the last real sighting.
+- **Acting gates.** WhatsApp dispatch (arb/EV/middle incl. free middles)
+  moved verbatim from the per-scan notifier into index.ts's `onConfirmed`
+  fan-out (fire-and-forget per consumer, console.warn discipline). Paper fund
+  stays UNGATED per scan (recorded decision). Survival/coverage/leaderboard
+  telemetry unchanged — the fixture proves survival is byte-identical with
+  confirmation fields stripped.
+- **Conversion.** `OpsSettings.confirmSecondSighting` is GONE (type, store
+  default, normalize drops the legacy key, PATCH validator, CadencePanel
+  toggle, index gate, filterConfirmedSightings + tests → seeded the matcher
+  tests). CadencePanel now edits the confirmation interval (seconds,
+  `patchScheduler({confirmationIntervalSecs})`) with the survival readout
+  kept beside it.
+- **Cost model.** /api/ops/cost-estimate adds `confirmation:
+  {intervalSecs, hitRate, hitRateSource MEASURED|ASSUMED, samples,
+  creditsPerPairWindow}` — hitRate = share of last-14-days logged scans with
+  ≥1 candidate, MEASURED at ≥50 samples else ASSUMED 30%; plain per-scan
+  number kept. Client: CadencePanel line + CreditSpendWidget "per scan
+  window" stat (`describePairCost` in creditWidget.ts).
+- **Acceptance fixtures** (binding): `scheduler/confirmationPair.test.ts` —
+  a mini index.ts composition (real runScan/OpportunityService/Scheduler/
+  notifyNewOpportunities, counting provider, hand-driven clock). No
+  candidates → no B, credit counter proves it; candidates → B at exactly
+  +60s with the scheduler disabled, exactly one alert; drift beyond ±0.5pp →
+  single_sighting never alerted; survival blind to confirmation.
 
 ## Next actions (per the design doc's build order)
-1. **WP2 (Opus)**: confirmation pairs (Part A) — scan A → scan B after
-   `confirmationIntervalSecs`; confirmed = same event/market/leg identities +
-   headline edge within ±0.5pp; only confirmed records alert/Hub-purchase;
-   unconfirmed persist `single_sighting`. Convert Phase-15's
-   `confirmSecondSighting` machinery into the A/B pair-matcher and REMOVE the
-   dead ops toggle from the UI (it's still live in CadencePanel — WP2 removes it).
-   Cost model widget = cost(A) + hitRate × cost(B).
-2. WP3: dense week caps + banners + weekly optimizer + proposal API/UI (the
-   optimizer becomes the editor for scheduler.blocks — read-only in WP1).
-3. WP4a/b: Analytics Hub server + client.
+1. **WP3 (Opus):** dense week caps + banners + weekly optimizer + proposal
+   API/UI (`scheduler/optimizer.ts`, GET /api/scheduler/proposal, POST
+   .../apply; the optimizer becomes the editor for scheduler.blocks).
+2. **WP4a merge:** wire the Hub consumer at the registration point in
+   index.ts; Hub purchases must key off `onConfirmed` ONLY.
+3. WP4b: Hub client page + neon button, on WP4a's API.
 
 ## Traps for the incoming agent
 - Vitest from `server/` (repo root loses `@shared`). Client from `client/`.
 - The live `:8787` runs `tsx watch` against Ryan's REAL key/data — never
-  `POST /api/scan` there. `scheduler.enabled` DEFAULTS FALSE and the tick no-ops
-  while disabled, so hot-reloads stay dormant; NEVER seed/migrate it true. For
-  live-ish checks, run your own instance on another port with DEV_MODE=true and
-  BACKUP_DIR to a temp dir; server/data/ has no path override, so snapshot +
-  restore if you cause writes (this session's boot smoke test only read + 400'd,
-  so it touched nothing).
-- Timers: setTimeout/setInterval are allowed ONLY under `server/src/scheduler/`
-  now (`timerScope.test.ts` fails otherwise). The one client setTimeout is a
-  Portfolios slider debounce — unrelated.
-- Quiet-hours guards use real time; they're mounted only on POST /api/scan and
-  POST /api/opportunities/:id/verify from index.ts (via app.post before the
-  routers), deliberately kept OUT of the router unit tests so nothing else is
-  time-dependent. Keep that pattern if you add more guarded routes.
-- Scheduler settings: `plan.ts` is pure/engine-grade — keep fs/env/Express/
-  provider imports out of it. All local-time reasoning goes through
-  vancouverTime (Intl/IANA), never a fixed offset.
-- WP2's confirmation supersedes `confirmSecondSighting` — don't extend it;
-  convert its pure gate into the pair-matcher and remove the UI toggle.
+  `POST /api/scan` there. `scheduler.enabled` stays FALSE by default; the
+  confirmation pair fires scan B even while disabled, but ONLY when a scan A
+  just left pending candidates — with no pending records a reload is inert.
+- Timers only under `server/src/scheduler/` (timerScope.test pins it). Scan-B
+  timing included — never add a confirmation timer anywhere else.
+- `pendingConfirmations()` must keep returning deep copies; the pair matcher
+  compares the pre-B snapshot against the post-B store (headline fields
+  refresh per sighting, so the snapshot IS scan A's edge).
+- `confirmationIntervalSecs` must stay ≤600s (validator + normalize) — above
+  the smallest block cadence, scan B would forever chase the next scan A's
+  re-basing.
+- confirmed / single_sighting are TERMINAL; applyConfirmations only moves
+  still-pending records (races are no-ops). Suspicious/same-book detections
+  get NO confirmation field, so they can never buy a scan B.
+- The onConfirmed fan-out passes live record references; consumers must not
+  mutate them. Alert dispatch converts via recordToOpportunity (fingerprint
+  round-trips — pinned by test).
 
 ## First prompt to paste into the new agent
 "Read CLAUDE.md, docs/PROGRESS.md, docs/superpowers/specs/2026-07-11-phase-16-design.md,
-and docs/HANDOFF.md, then start Phase 16 WP2 (confirmation pairs / Part A). Do
-not re-plan completed WP1 work."
+and docs/HANDOFF.md, then start Phase 16 WP3 (dense week + weekly optimizer).
+Do not re-plan completed WP1/WP2 work."

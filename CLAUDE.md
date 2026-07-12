@@ -48,10 +48,19 @@ server/src/
                  (pure rules), bookmakerService.ts (façade), bookmakerStore.ts.
   opportunities/ Persisted opportunity records. opportunityId.ts (fingerprint —
                  THE identity, alert dedup imports it), opportunityLifecycle.ts
-                 (pure transitions incl. applyStatusChange/applyVerification),
-                 opportunityService.ts, verifyService.ts (cockpit re-verify:
-                 cheap legs-only live fetch → re-price → persist),
-                 opportunityStore.ts (active JSON + monthly JSONL archive).
+                 (pure transitions incl. applyStatusChange/applyVerification;
+                 Phase 16 stamps eligible new records confirmation:'pending'
+                 and resolves dying pendings to single_sighting),
+                 confirmation.ts (Phase 16 Part A, pure: the pair matcher —
+                 same fingerprint present in both scans via the lastSeenAt-
+                 advanced judgement AND headline edge within ±0.5pp → confirmed,
+                 else terminal single_sighting; headlineEdgePct, candidate
+                 rule, record→opportunity conversion), opportunityService.ts
+                 (also pendingConfirmations — DEEP-COPY snapshots —,
+                 applyConfirmations, expirePendingConfirmations),
+                 verifyService.ts (cockpit re-verify: cheap legs-only live
+                 fetch → re-price → persist), opportunityStore.ts (active
+                 JSON + monthly JSONL archive).
   ledger/        ledgerService.ts — the P&L read model: streams the active
                  file + JSONL archives line-by-line (never whole-file reads)
                  into server-computed aggregates; CSV export is Excel-safe
@@ -78,7 +87,10 @@ server/src/
                  dev mode), alertService.ts (alertWorthy — THE strategy-agnostic
                  selection core: threshold, non-suspicious, non-same-book,
                  fingerprint dedup; WhatsApp AND the paper fund both call it —
-                 plus per-subscription rate limit, failure deactivation),
+                 plus per-subscription rate limit, failure deactivation;
+                 since Phase 16 Part A the WhatsApp dispatch is TRIGGERED by
+                 index.ts's onConfirmed fan-out — records reaching
+                 'confirmed' — not per scan),
                  verification.ts (hashed 6-digit codes), subscriptionStore.ts,
                  whatsappRequests.ts (validation, E.164).
   fund/          Fund settings (real bankroll, default stake, unallocated
@@ -88,8 +100,11 @@ server/src/
                  scanHistoryStore.ts (append-only per-scan JSONL, monthly —
                  runScan's scanLog dep writes one line per scan),
                  opsStore.ts (credit budget + markets + the Phase-16
-                 scheduler config: scheduler.blocks/enabled/scanParams,
+                 scheduler config: scheduler.blocks/enabled/scanParams/
+                 confirmationIntervalSecs (normalized to 60, range 10–600s),
                  enabled DEFAULT FALSE, migrated in via the normalize pattern;
+                 Phase 15's confirmSecondSighting was CONVERTED into the
+                 confirmation pair and its key is dropped on normalize;
                  the legacy weekday/weekend windows + inWindowMins/outWindowMins
                  are back-compat only — the scheduler ignores them),
                  coverageService.ts
@@ -132,9 +147,13 @@ server/src/
   scheduler/     Phase 16: THE one owner of wall-clock scheduling — the module
                  that retired "no server-side schedulers". plan.ts (PURE,
                  engine-grade) maps (settings, now, scan history, score polls,
-                 budget) → ONE next action: run scan / run score poll / sleep
-                 until T; its global gates make it budget-, cap-, and
-                 quiet-hours-aware by construction. scheduler.ts is the single
+                 budget, pending confirmation pair) → ONE next action: run
+                 scan / run confirmation scan B / resolve a lapsed pair / run
+                 score poll / sleep until T; its global gates make it budget-,
+                 cap-, and quiet-hours-aware by construction.
+                 confirmationPair.test.ts holds Part A's binding acceptance
+                 fixtures (mini index.ts composition, counting provider,
+                 injectable clock — no test sleeps). scheduler.ts is the single
                  self-rescheduling setTimeout chain (injectable clock/timer so
                  no test sleeps), started from index.ts; it self-disables
                  persistently on spent-quota / rejected-key errors.
@@ -187,10 +206,19 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   and quiet-hours-aware BY CONSTRUCTION: every provider call it initiates
   flows through the existing credit accounting and the 95% auto-stop, and
   `plan.ts`'s global gates refuse to emit any scan/score-poll in quiet hours
-  or past the cap. Scheduling decisions are PURE (`scheduler/plan.ts`,
+  or past the cap. ONE deliberate exception: a due confirmation scan B rides
+  its scan A's authorization — it fires while the scheduler is disabled (a
+  manual scan's pair must complete with the browser closed) and past the
+  budget stop (manual scans were never budget-gated) — but quiet hours block
+  it absolutely, and a B that cannot fire within 5× confirmationIntervalSecs
+  of its due time resolves its candidates to single_sighting instead (zero
+  credits). Scheduling decisions are PURE (`scheduler/plan.ts`,
   engine-grade: no fs/env/Express/provider imports). `scheduler.enabled`
   DEFAULTS FALSE — the dev server hot-reloads against real credits, so the
-  migration must never flip it and the tick no-ops harmlessly while disabled.
+  migration must never flip it and the tick no-ops harmlessly while
+  disabled; the pending pair is STORE-derived, so with no pending records a
+  reload stays completely inert, and a pending pair survives the reload
+  (fires or lapses honestly) instead of hanging.
 - **Quiet hours are absolute** — zero Odds API calls of ANY kind 01:00–08:00
   America/Vancouver, DST-safe via Intl/IANA (never a fixed UTC offset).
   `plan.ts` blocks scheduler scans AND score polls; a route guard 503s manual
@@ -202,11 +230,26 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   odds key. The client sees the phone number only masked (`/api/whatsapp/status`).
 - **Alert dispatch is fire-and-forget.** runScan's notifier hook must never
   slow or fail a scan; a Twilio outage is a console.warn, not a 500.
-- **Alerts piggyback on scans.** The notifier fires only when a scan runs —
-  manual OR scheduler-initiated (the scheduler's runScan reuses the SAME
-  scanDeps/notifier, so a scheduled scan is indistinguishable from a manual
-  one: same alerts, paper fund, grading piggyback, backup). It still must not
-  grow a timer of its own — all scan timing is the scheduler's, via the one tick.
+- **Nothing is acted on before 'confirmed' (Phase 16 Part A).** Every scan
+  (manual or scheduled) is a scan A; eligible detections persist
+  `confirmation: pending` and, when ≥1 candidate exists, the scheduler fires
+  scan B (same fetch scope) after `confirmationIntervalSecs` (default 60).
+  Confirmed = same fingerprint present in both scans AND headline edge
+  within ±0.5 pp (arb → profitPct, EV → ev.edgePct, middle → middle.costPct).
+  Everything else — drifted, vanished, or a lapsed B window — is the TERMINAL
+  `single_sighting`: kept for survival/coverage/leaderboard telemetry, never
+  alerted, never Hub-purchased. WhatsApp alerts (free middles included) fire
+  ONLY from index.ts's `onConfirmed` fan-out; the paper fund's
+  considerEntries deliberately stays on the UNGATED per-scan stream (recorded
+  decision — paper wants max samples). No candidates → no scan B → zero
+  extra credits. Pre-Phase-16 records have no confirmation field and are
+  never retro-alerted.
+- **Scans still drive everything time-based.** The notifier fires only when
+  a scan runs — manual OR scheduler-initiated (the scheduler's runScan
+  reuses the SAME scanDeps/notifier: same paper fund, grading piggyback,
+  backup, scheduler wake) — and alert dispatch fires only from a scan B's
+  confirmation evaluation. Neither may grow a timer of its own — all scan
+  timing (A and B alike) is the scheduler's, via the one tick.
 
 ## Extension recipes
 
@@ -278,7 +321,11 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   and never touches balances, alerts, opportunity records, or credits; a
   paper failure in the notifier is a console.warn, never a dropped alert.
 - Alert selection rules exist exactly once (alertWorthy). Adding a
-  strategy or channel must reuse it, not restate it.
+  strategy or channel must reuse it, not restate it. Since Phase 16 its
+  "exactly once" fingerprint dedup COMPOSES with the confirmation gate:
+  onConfirmed hands dispatch only confirmed records, and alertWorthy still
+  applies threshold/flags/dedup on top — so an alert requires confirmed AND
+  worthy, at most once, in that order.
 - Ops evidence semantics: survival-at-next-scan counts ANY sighting
   (scan re-detection or live re-verify) at/after the next covering scan;
   records with no covering scan are excluded. The paper haircut may be
@@ -327,7 +374,11 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   keeps costed middles ALIVE (a middle costing money is not dead).
 - Extra markets (totals/spreads) are ops-settings toggles, default OFF —
   each multiplies every odds call's credits. /api/ops/cost-estimate is
-  the pre-scan number that must move when a toggle does. The paper fund
+  the pre-scan number that must move when a toggle does; since Phase 16 it
+  also models the conditional pair (creditsPerPairWindow = creditsPerScan ×
+  (1 + hitRate), hitRate MEASURED from ≥50 logged scans in 14 days via
+  ScanLogEntry.confirmationCandidates, else ASSUMED 30% — the paper-haircut
+  idiom), keeping the plain per-scan number visible. The paper fund
   takes middles at their worst-case FLOOR (labeled), adopting actuals
   from graded real records by fingerprint.
 - Stake/cap math exists exactly once (shared/stakePlanning.ts planStakes):
