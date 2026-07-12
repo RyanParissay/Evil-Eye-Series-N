@@ -12,10 +12,17 @@ const SETTINGS: OpsSettings = {
   autoStopPct: 95,
   markets: { totals: false, spreads: false },
   confirmSecondSighting: false,
-  scheduler: DEFAULT_SCHEDULER_SETTINGS,
+  // An all-day / all-week block with a 5-min cadence: every stretch is "in a
+  // block" whatever the runner's timezone, so gap detection depends only on
+  // the (timezone-invariant) deltas and the 2×5 threshold — deterministic.
+  scheduler: {
+    ...DEFAULT_SCHEDULER_SETTINGS,
+    blocks: [{ days: [0, 1, 2, 3, 4, 5, 6], startMin: 0, endMin: 24 * 60, intervalMins: 5 }],
+  },
 };
 
-/** Local wall-clock time on a fixed date, matching gapDetector.test.ts. */
+/** Local wall-clock time on a fixed date (host-local; the all-day block above
+ *  makes gap detection timezone-independent regardless). */
 function local(hour: number, minute: number): string {
   return new Date(2026, 6, 13, hour, minute).toISOString();
 }

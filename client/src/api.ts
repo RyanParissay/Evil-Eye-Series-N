@@ -21,6 +21,7 @@ import type {
   OpsSettings,
   PaperSettings,
   PaperView,
+  SchedulerSettings,
   ScanBrowserEntry,
   Scoreboard,
   SurvivalStats,
@@ -210,6 +211,17 @@ export async function patchOpsSettings(patch: Partial<OpsSettings>): Promise<Ops
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(patch),
+  });
+}
+
+/** Phase 16: the auto-scan switch drives the SERVER scheduler now. Sends a
+ *  partial scheduler patch (enabled / scanParams / disabledReason) — the
+ *  server deep-merges it and wakes the running scheduler. */
+export async function patchScheduler(patch: Partial<SchedulerSettings>): Promise<OpsSettings> {
+  return request<OpsSettings>('/api/ops/settings', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ scheduler: patch }),
   });
 }
 

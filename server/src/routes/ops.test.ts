@@ -34,7 +34,7 @@ const DEFAULTS: OpsSettings = {
   scheduler: DEFAULT_SCHEDULER_SETTINGS,
 };
 
-function harness(scans: ScanLogEntry[] = []) {
+function harness(scans: ScanLogEntry[] = [], extra: Partial<OpsRouterDeps> = {}) {
   const store = new MemOpsStore({ ...DEFAULTS });
   const deps: OpsRouterDeps = {
     settings: store,
@@ -58,6 +58,7 @@ function harness(scans: ScanLogEntry[] = []) {
     lastUsage: async () => ({ requestsUsedTotal: 12_000 }),
     leaderboard: { read: async () => ({ createdAt: '2026-07-01T00:00:00Z', totalScans: 0, books: [] }) },
     now: () => NOW,
+    ...extra,
   };
   const app = express();
   app.use(express.json());
@@ -101,6 +102,48 @@ describe('/api/ops', () => {
     const off = await request(app).patch('/api/ops/settings').send({ confirmSecondSighting: false });
     expect(off.status).toBe(200);
     expect(off.body.confirmSecondSighting).toBe(false);
+  });
+
+  it('enabling the scheduler clears the self-disable reason, seeds scope from last scan, and wakes it', async () => {
+    let woke = 0;
+    const { app, store } = harness([], {
+      onSchedulerChange: () => {
+        woke += 1;
+      },
+      latestScanMeta: async () => ({ regionTab: 'ca', topN: 8 }),
+    });
+    // Simulate a prior quota self-disable.
+    store.data.scheduler = { ...store.data.scheduler, enabled: false, disabledReason: 'was spent' };
+
+    const res = await request(app).patch('/api/ops/settings').send({ scheduler: { enabled: true } });
+    expect(res.status).toBe(200);
+    expect(res.body.scheduler.enabled).toBe(true);
+    expect(res.body.scheduler.disabledReason).toBeNull();
+    expect(res.body.scheduler.scanParams).toEqual({ regionTab: 'ca', topN: 8 });
+    expect(woke).toBe(1);
+  });
+
+  it('accepts explicit scanParams and a disable toggle; rejects invalid scheduler patches', async () => {
+    const { app } = harness();
+    const withParams = await request(app)
+      .patch('/api/ops/settings')
+      .send({ scheduler: { enabled: true, scanParams: { regionTab: 'ca_us', topN: 3 } } });
+    expect(withParams.status).toBe(200);
+    expect(withParams.body.scheduler.scanParams).toEqual({ regionTab: 'ca_us', topN: 3 });
+
+    const off = await request(app).patch('/api/ops/settings').send({ scheduler: { enabled: false } });
+    expect(off.body.scheduler.enabled).toBe(false);
+
+    for (const body of [
+      { scheduler: { enabled: 'yes' } },
+      { scheduler: { scanParams: { regionTab: 'nope', topN: 3 } } },
+      { scheduler: { scanParams: { regionTab: 'ca', topN: 99 } } },
+      { scheduler: {} },
+      { scheduler: [] },
+    ]) {
+      const bad = await request(app).patch('/api/ops/settings').send(body);
+      expect(bad.status).toBe(400);
+    }
   });
 
   it('cost estimate reflects market toggles: OFF = today, each toggle multiplies', async () => {

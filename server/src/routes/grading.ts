@@ -82,7 +82,7 @@ export function createGradingRouter(deps: GradingRouterDeps): Router {
         scoresSpendToday,
         cap: SCORES_DAILY_CREDIT_CAP,
         capped: scoresSpendToday >= SCORES_DAILY_CREDIT_CAP,
-        gaps: detectScanGaps(scans, opsSettings, now()),
+        gaps: detectScanGaps(scans, opsSettings.scheduler.blocks, now()),
       });
     } catch (err) {
       next(err);

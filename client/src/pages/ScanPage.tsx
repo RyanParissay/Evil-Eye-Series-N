@@ -14,19 +14,11 @@ import {
   fetchLastScan,
   fetchOpsSettings,
   patchBookmaker,
-  pollGrading,
+  patchScheduler,
   runScan,
   type BookmakerPatchBody,
 } from '../api';
-import { budgetState, windowState } from '../cadence';
 import { CadencePanel } from '../components/CadencePanel';
-import {
-  loadAutoScanSettings,
-  msUntilNextScan,
-  saveAutoScanSettings,
-  shouldDisableAutoScan,
-  type AutoScanSettings,
-} from '../autoScan';
 import { BookmakerPanel } from '../components/BookmakerPanel';
 import { ControlBar } from '../components/ControlBar';
 import { CreditSpendWidget } from '../components/CreditSpendWidget';
@@ -40,7 +32,7 @@ type ScanState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'success'; data: ScanResponse }
-  | { status: 'error'; code: ApiErrorCode; message: string; autoDisabled?: boolean };
+  | { status: 'error'; code: ApiErrorCode; message: string };
 
 export function ScanPage() {
   const [topN, setTopN] = useState(5);
@@ -48,57 +40,39 @@ export function ScanPage() {
   const [scan, setScan] = useState<ScanState>({ status: 'idle' });
   const [lastMeta, setLastMeta] = useState<ScanMeta | null>(null);
 
-  // Auto-update: persisted so the switch "stays on" across refreshes.
-  const [autoScan, setAutoScan] = useState<AutoScanSettings>(() =>
-    loadAutoScanSettings(window.localStorage),
-  );
-  // Epoch ms of the last completed scan ATTEMPT (success or error) — the
-  // anchor the auto-update countdown schedules from. Failures count too, so
-  // a failing scan can never turn into a hot retry loop.
+  // Epoch ms of the last completed scan attempt — a refresh key for the fund
+  // and credit widgets and the bookmaker refetch. It is NOT a countdown
+  // anchor anymore: Phase 16 moved all scan/grading TIMING to the server
+  // scheduler (server/src/scheduler/). The client runs no scan or grading
+  // timers at all now.
   const [lastScanAt, setLastScanAt] = useState<number | null>(null);
 
-  function updateAutoScan(next: AutoScanSettings) {
-    setAutoScan(next);
-    saveAutoScanSettings(window.localStorage, next);
-  }
-
-  // Phase 8 cadence: window/budget settings live server-side; timers stay
-  // right here in the client. A 30s tick re-evaluates window transitions.
+  // The auto-scan switch drives the SERVER scheduler (ops setting
+  // scheduler.enabled). We render its state from the ops settings fetch and
+  // PATCH it on toggle; the server wakes the running scheduler.
   const [ops, setOps] = useState<OpsSettings | null>(null);
-  const [, setCadenceTick] = useState(0);
+  const [schedulerBusy, setSchedulerBusy] = useState(false);
   useEffect(() => {
     fetchOpsSettings()
       .then(setOps)
       .catch(() => {
-        // No ops settings — the fixed auto-scan interval still works.
+        // No ops settings — the manual scan button still works.
       });
   }, []);
-  useEffect(() => {
-    if (!autoScan.enabled) return;
-    const id = window.setInterval(() => setCadenceTick((t) => t + 1), 30_000);
-    return () => window.clearInterval(id);
-  }, [autoScan.enabled]);
 
-  // Phase 13: grading piggybacks on scans server-side already, but this
-  // page-open tick is the backstop for stretches with no scans at all.
-  // Client timer only — mirrors the cadence tick above, no server timers.
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      void pollGrading().catch(() => {
-        // Best-effort — the next tick (or the next scan) tries again.
-      });
-    }, 5 * 60_000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  const cadence = ops ? windowState(ops, new Date()) : null;
-  const budget = ops
-    ? budgetState(ops, lastMeta?.usage.requestsUsedTotal ?? null, new Date())
-    : null;
-  // Effective auto-scan interval: window cadence when ops settings exist,
-  // the classic slider interval otherwise. null = auto-scan sleeps.
-  const effectiveIntervalMins = ops ? (cadence?.cadenceMins ?? null) : autoScan.intervalMins;
-  const autoBlocked = budget?.stopped ?? false;
+  async function setSchedulerEnabled(enabled: boolean) {
+    setSchedulerBusy(true);
+    try {
+      // Enabling carries the current scan scope so the scheduler scans with
+      // the settings the operator has dialed in.
+      setOps(await patchScheduler({ enabled, scanParams: { regionTab, topN } }));
+    } catch {
+      // Leave the toggle as-is; the scheduler status line still reflects
+      // server truth on the next fetch.
+    } finally {
+      setSchedulerBusy(false);
+    }
+  }
 
   // The bookmaker registry: shared by the settings panel and the leg
   // warnings on opportunity cards. Scans grow it, so refetch after each one.
@@ -123,9 +97,7 @@ export function ScanPage() {
     [books],
   );
 
-  // Hydrate the usage panel from the server's persisted last-scan record,
-  // and anchor the auto-update countdown to it: with a 10-minute interval
-  // and a scan 3 minutes ago, reopening the page waits 7 minutes.
+  // Hydrate the usage panel from the server's persisted last-scan record.
   useEffect(() => {
     fetchLastScan()
       .then((meta) => {
@@ -139,7 +111,7 @@ export function ScanPage() {
       });
   }, []);
 
-  async function handleScan(source: 'manual' | 'auto' = 'manual') {
+  async function handleScan() {
     if (scan.status === 'loading') return;
     setScan({ status: 'loading' });
     try {
@@ -149,43 +121,15 @@ export function ScanPage() {
     } catch (err) {
       const isApi = err instanceof ApiError;
       const code: ApiErrorCode = isApi ? err.code : 'internal';
-      // A bad key or spent quota won't fix itself — switch auto mode off
-      // rather than re-hitting the API every X minutes. Functional update:
-      // the closure's autoScan may predate a mid-scan slider change.
-      const autoDisabled = source === 'auto' && shouldDisableAutoScan(code);
-      if (autoDisabled) {
-        setAutoScan((current) => {
-          const next = { ...current, enabled: false };
-          saveAutoScanSettings(window.localStorage, next);
-          return next;
-        });
-      }
       setScan({
         status: 'error',
         code,
         message: isApi ? err.message : 'Something unexpected broke. Check the server logs.',
-        autoDisabled,
       });
     } finally {
       setLastScanAt(Date.now());
     }
   }
-
-  // The auto-update loop: while enabled and not already scanning, arm a
-  // timer for when the next scan is due. Completing any scan (manual or
-  // auto) moves lastScanAt, re-arming for a fresh interval. Deliberately no
-  // dependency array: re-arming every render keeps the closure's
-  // topN/regionTab fresh, and the delay is computed from the absolute
-  // lastScanAt, so constant re-arming causes no drift. Phase 8 adds two
-  // gates: a null effective interval (out of window, sleeping) and the
-  // credit hard stop — manual scans are never blocked by either.
-  useEffect(() => {
-    if (!autoScan.enabled || scan.status === 'loading') return;
-    if (effectiveIntervalMins == null || autoBlocked) return;
-    const delay = msUntilNextScan(lastScanAt, effectiveIntervalMins, Date.now());
-    const id = window.setTimeout(() => void handleScan('auto'), delay);
-    return () => window.clearTimeout(id);
-  });
 
   return (
     <div className="page">
@@ -209,27 +153,17 @@ export function ScanPage() {
         onTopNChange={setTopN}
         regionTab={regionTab}
         onRegionTabChange={setRegionTab}
-        onScan={() => void handleScan('manual')}
+        onScan={() => void handleScan()}
         scanning={scan.status === 'loading'}
         lastMeta={lastMeta}
-        autoScan={autoScan}
-        onAutoScanChange={updateAutoScan}
-        lastScanAt={lastScanAt}
-        cadenceDriven={ops != null}
+        schedulerEnabled={ops?.scheduler.enabled ?? false}
+        onSchedulerToggle={(enabled) => void setSchedulerEnabled(enabled)}
+        schedulerDisabledReason={ops?.scheduler.disabledReason ?? null}
+        schedulerBusy={schedulerBusy}
       />
 
-      {ops && cadence && budget && (
-        <CadencePanel
-          settings={ops}
-          onSettings={setOps}
-          cadence={cadence}
-          budget={budget}
-          autoEnabled={autoScan.enabled}
-          lastScanAt={lastScanAt}
-          now={Date.now()}
-          regionTab={regionTab}
-          topN={topN}
-        />
+      {ops && (
+        <CadencePanel settings={ops} onSettings={setOps} regionTab={regionTab} topN={topN} />
       )}
 
       <FundPanel refreshKey={lastScanAt} />
@@ -265,12 +199,6 @@ export function ScanPage() {
             <p className="state-title">{errorTitle(scan.code)}</p>
             <p className="state-detail">{scan.message}</p>
             <p className="state-detail">{errorHint(scan.code)}</p>
-            {scan.autoDisabled && (
-              <p className="state-detail">
-                Auto update turned itself off so it doesn't retry into this error. Fix the cause,
-                then flip the switch back on.
-              </p>
-            )}
           </div>
         )}
 

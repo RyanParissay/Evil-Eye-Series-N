@@ -27,7 +27,9 @@ export function buildScanBrowser(
   now: Date,
 ): ScanBrowserEntry[] {
   const sorted = [...allScans].sort((a, b) => a.scannedAt.localeCompare(b.scannedAt));
-  const gapByEnd = new Map(detectScanGaps(sorted, opsSettings, now).map((g) => [g.to, g]));
+  const gapByEnd = new Map(
+    detectScanGaps(sorted, opsSettings.scheduler.blocks, now).map((g) => [g.to, g]),
+  );
   const window = sorted.slice(-Math.max(lastN, 0));
   const firstWindowIndex = sorted.length - window.length;
 

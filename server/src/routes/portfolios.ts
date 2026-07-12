@@ -132,7 +132,7 @@ async function buildReport(deps: PortfolioRouterDeps, now: Date): Promise<Scenar
     collectScans(deps.scanHistory),
     deps.opsSettings.read(),
   ]);
-  const gaps = detectScanGaps(scans, opsSettings, now);
+  const gaps = detectScanGaps(scans, opsSettings.scheduler.blocks, now);
   return runScenarios(records, gaps);
 }
 

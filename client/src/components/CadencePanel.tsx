@@ -1,31 +1,23 @@
 import { useEffect, useState } from 'react';
-import type { OpsSettings, SurvivalStats } from '../../../shared/types';
+import type { OpsSettings, SchedulerBlock, SurvivalStats } from '../../../shared/types';
 import { fetchCostEstimate, fetchSurvival, patchOpsSettings, type CostEstimate } from '../api';
-import type { BudgetState, CadenceState } from '../cadence';
-import { formatCountdown, msUntilNextScan } from '../autoScan';
 
 /**
- * The Phase 8 mode line + window/budget settings. Display only — every
- * timing decision comes from cadence.ts, every timer lives in ScanPage.
+ * Scheduler status + the settings the scheduler actually uses (Phase 16).
+ * Display only — every scan/score-poll TIMING decision is now the server
+ * scheduler's job (server/src/scheduler/), so this panel no longer computes
+ * client-side cadence or runs any timer. The legacy weekday/weekend window
+ * editors are gone (the scheduler ignores those fields); the block schedule
+ * below is read-only in WP1 — WP3's optimizer becomes its editor.
  */
 export function CadencePanel({
   settings,
   onSettings,
-  cadence,
-  budget,
-  autoEnabled,
-  lastScanAt,
-  now,
   regionTab,
   topN,
 }: {
   settings: OpsSettings;
   onSettings: (next: OpsSettings) => void;
-  cadence: CadenceState;
-  budget: BudgetState;
-  autoEnabled: boolean;
-  lastScanAt: number | null;
-  now: number;
   regionTab: string;
   topN: number;
 }) {
@@ -34,16 +26,14 @@ export function CadencePanel({
   const [estimate, setEstimate] = useState<CostEstimate | null>(null);
   const [survival, setSurvival] = useState<SurvivalStats | null>(null);
 
-  // Pre-scan cost, from the live fetch plan + enabled markets — the
-  // number that moves when a market toggle does. Never silent.
+  // Pre-scan cost, from the live fetch plan + enabled markets — the number
+  // that moves when a market toggle does. Never silent.
   useEffect(() => {
     fetchCostEstimate(regionTab, topN)
       .then(setEstimate)
       .catch(() => setEstimate(null));
   }, [regionTab, topN, settings.markets.totals, settings.markets.spreads]);
 
-  // The survival readout beside the second-sighting toggle — same
-  // zero-credit evidence /api/ops/survival already computes.
   useEffect(() => {
     fetchSurvival()
       .then(setSurvival)
@@ -55,32 +45,26 @@ export function CadencePanel({
     try {
       onSettings(await patchOpsSettings(patch));
     } catch {
-      setError('Could not save cadence settings.');
+      setError('Could not save settings.');
     }
   }
 
-  const mode = !autoEnabled
-    ? 'AUTO-SCAN OFF'
-    : budget.stopped
-      ? `BUDGET STOP — auto-scan halted at ${settings.autoStopPct}% of ${settings.monthlyCreditBudget.toLocaleString()}`
-      : cadence.cadenceMins == null
-        ? `${cadence.label} — sleeping until the next window`
-        : `${cadence.label} — next scan ${formatCountdown(msUntilNextScan(lastScanAt, cadence.cadenceMins, now))}`;
+  const sched = settings.scheduler;
+  const mode = sched.disabledReason
+    ? 'SCHEDULER OFF — stopped itself'
+    : sched.enabled
+      ? 'SCHEDULER ON — server-scheduled scans'
+      : 'SCHEDULER OFF';
 
   return (
-    <section className="cadence" aria-label="Scan cadence">
+    <section className="cadence" aria-label="Scheduler">
       <div className="cadence-row">
         <span
-          className={`cadence-mode micro-label${budget.stopped ? ' is-stopped' : cadence.inWindow && autoEnabled ? ' is-live' : ''}`}
+          className={`cadence-mode micro-label${sched.enabled && !sched.disabledReason ? ' is-live' : ''}`}
           role="status"
         >
           {mode}
         </span>
-        {budget.warning && !budget.stopped && (
-          <span className="chip chip-warn" title="Projected month-end burn exceeds the budget">
-            ⚠ projected {budget.projectedMonthEnd?.toLocaleString()} / {settings.monthlyCreditBudget.toLocaleString()} credits
-          </span>
-        )}
         {estimate && (
           <span className="micro-label" title="markets × region-equivalents × sports">
             ≈{estimate.creditsPerScan} credits/scan ({estimate.marketCount} market
@@ -88,50 +72,23 @@ export function CadencePanel({
           </span>
         )}
         <button type="button" className="cadence-edit micro-label" onClick={() => setOpen(!open)}>
-          {open ? 'close' : 'windows & budget'}
+          {open ? 'close' : 'schedule & budget'}
         </button>
       </div>
 
       {open && (
         <div className="cadence-settings">
-          <WindowEditor
-            label="weekday window"
-            window={settings.weekday}
-            onChange={(weekday) => void apply({ weekday })}
-          />
-          <WindowEditor
-            label="weekend window"
-            window={settings.weekend}
-            onChange={(weekend) => void apply({ weekend })}
-          />
-          <label className="micro-label">
-            in-window every (min)
-            <input
-              type="number"
-              min={1}
-              max={240}
-              defaultValue={settings.inWindowMins}
-              onBlur={(e) => {
-                const v = e.target.valueAsNumber;
-                if (Number.isInteger(v) && v >= 1 && v !== settings.inWindowMins) {
-                  void apply({ inWindowMins: v });
-                }
-              }}
-            />
-          </label>
-          <label className="micro-label">
-            out-of-window
-            <select
-              value={settings.outWindowMins == null ? 'off' : String(settings.outWindowMins)}
-              onChange={(e) =>
-                void apply({ outWindowMins: e.target.value === 'off' ? null : Number(e.target.value) })
-              }
-            >
-              <option value="off">off</option>
-              <option value="30">every 30 min</option>
-              <option value="60">every 60 min</option>
-            </select>
-          </label>
+          <div className="cadence-blocks micro-label">
+            <span>schedule · America/Vancouver</span>
+            <ul>
+              {[...sched.blocks]
+                .sort((a, b) => a.startMin - b.startMin)
+                .map((b, i) => (
+                  <li key={i}>{formatBlock(b)}</li>
+                ))}
+            </ul>
+            <span>01:00–08:00 quiet — no scans or re-verifies of any kind</span>
+          </div>
           <label className="micro-label">
             monthly budget
             <input
@@ -167,9 +124,7 @@ export function CadencePanel({
             <input
               type="checkbox"
               checked={settings.markets.totals}
-              onChange={(e) =>
-                void apply({ markets: { ...settings.markets, totals: e.target.checked } })
-              }
+              onChange={(e) => void apply({ markets: { ...settings.markets, totals: e.target.checked } })}
             />
           </label>
           <label className="micro-label cadence-market">
@@ -177,9 +132,7 @@ export function CadencePanel({
             <input
               type="checkbox"
               checked={settings.markets.spreads}
-              onChange={(e) =>
-                void apply({ markets: { ...settings.markets, spreads: e.target.checked } })
-              }
+              onChange={(e) => void apply({ markets: { ...settings.markets, spreads: e.target.checked } })}
             />
           </label>
           <div className="cadence-second-sight">
@@ -192,7 +145,7 @@ export function CadencePanel({
               />
             </label>
             <span className="micro-label">
-              delays every alert by one scan interval (~5 min); filters ghosts
+              delays every alert by one scan interval; filters ghosts
               {survival && survival.overall.samples > 0 && (
                 <>
                   {' · '}
@@ -211,51 +164,11 @@ export function CadencePanel({
   );
 }
 
-function WindowEditor({
-  label,
-  window,
-  onChange,
-}: {
-  label: string;
-  window: { startMinutes: number; endMinutes: number };
-  onChange: (next: { startMinutes: number; endMinutes: number }) => void;
-}) {
-  return (
-    <label className="micro-label cadence-window">
-      {label}
-      <span>
-        <input
-          type="time"
-          defaultValue={toHHMM(window.startMinutes)}
-          onBlur={(e) => {
-            const startMinutes = fromHHMM(e.target.value);
-            if (startMinutes != null && startMinutes !== window.startMinutes) {
-              onChange({ ...window, startMinutes });
-            }
-          }}
-        />
-        –
-        <input
-          type="time"
-          defaultValue={toHHMM(window.endMinutes)}
-          onBlur={(e) => {
-            const endMinutes = fromHHMM(e.target.value);
-            if (endMinutes != null && endMinutes !== window.endMinutes) {
-              onChange({ ...window, endMinutes });
-            }
-          }}
-        />
-      </span>
-    </label>
-  );
+function formatBlock(b: SchedulerBlock): string {
+  return `${hhmm(b.startMin)}–${hhmm(b.endMin)} · every ${b.intervalMins}m`;
 }
 
-function toHHMM(minutes: number): string {
-  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
-}
-
-function fromHHMM(value: string): number | null {
-  const match = /^(\d{2}):(\d{2})$/.exec(value);
-  if (!match) return null;
-  return Number(match[1]) * 60 + Number(match[2]);
+function hhmm(minutes: number): string {
+  const m = minutes % (24 * 60);
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }

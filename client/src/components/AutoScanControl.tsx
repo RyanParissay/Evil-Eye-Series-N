@@ -1,113 +1,55 @@
 /**
- * The auto-update switch and its settings. Green is reserved app-wide for
- * exactly one meaning: surveillance is live. The switch turns green when on
- * and reveals the interval slider, a countdown to the next scan, and the
- * projected credit burn at the current cadence.
- *
- * All timing DECISIONS live in autoScan.ts; this component only renders and
- * ticks a 1-second clock for the countdown.
+ * The auto-scan switch. As of Phase 16 this drives the SERVER-side scheduler
+ * (ops setting scheduler.enabled) — the client owns no scan timer anymore.
+ * Green is reserved app-wide for "surveillance is live", so the switch turns
+ * green when the scheduler is on. A self-disable (spent quota / rejected key)
+ * shows its stored reason with the switch flipped off; flipping it back on
+ * clears the reason server-side and re-arms the scheduler.
  */
-import { useEffect, useState } from 'react';
-import {
-  MAX_INTERVAL_MINS,
-  MIN_INTERVAL_MINS,
-  clampIntervalMins,
-  creditsPerHour,
-  formatCountdown,
-  msUntilNextScan,
-  type AutoScanSettings,
-} from '../autoScan';
-
 interface AutoScanControlProps {
-  settings: AutoScanSettings;
-  onChange: (next: AutoScanSettings) => void;
-  /** Epoch ms of the last completed scan attempt; null before any scan. */
-  lastScanAt: number | null;
-  scanning: boolean;
-  /** Credits the last scan cost, for the burn projection; null before any scan. */
-  creditsPerScan: number | null;
-  /** Phase 8: scan windows drive the cadence — hide the fixed slider/countdown. */
-  cadenceDriven?: boolean;
+  /** scheduler.enabled from the server. */
+  enabled: boolean;
+  onToggle: (enabled: boolean) => void;
+  /** scheduler.disabledReason — non-null after a self-disable. */
+  disabledReason: string | null;
+  /** True while the enable PATCH is in flight. */
+  busy?: boolean;
 }
 
-export function AutoScanControl({
-  settings,
-  onChange,
-  lastScanAt,
-  scanning,
-  creditsPerScan,
-  cadenceDriven = false,
-}: AutoScanControlProps) {
-  // 1 Hz clock, running only while auto mode is on, so the countdown moves.
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!settings.enabled) return;
-    setNow(Date.now());
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [settings.enabled]);
-
-  const remaining = msUntilNextScan(lastScanAt, settings.intervalMins, now);
-
+export function AutoScanControl({ enabled, onToggle, disabledReason, busy = false }: AutoScanControlProps) {
   return (
     <div className="auto-block">
       <div className="auto-head">
         <span className="micro-label" id="auto-update-label">
-          Auto update
+          Auto scan
         </span>
         <button
           type="button"
           role="switch"
-          aria-checked={settings.enabled}
+          aria-checked={enabled}
           aria-labelledby="auto-update-label"
           className="switch"
-          onClick={() => onChange({ ...settings, enabled: !settings.enabled })}
+          disabled={busy}
+          onClick={() => onToggle(!enabled)}
         >
           <span className="switch-thumb" aria-hidden="true" />
         </button>
-        {settings.enabled && (
-          <span className="auto-live micro-label" role="status">
-            <span className={`live-dot${scanning ? '' : ' live-dot-pulse'}`} aria-hidden="true" />
-            {scanning
-              ? 'Scanning'
-              : cadenceDriven
-                ? 'Window cadence'
-                : `Next scan ${formatCountdown(remaining)}`}
-          </span>
-        )}
+        <span className="auto-live micro-label" role="status">
+          {enabled ? (
+            <>
+              <span className="live-dot live-dot-pulse" aria-hidden="true" />
+              Scheduler on
+            </>
+          ) : (
+            'Scheduler off'
+          )}
+        </span>
       </div>
 
-      {settings.enabled && !cadenceDriven && (
-        <div className="slider-block auto-settings">
-          <label
-            className="micro-label"
-            htmlFor="auto-interval"
-            title="How often a scan runs while this page is open. Each scan costs the same credits as pressing Run scan; the ≈/hr figure projects that burn at this cadence."
-          >
-            Update every <span className="slider-value">{settings.intervalMins}</span> min
-            {creditsPerScan != null && (
-              <span className="auto-burn">
-                {' '}
-                · ≈{creditsPerHour(creditsPerScan, settings.intervalMins)} credits/hr
-              </span>
-            )}
-          </label>
-          <input
-            id="auto-interval"
-            type="range"
-            min={MIN_INTERVAL_MINS}
-            max={MAX_INTERVAL_MINS}
-            step={1}
-            value={settings.intervalMins}
-            onChange={(e) =>
-              onChange({ ...settings, intervalMins: clampIntervalMins(Number(e.currentTarget.value)) })
-            }
-          />
-          <div className="slider-scale" aria-hidden="true">
-            <span>{MIN_INTERVAL_MINS} min</span>
-            <span>{MAX_INTERVAL_MINS} min</span>
-          </div>
-        </div>
+      {disabledReason && (
+        <p className="micro-label cadence-error" role="alert">
+          Auto scan stopped itself: {disabledReason}
+        </p>
       )}
     </div>
   );

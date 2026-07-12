@@ -66,6 +66,16 @@ export const PLAN_MONTHLY_CREDITS = 20_000; // credits per month
 
 export const DEFAULT_PORT = 8787;
 
+/* ————— Scheduler (Phase 16) ————— */
+
+/** Longest the scheduler sleeps before re-reading settings, so an enable
+ *  toggle or a budget release is picked up even absent an explicit wake(). */
+export const SCHEDULER_MAX_SLEEP_MS = 60_000;
+
+/** How often the scheduler runs a grading score poll while enabled and
+ *  outside quiet hours — replaces the retired client grading tick. */
+export const SCHEDULER_SCORE_POLL_INTERVAL_MS = 5 * 60_000;
+
 /** Where last-scan metadata persists across server restarts (gitignored). */
 export const LAST_SCAN_FILE = 'data/last-scan.json';
 

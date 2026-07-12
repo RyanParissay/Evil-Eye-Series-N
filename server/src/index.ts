@@ -26,6 +26,8 @@ import {
   PAPER_FILE,
   PRESETS_FILE,
   SCAN_HISTORY_DIR,
+  SCHEDULER_MAX_SLEEP_MS,
+  SCHEDULER_SCORE_POLL_INTERVAL_MS,
   WHATSAPP_DATA_FILE,
 } from './config/constants';
 import { BackupService } from './ops/backupService';
@@ -70,8 +72,12 @@ import { quietHoursGuard } from './routes/quietHoursGuard';
 import { createBookmakersRouter } from './routes/bookmakers';
 import { createOpportunitiesRouter } from './routes/opportunities';
 import { createWhatsAppRouter } from './routes/whatsapp';
+import { parseScanRequest } from './scan/scanRequest';
+import { runScan, type ScanDeps } from './scan/scanService';
 import { ScanStore } from './scan/scanStore';
 import { SnapshotStore } from './scan/snapshotStore';
+import { Scheduler } from './scheduler/scheduler';
+import { realTimer } from './scheduler/realTimer';
 
 const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -158,6 +164,10 @@ async function collectScanHistory() {
   return scans;
 }
 
+// The one wall-clock scheduler (assigned once its scan pipeline exists,
+// below). Declared here so the ops router can wake() it on a settings PATCH.
+let scheduler: Scheduler | undefined;
+
 app.use(
   '/api/ops',
   createOpsRouter({
@@ -187,6 +197,14 @@ app.use(
       requestsUsedTotal: (await store.read())?.usage.requestsUsedTotal ?? null,
     }),
     leaderboard: leaderboardStore,
+    // Phase 16: the scanner-page toggle PATCHes scheduler.enabled here; wake
+    // the running scheduler so the change takes effect at once, and seed the
+    // scan scope from the last scan when enabling without explicit params.
+    onSchedulerChange: () => scheduler?.wake(),
+    latestScanMeta: async () => {
+      const meta = await store.read();
+      return meta ? { regionTab: meta.regionTab, topN: meta.topN } : null;
+    },
   }),
 );
 
@@ -285,13 +303,10 @@ app.use(
     },
   ),
 );
-// Manual scans are blocked in quiet hours too (spec: "zero calls of any
-// kind"). Manual scans stay never-blocked by the credit budget — that guard
-// lives only in the scheduler's plan — but quiet hours bind everything.
-app.post('/api/scan', quietHoursGuard());
-app.use(
-  '/api',
-  createApiRouter({
+// One ScanDeps, shared by the manual /api/scan route AND the scheduler, so a
+// scheduled scan fires the exact same notifier pipeline (alerts, paper fund,
+// grading piggyback, backup) a manual scan does.
+const scanDeps: ScanDeps = {
     provider,
     store,
     books: bookmakerService,
@@ -420,9 +435,49 @@ app.use(
         console.warn('Backup failed:', err);
       }
     },
-  }),
-);
+};
+
+// Manual scans are blocked in quiet hours too (spec: "zero calls of any
+// kind"). Manual scans stay never-blocked by the credit budget — that guard
+// lives only in the scheduler's plan — but quiet hours bind everything.
+app.post('/api/scan', quietHoursGuard());
+app.use('/api', createApiRouter(scanDeps));
 app.use(apiErrorHandler);
+
+// THE one wall-clock scheduler. It is DEFAULT DISABLED (opsStore) and thus
+// inert until the operator enables it from the UI — safe on the hot-reloading
+// dev server, which is why the migration must never flip enabled true. plan.ts
+// makes it budget-, cap-, and quiet-hours-aware; runScan reuses scanDeps so a
+// scheduled scan is indistinguishable from a manual one (same alerts, paper
+// fund, grading piggyback, backup).
+scheduler = new Scheduler({
+  now: () => new Date(),
+  setTimer: realTimer.setTimer,
+  clearTimer: realTimer.clearTimer,
+  readSettings: () => opsStore.read(),
+  disable: (reason) =>
+    opsStore.update((data) => ({
+      data: { ...data, scheduler: { ...data.scheduler, enabled: false, disabledReason: reason } },
+      result: undefined,
+    })),
+  runScan: async (params) => {
+    const parsed = parseScanRequest({ topN: params.topN, regionTab: params.regionTab });
+    if (!parsed.ok) throw new Error(`Invalid scheduler scanParams: ${parsed.message}`);
+    await runScan(scanDeps, parsed.request);
+  },
+  pollGrading: async () => {
+    await gradingService.poll();
+  },
+  lastScanAtMs: async () => {
+    const [latest] = await scanHistoryStore.lastN(1);
+    return latest ? Date.parse(latest.scannedAt) : null;
+  },
+  usedTotal: async () => (await store.read())?.usage.requestsUsedTotal ?? null,
+  scorePollIntervalMs: SCHEDULER_SCORE_POLL_INTERVAL_MS,
+  maxSleepMs: SCHEDULER_MAX_SLEEP_MS,
+  log: (message, err) => console.warn(message, err),
+});
+scheduler.start();
 
 const port = Number(process.env.PORT) || DEFAULT_PORT;
 app.listen(port, () => {

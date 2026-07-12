@@ -12,16 +12,22 @@ import type {
   OpportunityRecord,
   OpsSettings,
   ScanLogEntry,
+  ScanMeta,
   ScanWindow,
+  SchedulerSettings,
   Scoreboard,
 } from '@shared/types';
 import { regionTabByKey, type RegionTabConfig } from '@shared/regionTabs';
-import { BENCHMARK_BOOKS } from '../config/constants';
+import { BENCHMARK_BOOKS, MAX_TOP_N } from '../config/constants';
 import { computeCoverage } from '../ops/coverageService';
 import { buildScanBrowser } from '../ops/scanBrowser';
 import { computeSurvival } from '../ops/survivalService';
 import { computeTelemetry } from '../ops/telemetryService';
-import type { OpsSettingsStore } from '../ops/opsStore';
+import { seedScanParams, type OpsSettingsStore } from '../ops/opsStore';
+
+/** The PATCH body shape: any top-level setting, plus a PARTIAL scheduler
+ *  (the client sends just `enabled` / `scanParams`, deep-merged in). */
+type OpsPatch = Partial<Omit<OpsSettings, 'scheduler'>> & { scheduler?: Partial<SchedulerSettings> };
 import type { OddsSnapshot } from '../scan/snapshotStore';
 import { errorBody } from './api';
 
@@ -43,6 +49,12 @@ export interface OpsRouterDeps {
   lastUsage: () => Promise<{ requestsUsedTotal: number | null }>;
   /** Book leaderboard (ops/leaderboardStore.ts) — zero credits, structural. */
   leaderboard: { read(): Promise<Leaderboard> };
+  /** Called after a settings PATCH that touched `scheduler`, so the running
+   *  scheduler re-plans immediately (e.g. the enable toggle). */
+  onSchedulerChange?: () => void;
+  /** Latest scan's meta — used to seed scheduler.scanParams when the
+   *  scheduler is enabled without explicit params (Phase-16 design). */
+  latestScanMeta?: () => Promise<Pick<ScanMeta, 'regionTab' | 'topN'> | null>;
   now?: () => Date;
 }
 
@@ -68,10 +80,25 @@ export function createOpsRouter(deps: OpsRouterDeps): Router {
         res.status(400).json(errorBody('bad_request', parsed.message));
         return;
       }
-      const updated = await deps.settings.update((data) => {
-        const next = { ...data, ...parsed.patch };
+      const { scheduler: schedPatch, ...rest } = parsed.patch;
+      const updated = await deps.settings.update(async (data) => {
+        const next: OpsSettings = { ...data, ...rest };
+        if (schedPatch) {
+          const merged: SchedulerSettings = { ...data.scheduler, ...schedPatch };
+          // Re-enabling clears the self-disable reason (unless one is given).
+          if (schedPatch.enabled === true && !('disabledReason' in schedPatch)) {
+            merged.disabledReason = null;
+          }
+          // Enable without explicit params → seed scope from the last scan.
+          if (schedPatch.enabled === true && !('scanParams' in schedPatch)) {
+            const meta = deps.latestScanMeta ? await deps.latestScanMeta() : null;
+            merged.scanParams = seedScanParams(meta);
+          }
+          next.scheduler = merged;
+        }
         return { data: next, result: next };
       });
+      if (schedPatch) deps.onSchedulerChange?.();
       res.json(updated);
     } catch (err) {
       next(err);
@@ -230,9 +257,9 @@ export function creditsState(
 
 function parseOpsPatch(
   body: unknown,
-): { ok: true; patch: Partial<OpsSettings> } | { ok: false; message: string } {
+): { ok: true; patch: OpsPatch } | { ok: false; message: string } {
   const raw = (body ?? {}) as Record<string, unknown>;
-  const patch: Partial<OpsSettings> = {};
+  const patch: OpsPatch = {};
 
   for (const key of ['weekday', 'weekend'] as const) {
     if (!(key in raw)) continue;
@@ -283,7 +310,57 @@ function parseOpsPatch(
     }
     patch.confirmSecondSighting = raw.confirmSecondSighting;
   }
+  if ('scheduler' in raw) {
+    const parsed = parseSchedulerPatch(raw.scheduler);
+    if (!parsed.ok) return parsed;
+    patch.scheduler = parsed.patch;
+  }
   if (Object.keys(patch).length === 0) return { ok: false, message: 'Empty settings patch' };
+  return { ok: true, patch };
+}
+
+/** The scanner-page toggle (Phase 16) PATCHes scheduler.enabled here, and may
+ *  carry the current scan scope. Blocks are edited by WP3's optimizer route,
+ *  not this validator. */
+function parseSchedulerPatch(
+  raw: unknown,
+): { ok: true; patch: Partial<SchedulerSettings> } | { ok: false; message: string } {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return { ok: false, message: 'scheduler must be an object' };
+  }
+  const sched = raw as Record<string, unknown>;
+  const patch: Partial<SchedulerSettings> = {};
+  if ('enabled' in sched) {
+    if (typeof sched.enabled !== 'boolean') {
+      return { ok: false, message: 'scheduler.enabled must be boolean' };
+    }
+    patch.enabled = sched.enabled;
+  }
+  if ('scanParams' in sched) {
+    const sp = sched.scanParams as { regionTab?: unknown; topN?: unknown } | null;
+    if (
+      typeof sp !== 'object' ||
+      sp === null ||
+      typeof sp.regionTab !== 'string' ||
+      !regionTabByKey(sp.regionTab) ||
+      !isIntIn(sp.topN, 1, MAX_TOP_N)
+    ) {
+      return {
+        ok: false,
+        message: `scheduler.scanParams needs a valid regionTab and topN 1–${MAX_TOP_N}`,
+      };
+    }
+    patch.scanParams = { regionTab: sp.regionTab, topN: sp.topN as number };
+  }
+  if ('disabledReason' in sched) {
+    if (sched.disabledReason !== null && typeof sched.disabledReason !== 'string') {
+      return { ok: false, message: 'scheduler.disabledReason must be a string or null' };
+    }
+    patch.disabledReason = sched.disabledReason as string | null;
+  }
+  if (Object.keys(patch).length === 0) {
+    return { ok: false, message: 'scheduler patch must set enabled, scanParams, or disabledReason' };
+  }
   return { ok: true, patch };
 }
 

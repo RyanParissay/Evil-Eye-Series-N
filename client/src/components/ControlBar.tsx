@@ -1,6 +1,5 @@
 import type { RegionTabKey } from '../../../shared/regionTabs';
 import type { ScanMeta } from '../../../shared/types';
-import type { AutoScanSettings } from '../autoScan';
 import { AutoScanControl } from './AutoScanControl';
 import { RegionTabs } from './RegionTabs';
 import { UsagePanel } from './UsagePanel';
@@ -13,11 +12,11 @@ interface ControlBarProps {
   onScan: () => void;
   scanning: boolean;
   lastMeta: ScanMeta | null;
-  autoScan: AutoScanSettings;
-  onAutoScanChange: (next: AutoScanSettings) => void;
-  lastScanAt: number | null;
-  /** Phase 8: scan windows drive the cadence display. */
-  cadenceDriven?: boolean;
+  /** Phase 16: the auto-scan switch drives the server scheduler. */
+  schedulerEnabled: boolean;
+  onSchedulerToggle: (enabled: boolean) => void;
+  schedulerDisabledReason: string | null;
+  schedulerBusy: boolean;
 }
 
 export function ControlBar({
@@ -28,10 +27,10 @@ export function ControlBar({
   onScan,
   scanning,
   lastMeta,
-  autoScan,
-  onAutoScanChange,
-  lastScanAt,
-  cadenceDriven = false,
+  schedulerEnabled,
+  onSchedulerToggle,
+  schedulerDisabledReason,
+  schedulerBusy,
 }: ControlBarProps) {
   return (
     <div className="control-bar">
@@ -74,12 +73,10 @@ export function ControlBar({
         <RegionTabs active={regionTab} onChange={onRegionTabChange} disabled={scanning} />
 
         <AutoScanControl
-          settings={autoScan}
-          onChange={onAutoScanChange}
-          lastScanAt={lastScanAt}
-          scanning={scanning}
-          creditsPerScan={lastMeta?.usage.creditsComputedThisScan ?? null}
-          cadenceDriven={cadenceDriven}
+          enabled={schedulerEnabled}
+          onToggle={onSchedulerToggle}
+          disabledReason={schedulerDisabledReason}
+          busy={schedulerBusy}
         />
       </div>
 
