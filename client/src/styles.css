@@ -3039,11 +3039,6 @@ select.bm-input {
   border-bottom: 1px solid var(--hairline);
 }
 
-.safety-cost-by-reason td:first-child,
-.safety-cost-by-strategy td:first-child {
-  text-transform: capitalize;
-}
-
 .safety-cost-tag {
   font-size: 9px;
   border: 1px solid var(--grey);

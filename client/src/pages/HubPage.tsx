@@ -21,6 +21,7 @@ import {
 } from '../api';
 import { EquityChart } from '../components/EquityChart';
 import { EyeGlyph } from '../components/EyeGlyph';
+import { SafetyCostPanel } from '../components/SafetyCostPanel';
 import { errorHint, errorTitle } from '../errorCopy';
 import {
   describeStake,
@@ -34,7 +35,7 @@ import {
 const STRATEGIES: readonly OpportunityStrategy[] = ['arb', 'ev', 'middle'];
 const STRATEGY_LABEL: Record<OpportunityStrategy, string> = { arb: 'Arb', ev: 'EV', middle: 'Middles' };
 
-type Segment = 'profile' | 'leaderboards';
+type Segment = 'profile' | 'leaderboards' | 'safety';
 type FormMode = { kind: 'closed' } | { kind: 'new' } | { kind: 'edit'; profile: HubProfile };
 
 /**
@@ -124,7 +125,7 @@ export function HubPage() {
       </header>
 
       <div className="risk-segments" role="tablist" aria-label="Analytics Hub views">
-        {(['profile', 'leaderboards'] as const).map((key) => (
+        {(['profile', 'leaderboards', 'safety'] as const).map((key) => (
           <button
             key={key}
             type="button"
@@ -133,7 +134,7 @@ export function HubPage() {
             className={`risk-segment${segment === key ? ' is-active' : ''}`}
             onClick={() => setSegment(key)}
           >
-            {key === 'profile' ? 'PROFILE' : 'LEADERBOARDS'}
+            {key === 'profile' ? 'PROFILE' : key === 'leaderboards' ? 'LEADERBOARDS' : 'COST OF SAFETY'}
           </button>
         ))}
       </div>
@@ -192,6 +193,8 @@ export function HubPage() {
       )}
 
       {!error && leaderboards && segment === 'leaderboards' && <LeaderboardsView boards={leaderboards} />}
+
+      {!error && segment === 'safety' && <SafetyCostPanel />}
 
       <footer className="footnote micro-label">
         Every figure on this page is SIMULATED paper money, flat or %-of-start staked, never
