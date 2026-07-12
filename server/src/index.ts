@@ -16,6 +16,7 @@ import {
   GRADING_FILE,
   LAST_SCAN_FILE,
   LAST_SNAPSHOT_FILE,
+  LEADERBOARD_FILE,
   EV_FILE,
   FUND_FILE,
   MIDDLES_FILE,
@@ -28,6 +29,7 @@ import {
   WHATSAPP_DATA_FILE,
 } from './config/constants';
 import { BackupService } from './ops/backupService';
+import { LeaderboardStore } from './ops/leaderboardStore';
 import { GradingService } from './grading/gradingService';
 import { GradingStore } from './grading/gradingStore';
 import { createGradingRouter } from './routes/grading';
@@ -121,6 +123,9 @@ app.use('/api/bookmakers', createBookmakersRouter(bookmakerService));
 app.use('/api/ledger', createLedgerRouter(ledgerService));
 const scanHistoryStore = new ScanHistoryStore(path.join(serverRoot, SCAN_HISTORY_DIR));
 const opsStore = new OpsStore(path.join(serverRoot, OPS_FILE));
+// Phase 15 #1: book leaderboards accrue per scan, zero credits (no
+// provider anywhere in leaderboardStore.ts's dependency graph).
+const leaderboardStore = new LeaderboardStore(path.join(serverRoot, LEADERBOARD_FILE));
 
 // Phase 15 #6: daily backup of server/data/ (everything except the backups
 // dir itself), pruned to the newest 14. No server-side timers — triggered
@@ -180,6 +185,7 @@ app.use(
     lastUsage: async () => ({
       requestsUsedTotal: (await store.read())?.usage.requestsUsedTotal ?? null,
     }),
+    leaderboard: leaderboardStore,
   }),
 );
 
@@ -283,6 +289,7 @@ app.use(
     opportunityLog: opportunityService,
     snapshots: snapshotStore,
     scanLog: scanHistoryStore,
+    leaderboard: leaderboardStore,
     ev: { settings: () => evStore.read() },
     middles: { settings: () => middlesStore.read() },
     marketSettings: { read: async () => (await opsStore.read()).markets },

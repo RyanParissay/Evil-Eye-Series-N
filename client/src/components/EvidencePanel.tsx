@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { CoverageReport, Scoreboard, SurvivalStats, TelemetryStats } from '../../../shared/types';
+import type { CoverageReport, Leaderboard, Scoreboard, SurvivalStats, TelemetryStats } from '../../../shared/types';
 import {
   fetchCoverage,
   fetchGradingStatus,
+  fetchLeaderboard,
   fetchScoreboard,
   fetchSurvival,
   fetchTelemetry,
@@ -20,6 +21,7 @@ export function EvidencePanel() {
   const [survival, setSurvival] = useState<SurvivalStats | null>(null);
   const [telemetry, setTelemetry] = useState<TelemetryStats | null>(null);
   const [grading, setGrading] = useState<GradingStatus | null>(null);
+  const [leaderboard, setLeaderboard] = useState<Leaderboard | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -29,6 +31,7 @@ export function EvidencePanel() {
       fetchSurvival().then((s) => !cancelled && setSurvival(s)),
       fetchTelemetry().then((t) => !cancelled && setTelemetry(t)),
       fetchGradingStatus().then((g) => !cancelled && setGrading(g)),
+      fetchLeaderboard().then((l) => !cancelled && setLeaderboard(l)),
     ]);
     return () => {
       cancelled = true;
@@ -267,6 +270,46 @@ export function EvidencePanel() {
                 </table>
               )}
             </>
+          )}
+        </section>
+
+        <section>
+          <h2 className="ledger-section micro-label">
+            Book leaderboard{leaderboard && ` — since ${new Date(leaderboard.createdAt).toLocaleDateString()}`}
+          </h2>
+          {!leaderboard || leaderboard.books.length === 0 ? (
+            <p className="micro-label">
+              No scans accrued yet — the leaderboard starts filling in with the next scan.
+            </p>
+          ) : (
+            <table className="ledger-table">
+              <thead>
+                <tr>
+                  <th>Book</th>
+                  <th>Seen</th>
+                  <th>Arb</th>
+                  <th>EV</th>
+                  <th>Middle</th>
+                  <th>First seen</th>
+                  <th>Last seen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaderboard.books.map((b) => (
+                  <tr key={b.key}>
+                    <td>{b.title}</td>
+                    <td className="num">
+                      {(b.share * 100).toFixed(0)}% ({b.appearances}/{leaderboard.totalScans})
+                    </td>
+                    <td className="num">{b.legCounts.arb}</td>
+                    <td className="num">{b.legCounts.ev}</td>
+                    <td className="num">{b.legCounts.middle}</td>
+                    <td>{new Date(b.firstSeenAt).toLocaleDateString()}</td>
+                    <td>{new Date(b.lastSeenAt).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </section>
       </div>

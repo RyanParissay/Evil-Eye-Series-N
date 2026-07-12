@@ -54,6 +54,7 @@ function harness(scans: ScanLogEntry[] = []) {
     }),
     paper: async () => null,
     lastUsage: async () => ({ requestsUsedTotal: 12_000 }),
+    leaderboard: { read: async () => ({ createdAt: '2026-07-01T00:00:00Z', totalScans: 0, books: [] }) },
     now: () => NOW,
   };
   const app = express();
@@ -176,5 +177,12 @@ describe('/api/ops', () => {
       '2026-07-19T10:05:00Z',
       '2026-07-19T10:00:00Z',
     ]);
+  });
+
+  it('GET /leaderboard passes the store report straight through', async () => {
+    const { app } = harness();
+    const res = await request(app).get('/api/ops/leaderboard');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ createdAt: '2026-07-01T00:00:00Z', totalScans: 0, books: [] });
   });
 });

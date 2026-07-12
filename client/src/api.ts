@@ -14,6 +14,7 @@ import type {
   EvSettings,
   FundPosition,
   FundSettings,
+  Leaderboard,
   LedgerSummary,
   MiddlesSettings,
   OpportunityRecord,
@@ -399,6 +400,12 @@ export async function fetchScanBrowser(lastN: number): Promise<ScanBrowserEntry[
     `/api/ops/scans?lastN=${lastN}`,
   );
   return scans;
+}
+
+/* ————— Book leaderboards (Phase 15 #1 — zero credits) ————— */
+
+export async function fetchLeaderboard(): Promise<Leaderboard> {
+  return request<Leaderboard>('/api/ops/leaderboard');
 }
 
 /* ————— Portfolios (Phase 14 — SIMULATED paper series + combo optimizer) ————— */

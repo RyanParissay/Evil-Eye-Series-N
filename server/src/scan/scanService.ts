@@ -53,6 +53,11 @@ export interface ScanDeps {
   /** Per-scan history line (ops/scanHistoryStore.ts). Optional, non-fatal. */
   scanLog?: ScanLogIntegration;
   /**
+   * Book leaderboard accrual (ops/leaderboardStore.ts). Optional, non-fatal,
+   * zero credits — fed only from data this scan already fetched.
+   */
+  leaderboard?: LeaderboardIntegration;
+  /**
    * Risk Mode: EV detection rides the same raw feed — zero extra credits.
    * EV opportunities go to persistence and the notifier, NEVER into the
    * arb scan response.
@@ -70,6 +75,11 @@ export interface ScanDeps {
 /** What runScan needs from ScanHistoryStore — structural, for tests. */
 export interface ScanLogIntegration {
   append(entry: ScanLogEntry): Promise<void>;
+}
+
+/** What runScan needs from LeaderboardStore — structural, for tests. */
+export interface LeaderboardIntegration {
+  accrue(input: { events: OddsEvent[]; opportunities: ArbOpportunity[] }): Promise<void>;
 }
 
 /** What runScan needs from BookmakerService — structural, for tests. */
@@ -310,6 +320,17 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
       });
     } catch (err) {
       console.warn('Scan-history append failed:', err);
+    }
+  }
+
+  // 6¾. Book leaderboard accrual (Phase 15 #1) — appearances from the raw
+  //     feed, opportunity-leg counts by strategy from what was detected.
+  //     Zero credits, fed only from data this scan already fetched.
+  if (deps.leaderboard) {
+    try {
+      await deps.leaderboard.accrue({ events: rawEvents, opportunities: allDetected });
+    } catch (err) {
+      console.warn('Leaderboard accrual failed:', err);
     }
   }
 

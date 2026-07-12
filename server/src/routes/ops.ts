@@ -7,6 +7,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import type {
   BookmakerConfig,
+  Leaderboard,
   LedgerSummary,
   OpportunityRecord,
   OpsSettings,
@@ -40,6 +41,8 @@ export interface OpsRouterDeps {
   ledger: () => Promise<Pick<LedgerSummary, 'realized' | 'captureRate'>>;
   paper: () => Promise<Scoreboard['paper']>;
   lastUsage: () => Promise<{ requestsUsedTotal: number | null }>;
+  /** Book leaderboard (ops/leaderboardStore.ts) — zero credits, structural. */
+  leaderboard: { read(): Promise<Leaderboard> };
   now?: () => Date;
 }
 
@@ -122,6 +125,16 @@ export function createOpsRouter(deps: OpsRouterDeps): Router {
         deps.settings.read(),
       ]);
       res.json({ scans: buildScanBrowser(scans, lastN, records, settings, now()) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** Phase 15 #1: per-book appearances + opportunity-leg counts by strategy,
+   *  accrued per scan. Zero credits — no provider in this route's deps. */
+  router.get('/leaderboard', async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json(await deps.leaderboard.read());
     } catch (err) {
       next(err);
     }

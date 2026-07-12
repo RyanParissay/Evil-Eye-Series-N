@@ -412,6 +412,39 @@ describe('runScan', () => {
     });
   });
 
+  it('accrues the book leaderboard with the raw feed and all detected strategies (Phase 15 #1)', async () => {
+    const accrued: Array<{ events: unknown[]; opportunities: unknown[] }> = [];
+    const result = await runScan(
+      deps(stubProvider([totalsArbEvent()]), {
+        markets: ['totals'],
+        leaderboard: {
+          async accrue(input) {
+            accrued.push(input as { events: unknown[]; opportunities: unknown[] });
+          },
+        },
+      }),
+      { topN: 5, tab: CA_TAB },
+    );
+    expect(accrued).toHaveLength(1);
+    expect(accrued[0].events).toHaveLength(1); // raw, pre-filter
+    expect(accrued[0].opportunities).toHaveLength(result.opportunities.length);
+  });
+
+  it('a failing leaderboard accrual never fails the scan', async () => {
+    const result = await runScan(
+      deps(stubProvider([totalsArbEvent()]), {
+        markets: ['totals'],
+        leaderboard: {
+          async accrue() {
+            throw new Error('disk full');
+          },
+        },
+      }),
+      { topN: 5, tab: CA_TAB },
+    );
+    expect(result.opportunities).toHaveLength(1);
+  });
+
   it('hands each scan’s opportunities to the notifier', async () => {
     const seen: unknown[] = [];
     const result = await runScan(

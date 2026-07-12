@@ -116,6 +116,9 @@ export const OPS_FILE = 'data/ops.json';
 /** Per-scan history JSONL, monthly files (gitignored). */
 export const SCAN_HISTORY_DIR = 'data/scan-history';
 
+/** Book leaderboards: per-book appearances + leg counts, accrued per scan (gitignored). */
+export const LEADERBOARD_FILE = 'data/leaderboard.json';
+
 /** Score-polling ledger: daily credit spend + per-event poll state (gitignored). */
 export const GRADING_FILE = 'data/grading.json';
 
