@@ -17,6 +17,7 @@ import type {
 import { regionTabByKey, type RegionTabConfig } from '@shared/regionTabs';
 import { BENCHMARK_BOOKS } from '../config/constants';
 import { computeCoverage } from '../ops/coverageService';
+import { buildScanBrowser } from '../ops/scanBrowser';
 import { computeSurvival } from '../ops/survivalService';
 import { computeTelemetry } from '../ops/telemetryService';
 import type { OpsSettingsStore } from '../ops/opsStore';
@@ -43,6 +44,7 @@ export interface OpsRouterDeps {
 }
 
 const DEFAULT_COVERAGE_N = 50;
+const DEFAULT_SCANS_N = 20;
 
 export function createOpsRouter(deps: OpsRouterDeps): Router {
   const router = Router();
@@ -101,6 +103,25 @@ export function createOpsRouter(deps: OpsRouterDeps): Router {
         creditsPerSport: marketCount * regionEquivalents,
         creditsPerScan: marketCount * regionEquivalents * topN,
       });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * Phase 15 #2: past scans newest-first, each carrying its opportunities
+   * (drill-down, matched by detection/sighting slot — see scanBrowser.ts)
+   * and its Phase-13 gap indicator. Zero credits, like every /api/ops route.
+   */
+  router.get('/scans', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const lastN = clampInt(Number(req.query.lastN), 1, 200) ?? DEFAULT_SCANS_N;
+      const [scans, records, settings] = await Promise.all([
+        allScans(deps),
+        deps.records(),
+        deps.settings.read(),
+      ]);
+      res.json({ scans: buildScanBrowser(scans, lastN, records, settings, now()) });
     } catch (err) {
       next(err);
     }

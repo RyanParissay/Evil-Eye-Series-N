@@ -593,6 +593,47 @@ export interface ScanLogEntry {
   eventCount: number;
 }
 
+/**
+ * Phase 15 #2: one scan-history line enriched for the /scans browser —
+ * its Phase-13 gap indicator and the opportunities detected/re-sighted
+ * during its slot (the window between it and the previous scan). Every
+ * opportunity here is a persisted OpportunityRecord, so `id` is always a
+ * valid cockpit deep link — no separate knownRecordIds needed.
+ */
+export interface ScanBrowserEntry extends ScanLogEntry {
+  /** Gap immediately preceding this scan, rendered inline between rows;
+   *  null when it followed the prior scan at normal cadence. */
+  gapBefore: { from: string; to: string; minutes: number } | null;
+  opportunities: OpportunityRecord[];
+  counts: { arb: number; ev: number; middle: number; total: number };
+}
+
+/**
+ * Phase 15 #1: per-book counts accrued PER SCAN (the raw snapshot is
+ * latest-only, so historic re-detection is impossible — see CLAUDE.md).
+ * Zero credits: fed only from data a scan already fetched.
+ */
+export interface BookLeaderboardEntry {
+  key: string;
+  title: string;
+  /** Scans whose raw feed carried this book. */
+  appearances: number;
+  /** appearances / totalScans, rounded like BookCoverage.share. */
+  share: number;
+  /** Opportunity LEGS involving this book, by detection strategy. */
+  legCounts: { arb: number; ev: number; middle: number };
+  firstSeenAt: string;
+  lastSeenAt: string;
+}
+
+export interface Leaderboard {
+  /** When the store first accrued data — "since <date>" in the UI, NOT
+   *  "since paper start". */
+  createdAt: string;
+  totalScans: number;
+  books: BookLeaderboardEntry[];
+}
+
 export interface BookCoverage {
   key: string;
   title: string;

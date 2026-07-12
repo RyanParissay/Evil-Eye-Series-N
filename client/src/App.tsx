@@ -10,6 +10,7 @@ import { CockpitPage } from './pages/CockpitPage';
 import { LedgerPage } from './pages/LedgerPage';
 import { PortfoliosPage } from './pages/PortfoliosPage';
 import { RiskModePage } from './pages/RiskModePage';
+import { ScanHistoryPage } from './pages/ScanHistoryPage';
 import { ScanPage } from './pages/ScanPage';
 
 export function App() {
@@ -21,6 +22,7 @@ export function App() {
         <Route path="/ledger" element={<LedgerPage />} />
         <Route path="/risk" element={<RiskModePage />} />
         <Route path="/portfolios" element={<PortfoliosPage />} />
+        <Route path="/scans" element={<ScanHistoryPage />} />
         <Route path="/opportunity/:id" element={<CockpitPage />} />
       </Routes>
     </BrowserRouter>

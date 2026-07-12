@@ -140,4 +140,41 @@ describe('/api/ops', () => {
     expect(scoreboard.body.credits.autoStopEngaged).toBe(false);
     expect(scoreboard.body.paper).toBeNull();
   });
+
+  it('GET /scans returns scans newest-first with drill-down opportunities and gap indicators', async () => {
+    const { app } = harness([
+      {
+        scannedAt: '2026-07-19T10:00:00Z',
+        regionTab: 'ca',
+        sportsScanned: ['basketball_nba'],
+        creditsComputed: 10,
+        requestsUsedTotal: 11_000,
+        distinctBooks: ['bet365'],
+        eventCount: 3,
+      },
+      {
+        scannedAt: '2026-07-19T10:05:00Z',
+        regionTab: 'ca',
+        sportsScanned: ['basketball_nba'],
+        creditsComputed: 10,
+        requestsUsedTotal: 11_010,
+        distinctBooks: ['bet365'],
+        eventCount: 3,
+      },
+    ]);
+    const res = await request(app).get('/api/ops/scans?lastN=1');
+    expect(res.status).toBe(200);
+    expect(res.body.scans).toHaveLength(1);
+    expect(res.body.scans[0].scannedAt).toBe('2026-07-19T10:05:00Z');
+    expect(res.body.scans[0]).toHaveProperty('opportunities');
+    expect(res.body.scans[0]).toHaveProperty('counts');
+    expect(res.body.scans[0]).toHaveProperty('gapBefore');
+
+    const full = await request(app).get('/api/ops/scans');
+    expect(full.body.scans).toHaveLength(2);
+    expect(full.body.scans.map((s: { scannedAt: string }) => s.scannedAt)).toEqual([
+      '2026-07-19T10:05:00Z',
+      '2026-07-19T10:00:00Z',
+    ]);
+  });
 });

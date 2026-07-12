@@ -20,6 +20,7 @@ import type {
   OpsSettings,
   PaperSettings,
   PaperView,
+  ScanBrowserEntry,
   Scoreboard,
   SurvivalStats,
   TelemetryStats,
@@ -389,6 +390,15 @@ export async function fetchCostEstimate(regionTab: string, topN: number): Promis
   return request<CostEstimate>(
     `/api/ops/cost-estimate?regionTab=${encodeURIComponent(regionTab)}&topN=${topN}`,
   );
+}
+
+/* ————— Scan history browser (Phase 15 #2) ————— */
+
+export async function fetchScanBrowser(lastN: number): Promise<ScanBrowserEntry[]> {
+  const { scans } = await request<{ scans: ScanBrowserEntry[] }>(
+    `/api/ops/scans?lastN=${lastN}`,
+  );
+  return scans;
 }
 
 /* ————— Portfolios (Phase 14 — SIMULATED paper series + combo optimizer) ————— */

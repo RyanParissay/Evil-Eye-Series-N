@@ -1576,6 +1576,42 @@ select.bm-input {
   padding: 12px 0;
 }
 
+/* ————— Scan history browser — /scans. Namespace: .scan-* ————— */
+
+.scan-history-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+}
+
+.scan-row-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+  padding: 0;
+}
+
+.scan-row-toggle:disabled {
+  color: var(--grey);
+  cursor: default;
+}
+
+.scan-drill {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.scan-gap-row td {
+  padding: 6px 8px 6px 0;
+  border-bottom: none;
+}
+
 /* ————— Cockpit completion fills ————— */
 
 .cockpit-fill {

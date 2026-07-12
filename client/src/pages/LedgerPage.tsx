@@ -48,6 +48,7 @@ export function LedgerPage() {
             CSV ↓
           </a>{' '}
           · <Link to="/portfolios" className="adv-back">Portfolios →</Link> ·{' '}
+          <Link to="/scans" className="adv-back">Scan history →</Link> ·{' '}
           <Link to="/risk" className="risk-nav">RISK MODE</Link>
         </p>
       </header>
