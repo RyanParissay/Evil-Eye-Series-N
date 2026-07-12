@@ -306,6 +306,87 @@ describe('Scheduler — confirmation pairs (Phase 16 Part A; injectable timer, n
   });
 });
 
+describe('Scheduler — dense data-gathering week (Phase 16 Part C.3; injectable clock, no sleeps)', () => {
+  /** A dense week starting now; denseWeekInputs returns fixed spend + cost. */
+  function wireDense(
+    h: Harness,
+    inputs: { dayCreditsUsed: number; weekCreditsUsed: number; perPairCost: number },
+    schedulerEnabled = false,
+  ): Recorder {
+    const startedAt = new Date(h.current).toISOString();
+    const rec = wire(h, {
+      settings: opsSettings({
+        enabled: schedulerEnabled,
+        denseWeek: { startedAt },
+      }),
+    });
+    rec.deps.denseWeekInputs = async () => inputs;
+    let cleared = 0;
+    rec.deps.clearDenseWeek = async () => {
+      cleared += 1;
+    };
+    (rec as Recorder & { cleared: () => number }).cleared = () => cleared;
+    return rec;
+  }
+
+  it('scans at the derived interval even with the scheduler DISABLED (user-authorized)', async () => {
+    const h = new Harness(vancouverEpochOf(2026, 1, 15, 14 * 60));
+    // perPairCost 39 → interval 9 min. Under both caps → scans every 9 min.
+    const rec = wireDense(h, { dayCreditsUsed: 100, weekCreditsUsed: 100, perPairCost: 39 });
+    const s = new Scheduler(rec.deps);
+    s.start();
+    await h.advanceTo(h.current + 40 * 60_000); // 40 min
+    s.stop();
+    expect(rec.scans.length).toBeGreaterThanOrEqual(4); // ~40/9
+    for (let i = 1; i < rec.scans.length; i++) {
+      expect(rec.scans[i] - rec.scans[i - 1]).toBeGreaterThanOrEqual(9 * 60_000 - 1);
+    }
+  });
+
+  it('the daily cap halts scheduled scanning for the local day', async () => {
+    const h = new Harness(vancouverEpochOf(2026, 1, 15, 14 * 60));
+    const rec = wireDense(h, { dayCreditsUsed: 4_500, weekCreditsUsed: 4_500, perPairCost: 39 });
+    const s = new Scheduler(rec.deps);
+    s.start();
+    await h.advanceTo(h.current + 6 * 3_600_000); // rest of the day (still before midnight)
+    s.stop();
+    expect(rec.scans).toEqual([]); // capped: zero scheduled scans
+  });
+
+  it('the weekly cap halts scheduled scanning for the week', async () => {
+    const h = new Harness(vancouverEpochOf(2026, 1, 15, 14 * 60));
+    const rec = wireDense(h, { dayCreditsUsed: 100, weekCreditsUsed: 30_000, perPairCost: 39 });
+    const s = new Scheduler(rec.deps);
+    s.start();
+    await h.advanceTo(h.current + 20 * 3_600_000);
+    s.stop();
+    expect(rec.scans).toEqual([]);
+  });
+
+  it('an expired dense week clears itself and falls back to normal blocks', async () => {
+    // Start the clock 8 days after the dense week began → expired.
+    const startedAt = vancouverEpochOf(2026, 1, 7, 14 * 60);
+    const h = new Harness(vancouverEpochOf(2026, 1, 15, 14 * 60));
+    const rec = wire(h, {
+      settings: opsSettings({
+        enabled: false,
+        denseWeek: { startedAt: new Date(startedAt).toISOString() },
+      }),
+    });
+    let cleared = 0;
+    rec.deps.denseWeekInputs = async () => ({ dayCreditsUsed: 0, weekCreditsUsed: 0, perPairCost: 39 });
+    rec.deps.clearDenseWeek = async () => {
+      cleared += 1;
+    };
+    const s = new Scheduler(rec.deps);
+    s.start();
+    await h.advanceTo(h.current); // one tick
+    s.stop();
+    expect(cleared).toBeGreaterThanOrEqual(1);
+    expect(rec.scans).toEqual([]); // disabled + no dense week → dormant
+  });
+});
+
 describe('Scheduler — DST-safe quiet hours over a simulated 24h', () => {
   for (const [label, date] of [
     ['PST (winter, UTC-8)', [2026, 1, 15] as const],

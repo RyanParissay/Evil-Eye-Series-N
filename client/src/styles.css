@@ -2325,3 +2325,60 @@ select.bm-input {
 .ledger-table details summary {
   cursor: pointer;
 }
+
+/* ————— Dense data-gathering week (Phase 16 Part C.3) ————— */
+.cadence-dense {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.cadence-dense.is-active .cadence-dense-status {
+  color: var(--green); /* elevated surveillance is live */
+}
+
+.cadence-dense-status strong {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.cadence-dense-start,
+.cadence-dense-cancel {
+  margin-left: auto;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--grey);
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 11px;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.cadence-dense-start:hover:not(:disabled),
+.cadence-dense-start:focus-visible,
+.cadence-dense-cancel:hover:not(:disabled),
+.cadence-dense-cancel:focus-visible {
+  color: var(--red);
+  outline: none;
+}
+
+.cadence-dense-start:disabled,
+.cadence-dense-cancel:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Cap reached — scheduled scanning halted; numeric danger, not the arb red. */
+.cadence-dense-banner {
+  flex-basis: 100%;
+  border: 1px solid var(--amber);
+  color: var(--amber);
+  padding: 6px 10px;
+  border-radius: 2px;
+}

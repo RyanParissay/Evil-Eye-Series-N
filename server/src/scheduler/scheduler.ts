@@ -14,7 +14,12 @@
  */
 import type { OpsSettings } from '@shared/types';
 import { ProviderError } from '../providers/OddsProvider';
-import { plan, type SchedulerAction } from './plan';
+import {
+  denseWeekEndMs,
+  denseWeekIntervalMins,
+  isDenseWeekActive,
+} from './denseWeek';
+import { plan, type PlanInput, type SchedulerAction } from './plan';
 
 export type TimerHandle = unknown;
 
@@ -47,6 +52,16 @@ export interface SchedulerDeps {
   lastScanAtMs: () => Promise<number | null>;
   /** The provider's month-to-date credit counter; null when unknown. */
   usedTotal: () => Promise<number | null>;
+  /**
+   * Phase 16 Part C.3: dense-week spend + measured per-pair cost, from scan
+   * history. Called only while a dense week is active. Absent (existing tests
+   * / dense week off) ⇒ plan runs the normal block cadence. */
+  denseWeekInputs?: (
+    startedAtMs: number,
+    now: Date,
+  ) => Promise<{ dayCreditsUsed: number; weekCreditsUsed: number; perPairCost: number }>;
+  /** Clear an expired dense week so it falls back to normal blocks (Part C.3). */
+  clearDenseWeek?: () => Promise<void>;
   scorePollIntervalMs: number;
   /** Upper bound on any single sleep, so a settings/budget change is picked
    *  up within this bound even absent an explicit wake(). */
@@ -103,6 +118,7 @@ export class Scheduler {
         this.deps.pendingConfirmation(),
         this.deps.lastScanParams(),
       ]);
+      const denseWeek = await this.resolveDenseWeek(settings, now);
       const action = plan({
         settings: settings.scheduler,
         now,
@@ -119,6 +135,7 @@ export class Scheduler {
           latestSeenAtMs: pending.latestSeenAtMs,
           lastScanParams,
         },
+        denseWeek,
       });
       await this.execute(action, now);
     } catch (err) {
@@ -127,6 +144,38 @@ export class Scheduler {
     } finally {
       this.ticking = false;
     }
+  }
+
+  /**
+   * Resolve the dense-week plan input (Part C.3): when `denseWeek.startedAt`
+   * is set and still inside its 7-day window, measure spend + per-pair cost
+   * from scan history and derive the elevated interval; when the window has
+   * lapsed, clear it (falls back to normal blocks automatically). Absent deps
+   * or no dense week ⇒ null, i.e. the normal block cadence.
+   */
+  private async resolveDenseWeek(
+    settings: OpsSettings,
+    now: Date,
+  ): Promise<PlanInput['denseWeek']> {
+    const raw = settings.scheduler.denseWeek?.startedAt;
+    if (typeof raw !== 'string' || !this.deps.denseWeekInputs) return null;
+    const startedAtMs = Date.parse(raw);
+    if (!Number.isFinite(startedAtMs)) return null;
+    if (!isDenseWeekActive(startedAtMs, now.getTime())) {
+      await this.deps.clearDenseWeek?.();
+      return null;
+    }
+    const { dayCreditsUsed, weekCreditsUsed, perPairCost } = await this.deps.denseWeekInputs(
+      startedAtMs,
+      now,
+    );
+    return {
+      active: true,
+      endsAtMs: denseWeekEndMs(startedAtMs),
+      intervalMins: denseWeekIntervalMins(perPairCost),
+      dayCreditsUsed,
+      weekCreditsUsed,
+    };
   }
 
   private async execute(action: SchedulerAction, now: Date): Promise<void> {

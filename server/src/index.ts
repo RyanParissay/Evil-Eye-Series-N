@@ -68,6 +68,8 @@ import { createMiddlesRouter } from './routes/middles';
 import { computeSurvival } from './ops/survivalService';
 import { createFundRouter } from './routes/fund';
 import { createOpsRouter } from './routes/ops';
+import { createSchedulerRouter, measurePerPairCost } from './routes/scheduler';
+import { denseWeekSpend } from './scheduler/denseWeek';
 import { createPaperRouter } from './routes/paper';
 import { PresetService } from './presets/presetService';
 import { PresetStore } from './presets/presetStore';
@@ -215,6 +217,20 @@ app.use(
       const meta = await store.read();
       return meta ? { regionTab: meta.regionTab, topN: meta.topN } : null;
     },
+  }),
+);
+
+// Phase 16 Part C: the dense data-gathering week + weekly deterministic
+// proposal. Zero credits structurally (dense-week spend derives from
+// scan-history creditsComputed, the proposal from persisted history) — the
+// only credit-spending consequence is the scheduler tick actually scanning,
+// gated by plan.ts. A start/cancel wakes the running scheduler.
+app.use(
+  '/api/scheduler',
+  createSchedulerRouter({
+    settings: opsStore,
+    scanHistory: scanHistoryStore,
+    onSchedulerChange: () => scheduler?.wake(),
   }),
 );
 
@@ -582,6 +598,21 @@ scheduler = new Scheduler({
     return latest ? Date.parse(latest.scannedAt) : null;
   },
   usedTotal: async () => (await store.read())?.usage.requestsUsedTotal ?? null,
+  // Phase 16 Part C.3: dense-week spend + measured per-pair cost from scan
+  // history — the tick derives the elevated interval and the hard caps bind.
+  denseWeekInputs: async (startedAtMs, at) => {
+    const scans = await collectScanHistory();
+    return {
+      ...denseWeekSpend(startedAtMs, at, scans),
+      perPairCost: measurePerPairCost(scans, at),
+    };
+  },
+  clearDenseWeek: async () => {
+    await opsStore.update((data) => ({
+      data: { ...data, scheduler: { ...data.scheduler, denseWeek: null } },
+      result: undefined,
+    }));
+  },
   scorePollIntervalMs: SCHEDULER_SCORE_POLL_INTERVAL_MS,
   maxSleepMs: SCHEDULER_MAX_SLEEP_MS,
   log: (message, err) => console.warn(message, err),

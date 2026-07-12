@@ -1,11 +1,19 @@
 import { useEffect, useState } from 'react';
-import type { OpsSettings, SchedulerBlock, SurvivalStats } from '../../../shared/types';
+import type {
+  DenseWeekStatus,
+  OpsSettings,
+  SchedulerBlock,
+  SurvivalStats,
+} from '../../../shared/types';
 import { describePairCost } from '../creditWidget';
 import {
+  cancelDenseWeek,
   fetchCostEstimate,
+  fetchDenseWeek,
   fetchSurvival,
   patchOpsSettings,
   patchScheduler,
+  startDenseWeek,
   type CostEstimate,
 } from '../api';
 
@@ -32,6 +40,39 @@ export function CadencePanel({
   const [error, setError] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<CostEstimate | null>(null);
   const [survival, setSurvival] = useState<SurvivalStats | null>(null);
+
+  // Dense data-gathering week (Phase 16 Part C.3): live status + start/cancel.
+  const [dense, setDense] = useState<DenseWeekStatus | null>(null);
+  const [denseBusy, setDenseBusy] = useState(false);
+  useEffect(() => {
+    fetchDenseWeek()
+      .then(setDense)
+      .catch(() => setDense(null));
+  }, []);
+
+  async function startDense() {
+    setError(null);
+    setDenseBusy(true);
+    try {
+      setDense(await startDenseWeek());
+    } catch {
+      setError('Could not start the dense week.');
+    } finally {
+      setDenseBusy(false);
+    }
+  }
+
+  async function cancelDense() {
+    setError(null);
+    setDenseBusy(true);
+    try {
+      setDense(await cancelDenseWeek());
+    } catch {
+      setError('Could not cancel the dense week.');
+    } finally {
+      setDenseBusy(false);
+    }
+  }
 
   // Pre-scan cost, from the live fetch plan + enabled markets — the number
   // that moves when a market toggle does. Never silent.
@@ -100,6 +141,8 @@ export function CadencePanel({
           {open ? 'close' : 'schedule & budget'}
         </button>
       </div>
+
+      {dense && <DenseWeekControl dense={dense} busy={denseBusy} onStart={startDense} onCancel={cancelDense} />}
 
       {open && (
         <div className="cadence-settings">
@@ -200,6 +243,58 @@ export function CadencePanel({
       )}
       {error && <p className="micro-label cadence-error">{error}</p>}
     </section>
+  );
+}
+
+/**
+ * The dense data-gathering week (Phase 16 Part C.3): 7 days of elevated
+ * scanning across all allowed hours, hard-capped at 4,500 credits/day and
+ * 30,000/week. Shows "day X of 7 · credits Y / 30,000" while active, a start
+ * button with a one-line cost warning while idle, and the cap-hit banner when
+ * a cap has halted scheduled scanning (manual scans stay allowed).
+ */
+function DenseWeekControl({
+  dense,
+  busy,
+  onStart,
+  onCancel,
+}: {
+  dense: DenseWeekStatus;
+  busy: boolean;
+  onStart: () => void;
+  onCancel: () => void;
+}) {
+  if (!dense.active) {
+    return (
+      <div className="cadence-dense">
+        <span className="micro-label">
+          dense week — 7 days of elevated scanning across all allowed hours, capped at{' '}
+          {dense.dayCap.toLocaleString()} credits/day · {dense.weekCap.toLocaleString()}/week. Spends
+          real credits and starts immediately.
+        </span>
+        <button type="button" className="cadence-dense-start micro-label" disabled={busy} onClick={onStart}>
+          start dense week
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="cadence-dense is-active">
+      <span className="micro-label cadence-dense-status">
+        <strong>dense week: day {dense.dayNumber} of 7</strong> · credits{' '}
+        {dense.weekCreditsUsed.toLocaleString()} / {dense.weekCap.toLocaleString()} · today{' '}
+        {dense.dayCreditsUsed.toLocaleString()} / {dense.dayCap.toLocaleString()} · every{' '}
+        {dense.intervalMins}m
+      </span>
+      {dense.stopped && (
+        <span className="cadence-dense-banner micro-label" role="status">
+          {dense.stopped.message}
+        </span>
+      )}
+      <button type="button" className="cadence-dense-cancel micro-label" disabled={busy} onClick={onCancel}>
+        cancel dense week
+      </button>
+    </div>
   );
 }
 

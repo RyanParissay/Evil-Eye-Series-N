@@ -12,6 +12,7 @@ import type {
   BookmakerConfig,
   BookmakerStatusValue,
   CoverageReport,
+  DenseWeekStatus,
   EvSettings,
   FundPosition,
   FundSettings,
@@ -22,6 +23,7 @@ import type {
   OpsSettings,
   PaperSettings,
   PaperView,
+  SchedulerProposal,
   SchedulerSettings,
   ScanBrowserEntry,
   Scoreboard,
@@ -567,6 +569,39 @@ async function whatsappRequest(
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     }),
+  });
+}
+
+/* ————— Adaptive scheduler: dense week + weekly proposal (Phase 16 Part C) ————— */
+
+/** Live dense-week status (day X of 7, credits vs caps, cap-hit banner). */
+export async function fetchDenseWeek(): Promise<DenseWeekStatus> {
+  return request<DenseWeekStatus>('/api/scheduler/dense-week');
+}
+
+/** Start a dense data-gathering week. 409 (conflict) if one is already active. */
+export async function startDenseWeek(): Promise<DenseWeekStatus> {
+  return request<DenseWeekStatus>('/api/scheduler/dense-week', { method: 'POST' });
+}
+
+/** Cancel the dense week early. */
+export async function cancelDenseWeek(): Promise<DenseWeekStatus> {
+  return request<DenseWeekStatus>('/api/scheduler/dense-week', { method: 'DELETE' });
+}
+
+/** The weekly deterministic schedule proposal (MODEL, propose-only). 409
+ *  (conflict) until ≥7 days of scan history exist. */
+export async function fetchProposal(): Promise<SchedulerProposal> {
+  return request<SchedulerProposal>('/api/scheduler/proposal');
+}
+
+/** Apply the proposal's blocks to scheduler.blocks — the ONLY write path;
+ *  never auto-applied. */
+export async function applyProposal(blocks: SchedulerProposal['blocks']): Promise<OpsSettings> {
+  return request<OpsSettings>('/api/scheduler/proposal/apply', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ blocks }),
   });
 }
 

@@ -119,6 +119,11 @@ export const DENSE_WEEK_WEEK_CAP = 30_000;
  *  cheap a pair window is — the elevated-frequency floor. */
 export const DENSE_WEEK_MIN_INTERVAL_MINS = 5;
 
+/** Conservative per-scan credit cost used to derive the dense-week interval
+ *  and project proposal spend when no scan history exists yet (a fresh
+ *  install). The hard caps stop scanning regardless of this estimate. */
+export const DEFAULT_PER_SCAN_COST = 30;
+
 /* ————— Weekly deterministic optimizer (Phase 16 Part C.4) ————— */
 
 /** The optimizer proposes blocks only once this many days of scan history
