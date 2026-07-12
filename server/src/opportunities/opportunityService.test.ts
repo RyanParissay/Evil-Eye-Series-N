@@ -420,6 +420,32 @@ describe('OpportunityService — confirmation pipeline (Phase 16 Part A)', () =>
     expect(a.confirmation?.status).toBe('confirmed');
   });
 
+  it('applyConfirmations persists the safety score onto confirming records (Phase 17)', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    await service.recordScan([makeArb(), makeArb({ eventId: 'evt-2' })], SCOPE);
+    const [a, b] = store.data.records;
+
+    const scanBAt = '2026-07-09T12:01:00Z';
+    const safety = {
+      score: 80,
+      components: [],
+      reasons: [],
+      roundedStakes: [250, 250],
+      scoredAt: scanBAt,
+    };
+    const confirmed = await service.applyConfirmations([
+      // A confirming record carries its score — persisted BEFORE the fan-out
+      // sees it (the returned records ARE the fan-out payload).
+      { fingerprint: a.fingerprint, status: 'confirmed', scanBAt, edgeDeltaPp: 0, safety },
+      // Scoring failure: no safety → the record confirms ungated (pre-P17).
+      { fingerprint: b.fingerprint, status: 'confirmed', scanBAt, edgeDeltaPp: 0 },
+    ]);
+    expect(confirmed.map((r) => r.safety)).toEqual([safety, undefined]);
+    expect(a.safety).toEqual(safety);
+    expect(b.safety).toBeUndefined();
+  });
+
   it('expirePendingConfirmations resolves every pending record to single_sighting', async () => {
     const store = new FakeStore();
     const service = new OpportunityService(store, new FakeArchive(), () => NOW);
