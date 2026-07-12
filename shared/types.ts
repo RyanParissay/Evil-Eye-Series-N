@@ -244,6 +244,31 @@ export interface OpportunityRecord {
   grading?: RecordGrading;
   /** Pending-state flags: 'needs_rules' | 'ungraded_stale'. */
   gradingFlags?: string[];
+  /**
+   * Phase 16 Part A: confirmation-pair state. Absent on pre-Phase-16
+   * records (treat as confirmed for display, but they are never
+   * retro-alerted — the alerted flag already gates that).
+   */
+  confirmation?: RecordConfirmation;
+}
+
+/* ————— Confirmation scanning (Phase 16 Part A) ————— */
+
+/**
+ * A record is acted on (alerted / Hub-purchased) ONLY at status
+ * 'confirmed': re-sighted by scan B with the same event + market + outcome
+ * pair + bookmaker pair and a headline edge within ±0.5 pp of scan A's
+ * (arb → profitPct, EV → edge %, middle → cost %). 'single_sighting' is
+ * terminal: kept for survival telemetry, never acted on.
+ */
+export interface RecordConfirmation {
+  status: 'pending' | 'confirmed' | 'single_sighting';
+  /** Scan A sighting time (detection). */
+  scanAAt: string;
+  /** Scan B evaluation time; absent while pending. */
+  scanBAt?: string;
+  /** Signed headline-edge drift A→B in percentage points; absent unless matched. */
+  edgeDeltaPp?: number;
 }
 
 /* ————— Auto-grading (Phase 13, GRADING_RULES.md is binding) ————— */
@@ -615,6 +640,17 @@ export interface SchedulerSettings {
    * page surfaces it and lets the user re-enable, which clears it.
    */
   disabledReason: string | null;
+  /**
+   * Phase 16 Part A: seconds between scan A and the conditional
+   * confirmation scan B. Optional pre-WP2; normalize to 60.
+   */
+  confirmationIntervalSecs?: number;
+  /**
+   * Phase 16 Part C.3: the dense data-gathering week, user-started. While
+   * active (7 days from startedAt) it replaces normal cadence, hard-capped
+   * at 4,500 credits/day and 30,000/week. Absent = not running.
+   */
+  denseWeek?: { startedAt: string } | null;
 }
 
 export interface MiddlesSettings {
@@ -812,4 +848,122 @@ export interface ApiErrorBody {
     code: ApiErrorCode;
     message: string;
   };
+}
+
+/* ————— Analytics Hub (Phase 16 Part B — everything here is SIMULATED) ————— */
+
+/** Flat dollars or percent OF STARTING bankroll (GRADING_RULES §5: never compounds). */
+export interface HubStake {
+  type: 'flat' | 'pctOfStart';
+  value: number;
+}
+
+/**
+ * A Hub profile is a PARAMETERIZED ENGINE SERIES (Phase 14 scenario engine)
+ * — settlement and P&L math must call the same primitives, never restate
+ * them. Premades: Arb / EV / Middles, $1,000 start, flat $50 stake
+ * (editable; §5 amendment — profile settings win inside the Hub).
+ */
+export interface HubProfile {
+  id: string;
+  name: string;
+  premade: boolean;
+  startingBankroll: number;
+  stake: HubStake;
+  /** Which strategies this profile auto-purchases. */
+  strategies: OpportunityStrategy[];
+  /** Minimum headline edge (pp) a confirmed opportunity needs to be purchased. */
+  minEdgePct: number;
+  createdAt: string;
+}
+
+/** One auto-purchase, written at confirmation time. Immutable once written. */
+export interface HubPurchase {
+  at: string;
+  recordId: string;
+  strategy: OpportunityStrategy;
+  stake: number;
+}
+
+export interface HubEquityPoint {
+  at: string;
+  bankroll: number;
+}
+
+/** Server-computed per-profile report; the client does zero money math. */
+export interface HubProfileReport {
+  profile: HubProfile;
+  simulated: true;
+  bankroll: number;
+  pnl: number;
+  roiPct: number;
+  betCount: number;
+  wins: number;
+  losses: number;
+  pushes: number;
+  voids: number;
+  pending: number;
+  /** Total stake currently in ungraded (pending) positions. */
+  exposure: number;
+  maxDrawdown: number;
+  skipped: { count: number; events: Array<{ at: string; recordId: string }> };
+  equity: HubEquityPoint[];
+  positions: HubPosition[];
+}
+
+export interface HubPosition {
+  purchase: HubPurchase;
+  eventName: string;
+  sportTitle: string;
+  commenceTime: string;
+  /** From record.grading; absent = pending. */
+  result?: GradeResult;
+  pnl?: number;
+  gradeSource?: 'auto' | 'manual';
+  gradeFlags?: string[];
+}
+
+/** Top-10 board for one strategy. occurrencePct = appearances ÷ total
+ *  opportunities of that strategy (two-leg strategies credit both books). */
+export interface HubLeaderboardRow {
+  bookmakerKey: string;
+  title: string;
+  count: number;
+  occurrencePct: number;
+}
+
+export interface HubLeaderboards {
+  sinceAt: string;
+  arb: HubLeaderboardRow[];
+  ev: HubLeaderboardRow[];
+  middle: HubLeaderboardRow[];
+}
+
+/* ————— Adaptive schedule proposal (Phase 16 Part C.4 — MODEL, propose-only) ————— */
+
+/** Confirmed-opportunity density for one hour-of-week cell (Vancouver local). */
+export interface DensityCell {
+  day: number;
+  hour: number;
+  arb: number;
+  ev: number;
+  middle: number;
+}
+
+/**
+ * Deterministic weekly schedule proposal. NEVER auto-applied — POST
+ * /api/scheduler/proposal/apply writes proposal.blocks into settings only
+ * on explicit user confirmation. model: true is the honesty label.
+ */
+export interface SchedulerProposal {
+  model: true;
+  computedAt: string;
+  /** Days of scan history the density table was computed from. */
+  historyDays: number;
+  density: DensityCell[];
+  blocks: SchedulerBlock[];
+  projectedMonthlyCredits: number;
+  monthlyBudget: number;
+  /** Budget minus the 10% reserve the proposal must fit under. */
+  spendCeiling: number;
 }
