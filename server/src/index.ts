@@ -38,6 +38,7 @@ import { createGradingRouter } from './routes/grading';
 import { filterConfirmedSightings, notifyNewOpportunities } from './notifications/alertService';
 import { WhatsAppStore } from './notifications/subscriptionStore';
 import { senderFromEnv } from './notifications/whatsappSender';
+import { isPendingCandidate, matchConfirmationPair } from './opportunities/confirmation';
 import { OpportunityService } from './opportunities/opportunityService';
 import { OpportunityArchive, OpportunityStore } from './opportunities/opportunityStore';
 import { verifyOpportunity } from './opportunities/verifyService';
@@ -50,7 +51,7 @@ import { PaperStore } from './paper/paperStore';
 import { planStakes } from '@shared/stakePlanning';
 import { EvStore } from './ops/evStore';
 import { MiddlesStore } from './ops/middlesStore';
-import { OpsStore } from './ops/opsStore';
+import { OpsStore, seedScanParams } from './ops/opsStore';
 import { ScanHistoryStore } from './ops/scanHistoryStore';
 import { notifyEvBets, notifyMiddleBets } from './notifications/alertService';
 import { createEvRouter } from './routes/ev';
@@ -321,6 +322,12 @@ const scanDeps: ScanDeps = {
     // dispatch; whatever actually sent gets flagged on its stored record.
     // The stream carries BOTH strategies; arbs and EV bets split here.
     notifier: async (opportunities) => {
+      // Phase 16 Part A: recordScan (already done by now) may have left
+      // candidates pending — wake the scheduler so their scan B is armed
+      // precisely, manual scans included. The 60s max-sleep is the backstop
+      // when a wake lands mid-tick.
+      scheduler?.wake();
+
       const alertable = await bookmakerService.filterAlertable(opportunities);
       const arbs = alertable.filter((o) => !o.ev && !o.middle);
       const evBets = alertable.filter((o) => o.ev);
@@ -451,6 +458,14 @@ app.use(apiErrorHandler);
 // makes it budget-, cap-, and quiet-hours-aware; runScan reuses scanDeps so a
 // scheduled scan is indistinguishable from a manual one (same alerts, paper
 // fund, grading piggyback, backup).
+//
+// Confirmation pairs (Phase 16 Part A) also live here — scan B timing is
+// scheduler timing. The pending pair is derived from the opportunity STORE,
+// so it survives hot reloads: a due B fires from the fresh process (it
+// completes a pair the user's own scan A already started and priced — never
+// a spontaneous call), and a pair whose window lapsed resolves to
+// single_sighting without ever touching the provider. With no pending
+// records, a disabled scheduler stays completely inert on reload.
 scheduler = new Scheduler({
   now: () => new Date(),
   setTimer: realTimer.setTimer,
@@ -465,6 +480,39 @@ scheduler = new Scheduler({
     const parsed = parseScanRequest({ topN: params.topN, regionTab: params.regionTab });
     if (!parsed.ok) throw new Error(`Invalid scheduler scanParams: ${parsed.message}`);
     await runScan(scanDeps, parsed.request);
+  },
+  // Scan B: snapshot the pending pair BEFORE the scan (headline fields
+  // refresh at every sighting, so the pre-B store carries scan A's edges),
+  // run the same full pipeline, then judge the pair against the post-B
+  // store and persist the verdicts.
+  runConfirmScan: async (params) => {
+    const before = await opportunityService.pendingConfirmations();
+    if (before.length === 0) return; // raced away — nothing to confirm, zero credits
+    const parsed = parseScanRequest({ topN: params.topN, regionTab: params.regionTab });
+    if (!parsed.ok) throw new Error(`Invalid confirmation scanParams: ${parsed.message}`);
+    await runScan(scanDeps, parsed.request);
+    const after = await opportunityService.list();
+    await opportunityService.applyConfirmations(matchConfirmationPair(before, after, new Date()));
+  },
+  // The pair's B window lapsed (quiet hours / stop / restart): resolve to
+  // single_sighting — bookkeeping only, zero provider calls.
+  resolveConfirmations: async () => {
+    await opportunityService.expirePendingConfirmations();
+  },
+  pendingConfirmation: async () => {
+    const candidates = (await opportunityService.pendingConfirmations()).filter(isPendingCandidate);
+    return {
+      count: candidates.length,
+      latestSeenAtMs:
+        candidates.length > 0
+          ? Math.max(...candidates.map((r) => Date.parse(r.lastSeenAt)))
+          : null,
+    };
+  },
+  // Scan B reuses the LAST scan's fetch scope — manual or scheduled alike.
+  lastScanParams: async () => {
+    const meta = await store.read();
+    return meta ? seedScanParams({ regionTab: meta.regionTab, topN: meta.topN }) : null;
   },
   pollGrading: async () => {
     await gradingService.poll();

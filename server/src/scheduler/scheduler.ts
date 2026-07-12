@@ -2,8 +2,9 @@
  * THE scheduler tick — the ONLY place in server/src allowed to own a
  * wall-clock timer (a single self-rescheduling setTimeout chain). It reads
  * settings, asks the pure `plan` what to do next, and executes exactly one
- * action per tick: run a scan, run a score poll, or sleep. The clock and the
- * timer are injected, so no test ever sleeps.
+ * action per tick: run a scan, run the confirmation scan B or resolve a
+ * lapsed pair (Phase 16 Part A), run a score poll, or sleep. The clock and
+ * the timer are injected, so no test ever sleeps.
  *
  * Everything credit-spending flows through here, and `plan`'s global gates
  * make the whole thing budget-, cap-, and quiet-hours-aware by construction.
@@ -27,6 +28,18 @@ export interface SchedulerDeps {
   /** Run one scan through the full notifier/alerts/backup pipeline; rejects
    *  with the provider error on total failure. */
   runScan: (params: { regionTab: string; topN: number }) => Promise<void>;
+  /** Phase 16 Part A: run scan B (same pipeline as runScan) and evaluate
+   *  the pending pair against it — index.ts owns the composition. */
+  runConfirmScan: (params: { regionTab: string; topN: number }) => Promise<void>;
+  /** Resolve every pending confirmation to single_sighting: the pair's B
+   *  window lapsed (quiet hours / stop / restart). Zero provider calls. */
+  resolveConfirmations: () => Promise<void>;
+  /** Store-derived pending-pair summary: eligible-candidate count + the
+   *  latest sighting among them (the expiry anchor); {0, null} when none. */
+  pendingConfirmation: () => Promise<{ count: number; latestSeenAtMs: number | null }>;
+  /** Fetch scope of the last completed scan — scan B reuses it; null falls
+   *  back to the scheduler's own scanParams. */
+  lastScanParams: () => Promise<{ regionTab: string; topN: number } | null>;
   /** One grading poll (fetchScores for whatever is due). */
   pollGrading: () => Promise<void>;
   /** Epoch ms of the most recent scan on disk (manual or scheduled); null
@@ -84,9 +97,11 @@ export class Scheduler {
     try {
       const settings = await this.deps.readSettings();
       const now = this.deps.now();
-      const [historyLastScan, usedTotal] = await Promise.all([
+      const [historyLastScan, usedTotal, pending, lastScanParams] = await Promise.all([
         this.deps.lastScanAtMs(),
         this.deps.usedTotal(),
+        this.deps.pendingConfirmation(),
+        this.deps.lastScanParams(),
       ]);
       const action = plan({
         settings: settings.scheduler,
@@ -98,6 +113,11 @@ export class Scheduler {
           monthlyCreditBudget: settings.monthlyCreditBudget,
           autoStopPct: settings.autoStopPct,
           usedTotal,
+        },
+        confirmation: {
+          pendingCount: pending.count,
+          latestSeenAtMs: pending.latestSeenAtMs,
+          lastScanParams,
         },
       });
       await this.execute(action, now);
@@ -116,6 +136,20 @@ export class Scheduler {
         await this.runScan(action.params);
         this.arm(0); // re-plan; the advanced cadence anchor makes plan sleep
         return;
+      case 'confirmScan':
+        // Scan B: the attempt stamp gives failed Bs the pair cadence as
+        // their retry spacing (never a tight loop); plan's expiry anchor
+        // (last real sighting) bounds the retries, then resolves the pair.
+        this.lastScanAttemptAtMs = now.getTime();
+        await this.runConfirm(action.params);
+        this.arm(0);
+        return;
+      case 'resolveConfirmations':
+        // Bookkeeping, zero credits. A throwing resolve falls to the tick's
+        // catch (max-sleep re-arm) — never a hot loop.
+        await this.deps.resolveConfirmations();
+        this.arm(0);
+        return;
       case 'scorePoll':
         this.lastScorePollAtMs = now.getTime();
         await this.runPoll();
@@ -132,6 +166,14 @@ export class Scheduler {
       await this.deps.runScan(params);
     } catch (err) {
       await this.handleProviderFailure(err, 'Scheduled scan failed');
+    }
+  }
+
+  private async runConfirm(params: { regionTab: string; topN: number }): Promise<void> {
+    try {
+      await this.deps.runConfirmScan(params);
+    } catch (err) {
+      await this.handleProviderFailure(err, 'Confirmation scan (B) failed');
     }
   }
 

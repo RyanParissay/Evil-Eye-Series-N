@@ -60,7 +60,13 @@ function opsSettings(over: Partial<OpsSettings['scheduler']> = {}, top?: Partial
 
 interface Recorder {
   scans: number[]; // fake-now epoch ms at each scan
+  confirms: number[]; // …at each confirmation scan B
+  resolves: number[]; // …at each lapsed-pair resolution
   polls: number[];
+  /** The store-derived pending-pair summary plan reads. Tests (and the
+   *  default runScan/runConfirmScan fakes) mutate it like recordScan would. */
+  pending: { count: number; latestSeenAtMs: number | null };
+  lastScanAt: number | null;
   deps: SchedulerDeps;
   settings: OpsSettings;
   disabledReason: string | null;
@@ -71,17 +77,21 @@ function wire(
   opts: {
     settings?: OpsSettings;
     runScan?: (params: { regionTab: string; topN: number }) => Promise<void>;
+    runConfirmScan?: (params: { regionTab: string; topN: number }) => Promise<void>;
     usedTotal?: number | null;
   } = {},
 ): Recorder {
   const rec: Recorder = {
     scans: [],
+    confirms: [],
+    resolves: [],
     polls: [],
+    pending: { count: 0, latestSeenAtMs: null },
+    lastScanAt: null,
     disabledReason: null,
     settings: opts.settings ?? opsSettings(),
     deps: null as unknown as SchedulerDeps,
   };
-  let lastScan: number | null = null;
   rec.deps = {
     now: h.now,
     setTimer: h.setTimer,
@@ -98,12 +108,25 @@ function wire(
       opts.runScan ??
       (async () => {
         rec.scans.push(h.current);
-        lastScan = h.current;
+        rec.lastScanAt = h.current;
       }),
+    runConfirmScan:
+      opts.runConfirmScan ??
+      (async () => {
+        rec.confirms.push(h.current);
+        rec.lastScanAt = h.current;
+        rec.pending = { count: 0, latestSeenAtMs: null }; // pair evaluated
+      }),
+    resolveConfirmations: async () => {
+      rec.resolves.push(h.current);
+      rec.pending = { count: 0, latestSeenAtMs: null };
+    },
+    pendingConfirmation: async () => rec.pending,
+    lastScanParams: async () => null,
     pollGrading: async () => {
       rec.polls.push(h.current);
     },
-    lastScanAtMs: async () => lastScan,
+    lastScanAtMs: async () => rec.lastScanAt,
     usedTotal: async () => opts.usedTotal ?? 0,
     scorePollIntervalMs: SCORE_POLL_MS,
     maxSleepMs: 26 * 3_600_000, // large: precise sleeps, few iterations
@@ -184,6 +207,102 @@ describe('Scheduler — self-rescheduling tick', () => {
     await h.advanceTo(h.current); // no time passes; the wake tick scans now
     s.stop();
     expect(rec.scans.length).toBe(1);
+  });
+});
+
+describe('Scheduler — confirmation pairs (Phase 16 Part A; injectable timer, no test sleeps)', () => {
+  it('a scan that leaves candidates gets its scan B exactly 60s later; the pair then closes', async () => {
+    const h = new Harness(vancouverEpochOf(2026, 1, 15, 14 * 60));
+    const rec = wire(h);
+    // Every scheduled scan A leaves one candidate pending, like recordScan would.
+    rec.deps.runScan = async () => {
+      rec.scans.push(h.current);
+      rec.lastScanAt = h.current;
+      rec.pending = { count: 1, latestSeenAtMs: h.current };
+    };
+    const s = new Scheduler(rec.deps);
+    s.start();
+    await h.advanceTo(h.current + 40 * 60_000);
+    s.stop();
+
+    expect(rec.scans.length).toBeGreaterThanOrEqual(2);
+    expect(rec.confirms.length).toBe(rec.scans.length); // one B per A, no more
+    rec.confirms.forEach((confirmAt, i) => {
+      expect(confirmAt - rec.scans[i]).toBe(60_000);
+    });
+    expect(rec.resolves).toEqual([]);
+  });
+
+  it('no candidates → no scan B, ever', async () => {
+    const h = new Harness(vancouverEpochOf(2026, 1, 15, 14 * 60));
+    const rec = wire(h); // default runScan leaves pending at {0, null}
+    const s = new Scheduler(rec.deps);
+    s.start();
+    await h.advanceTo(h.current + 60 * 60_000);
+    s.stop();
+    expect(rec.scans.length).toBeGreaterThan(0);
+    expect(rec.confirms).toEqual([]);
+    expect(rec.resolves).toEqual([]);
+  });
+
+  it('a MANUAL scan’s pair completes with the scheduler toggle OFF — B fires server-side at +60s', async () => {
+    const h = new Harness(vancouverEpochOf(2026, 1, 15, 15 * 60));
+    const rec = wire(h, { settings: opsSettings({ enabled: false }) });
+    const s = new Scheduler(rec.deps);
+    s.start();
+    await h.advanceTo(h.current); // settle the dormant tick
+    // A manual scan lands via the route: history + pending move, then the
+    // notifier wakes the scheduler (index.ts wiring).
+    const scanAt = h.current;
+    rec.lastScanAt = scanAt;
+    rec.pending = { count: 1, latestSeenAtMs: scanAt };
+    s.wake();
+    await h.advanceTo(scanAt + 5 * 60_000);
+    s.stop();
+    expect(rec.scans).toEqual([]); // disabled: the scheduler ran no scan A of its own
+    expect(rec.confirms).toEqual([scanAt + 60_000]);
+  });
+
+  it('quiet hours: a pair due at 01:00 never scans; it resolves to single_sighting at expiry (5× past due)', async () => {
+    const h = new Harness(vancouverEpochOf(2026, 1, 15, 59)); // 00:59, one minute before quiet
+    const rec = wire(h, { settings: opsSettings({ enabled: false }) });
+    const s = new Scheduler(rec.deps);
+    s.start();
+    await h.advanceTo(h.current);
+    const scanAt = h.current;
+    rec.lastScanAt = scanAt;
+    rec.pending = { count: 1, latestSeenAtMs: scanAt };
+    s.wake();
+    await h.advanceTo(scanAt + 30 * 60_000); // deep into quiet hours
+    s.stop();
+    expect(rec.confirms).toEqual([]); // zero provider calls in quiet hours
+    // Resolution is bookkeeping (zero credits): scanA + interval + 5×interval.
+    expect(rec.resolves).toEqual([scanAt + 6 * 60_000]);
+  });
+
+  it('a scan B hitting spent quota self-disables, retries stay bounded, and the pair resolves honestly', async () => {
+    const h = new Harness(vancouverEpochOf(2026, 1, 15, 14 * 60));
+    let attempts = 0;
+    const rec = wire(h, {
+      runConfirmScan: async () => {
+        attempts += 1;
+        throw new ProviderError('out of credits', 'quota_exhausted', 401);
+      },
+    });
+    rec.deps.runScan = async () => {
+      rec.scans.push(h.current);
+      rec.lastScanAt = h.current;
+      rec.pending = { count: 1, latestSeenAtMs: h.current };
+    };
+    const s = new Scheduler(rec.deps);
+    s.start();
+    await h.advanceTo(h.current + 60 * 60_000);
+    s.stop();
+    expect(rec.disabledReason).toMatch(/credits are spent/i);
+    expect(attempts).toBeGreaterThanOrEqual(1);
+    expect(attempts).toBeLessThanOrEqual(6); // due slides per attempt; expiry is fixed
+    expect(rec.resolves.length).toBe(1); // the pair resolved, never confirmed
+    expect(rec.confirms).toEqual([]);
   });
 });
 

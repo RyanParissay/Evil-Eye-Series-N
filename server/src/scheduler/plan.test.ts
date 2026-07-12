@@ -30,6 +30,7 @@ function input(over: Partial<PlanInput> = {}): PlanInput {
     lastScorePollAtMs: at(15 * 60).getTime(), // recently polled unless overridden
     scorePollIntervalMs: SCORE_POLL_MS,
     budget: { monthlyCreditBudget: 20_000, autoStopPct: 95, usedTotal: 0 },
+    confirmation: { pendingCount: 0, latestSeenAtMs: null, lastScanParams: null },
     ...over,
   };
 }
@@ -111,6 +112,138 @@ describe('plan — in an active block', () => {
       }),
     );
     expect(action.kind).toBe('scan');
+  });
+});
+
+describe('plan — confirmation pairs (Phase 16 Part A)', () => {
+  const INTERVAL_MS = 60_000; // default confirmationIntervalSecs = 60
+
+  /** A pair whose scan A ran `agoMs` before `now`. */
+  function pairInput(agoMs: number, over: Partial<PlanInput> = {}): PlanInput {
+    const now = at(15 * 60);
+    const scanAt = now.getTime() - agoMs;
+    return input({
+      now,
+      lastScanAtMs: scanAt,
+      confirmation: {
+        pendingCount: 2,
+        latestSeenAtMs: scanAt,
+        lastScanParams: { regionTab: 'ca', topN: 3 },
+      },
+      ...over,
+    });
+  }
+
+  it('scan B fires once the interval has elapsed, with the LAST scan’s fetch scope', () => {
+    const action = plan(pairInput(INTERVAL_MS));
+    expect(action).toEqual({ kind: 'confirmScan', params: { regionTab: 'ca', topN: 3 } });
+  });
+
+  it('falls back to the scheduler’s own scanParams when no last-scan scope exists', () => {
+    const base = pairInput(INTERVAL_MS);
+    const action = plan({
+      ...base,
+      confirmation: { ...base.confirmation, lastScanParams: null },
+    });
+    expect(action).toEqual({ kind: 'confirmScan', params: { regionTab: 'ca_us', topN: 5 } });
+  });
+
+  it('before the interval it sleeps exactly to the due time — never past a pending pair', () => {
+    const in20s = pairInput(INTERVAL_MS - 20_000);
+    const action = plan(in20s);
+    expect(action).toEqual({ kind: 'sleep', untilMs: in20s.now.getTime() + 20_000 });
+  });
+
+  it('honors a custom confirmationIntervalSecs', () => {
+    const action = plan(
+      pairInput(90_000, { settings: settings({ confirmationIntervalSecs: 120 }) }),
+    );
+    expect(action).toEqual({ kind: 'sleep', untilMs: at(15 * 60).getTime() + 30_000 });
+  });
+
+  it('scan B fires even while the scheduler is DISABLED — a manual pair completes with the toggle off', () => {
+    const action = plan(pairInput(INTERVAL_MS, { settings: settings({ enabled: false }) }));
+    expect(action.kind).toBe('confirmScan');
+  });
+
+  it('while disabled and not yet due, the sleep still wakes at the due time', () => {
+    const in20s = pairInput(INTERVAL_MS - 20_000, { settings: settings({ enabled: false }) });
+    expect(plan(in20s)).toEqual({ kind: 'sleep', untilMs: in20s.now.getTime() + 20_000 });
+  });
+
+  it('scan B rides scan A’s authorization past the budget stop (manual scans are never budget-gated)', () => {
+    const action = plan(
+      pairInput(INTERVAL_MS, {
+        budget: { monthlyCreditBudget: 20_000, autoStopPct: 95, usedTotal: 19_500 },
+      }),
+    );
+    expect(action.kind).toBe('confirmScan');
+  });
+
+  it('quiet hours block scan B; the sleep wakes at the pair’s expiry so it resolves promptly', () => {
+    const now = at(60 + 30); // 01:30, inside quiet hours
+    const scanAt = now.getTime() - INTERVAL_MS; // due mid-quiet
+    const action = plan(
+      pairInput(0, {
+        now,
+        lastScanAtMs: scanAt,
+        confirmation: { pendingCount: 1, latestSeenAtMs: scanAt, lastScanParams: null },
+      }),
+    );
+    // Expiry (scanA + 6× interval) is hours before 08:00 — wake there.
+    expect(action).toEqual({ kind: 'sleep', untilMs: scanAt + 6 * INTERVAL_MS });
+  });
+
+  it('past 5× the interval after its due time, the pair resolves to single_sighting — even disabled, even in quiet hours', () => {
+    // In quiet hours, disabled, and long past expiry: resolving is
+    // bookkeeping (zero credits), so nothing may block it.
+    const now = at(60 + 30); // 01:30
+    const scanAt = now.getTime() - 7 * INTERVAL_MS;
+    const action = plan(
+      pairInput(0, {
+        now,
+        settings: settings({ enabled: false }),
+        lastScanAtMs: scanAt,
+        confirmation: { pendingCount: 1, latestSeenAtMs: scanAt, lastScanParams: null },
+      }),
+    );
+    expect(action).toEqual({ kind: 'resolveConfirmations' });
+  });
+
+  it('failed scan-B attempts slide the due time (no tight retry loop) but never the expiry', () => {
+    const now = at(15 * 60);
+    const scanAt = now.getTime() - 5 * INTERVAL_MS; // sightings anchor
+    // A failed attempt 30s ago pushes the next try to +30s from now…
+    const retry = plan(
+      pairInput(0, {
+        now,
+        lastScanAtMs: now.getTime() - 30_000,
+        confirmation: { pendingCount: 1, latestSeenAtMs: scanAt, lastScanParams: null },
+      }),
+    );
+    expect(retry).toEqual({ kind: 'sleep', untilMs: now.getTime() + 30_000 });
+    // …but once past sightings + 6× interval, attempts stop mattering.
+    const expired = plan(
+      pairInput(0, {
+        now,
+        lastScanAtMs: now.getTime() - 30_000,
+        confirmation: {
+          pendingCount: 1,
+          latestSeenAtMs: now.getTime() - 7 * INTERVAL_MS,
+          lastScanParams: null,
+        },
+      }),
+    );
+    expect(expired).toEqual({ kind: 'resolveConfirmations' });
+  });
+
+  it('a pending pair with no sighting anchor resolves rather than hanging or guessing', () => {
+    const action = plan(
+      pairInput(0, {
+        confirmation: { pendingCount: 1, latestSeenAtMs: null, lastScanParams: null },
+      }),
+    );
+    expect(action).toEqual({ kind: 'resolveConfirmations' });
   });
 });
 
