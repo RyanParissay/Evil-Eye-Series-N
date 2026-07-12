@@ -25,11 +25,18 @@ export class OpportunityService {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  /** Upsert a scan's detections, apply lifecycle, age settled records out. */
-  async recordScan(opportunities: ArbOpportunity[], scope: ScanScope): Promise<void> {
+  /**
+   * Upsert a scan's detections, apply lifecycle, age settled records out.
+   * Reports the confirmation-candidate count (Phase 16 Part A): ≥1 means
+   * this scan is a scan A whose scan B the scheduler must fire.
+   */
+  async recordScan(
+    opportunities: ArbOpportunity[],
+    scope: ScanScope,
+  ): Promise<{ pendingCandidates: number }> {
     const at = this.now();
-    await this.store.update(async (data) => {
-      const { records } = applyScanToRecords(data.records, opportunities, scope, at);
+    return this.store.update(async (data) => {
+      const { records, pendingCandidates } = applyScanToRecords(data.records, opportunities, scope, at);
       const { keep, archive } = partitionForArchive(records, at);
       if (archive.length > 0) {
         try {
@@ -37,10 +44,10 @@ export class OpportunityService {
         } catch (err) {
           // Archive failure must not lose history — keep them active instead.
           console.warn('Opportunity archive append failed; keeping records in active file:', err);
-          return { data: { records }, result: undefined };
+          return { data: { records }, result: { pendingCandidates } };
         }
       }
-      return { data: { records: keep }, result: undefined };
+      return { data: { records: keep }, result: { pendingCandidates } };
     });
   }
 
@@ -282,6 +289,64 @@ export class OpportunityService {
         result = { ok: true, record };
       }
       return { data, result };
+    });
+  }
+
+  /** Records awaiting their confirmation scan B (Phase 16 Part A). */
+  async pendingConfirmations(): Promise<OpportunityRecord[]> {
+    const { records } = await this.store.read();
+    return records.filter((r) => r.confirmation?.status === 'pending');
+  }
+
+  /**
+   * Write pair-matcher verdicts (opportunities/confirmation.ts). Only
+   * still-pending records move — confirmed and single_sighting are terminal,
+   * so a racing scan or double evaluation is a no-op. Returns the records
+   * that reached 'confirmed' (the onConfirmed fan-out's payload).
+   */
+  async applyConfirmations(
+    outcomes: Array<{
+      fingerprint: string;
+      status: 'confirmed' | 'single_sighting';
+      scanBAt: string;
+      edgeDeltaPp?: number;
+    }>,
+  ): Promise<OpportunityRecord[]> {
+    if (outcomes.length === 0) return [];
+    return this.store.update((data) => {
+      const byFingerprint = new Map(data.records.map((r) => [r.fingerprint, r]));
+      const confirmed: OpportunityRecord[] = [];
+      for (const outcome of outcomes) {
+        const record = byFingerprint.get(outcome.fingerprint);
+        if (!record || record.confirmation?.status !== 'pending') continue;
+        record.confirmation = {
+          ...record.confirmation,
+          status: outcome.status,
+          scanBAt: outcome.scanBAt,
+          ...(outcome.edgeDeltaPp != null && { edgeDeltaPp: outcome.edgeDeltaPp }),
+        };
+        if (outcome.status === 'confirmed') confirmed.push(record);
+      }
+      return { data, result: confirmed };
+    });
+  }
+
+  /**
+   * Resolve EVERY pending confirmation to the terminal single_sighting —
+   * the honest outcome when scan B could not fire within its grace window
+   * (quiet hours, scheduler stop, restart). Bookkeeping only: zero provider
+   * calls, zero credits. Returns how many records it resolved.
+   */
+  async expirePendingConfirmations(): Promise<number> {
+    const at = this.now().toISOString();
+    return this.store.update((data) => {
+      let expired = 0;
+      for (const record of data.records) {
+        if (record.confirmation?.status !== 'pending') continue;
+        record.confirmation = { ...record.confirmation, status: 'single_sighting', scanBAt: at };
+        expired += 1;
+      }
+      return { data, result: expired };
     });
   }
 

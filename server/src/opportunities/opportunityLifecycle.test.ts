@@ -152,6 +152,91 @@ describe('applyScanToRecords', () => {
   });
 });
 
+describe('applyScanToRecords — confirmation stamping (Phase 16 Part A)', () => {
+  it('stamps a new eligible record pending, with scanAAt = the detection instant', () => {
+    const { records, pendingCandidates } = applyScanToRecords([], [makeArb()], SCOPE, NOW);
+    expect(records[0].confirmation).toEqual({ status: 'pending', scanAAt: NOW.toISOString() });
+    expect(pendingCandidates).toBe(1);
+  });
+
+  it('suspicious and same-book detections get NO confirmation field and are not candidates', () => {
+    const { records, pendingCandidates } = applyScanToRecords(
+      [],
+      [makeArb({ suspicious: true }), makeArb({ eventId: 'evt-2', sameBookmaker: true })],
+      SCOPE,
+      NOW,
+    );
+    expect(records.every((r) => r.confirmation === undefined)).toBe(true);
+    expect(pendingCandidates).toBe(0);
+  });
+
+  it('legacy records (no confirmation field) re-sighted stay unconfirmable — never retro-alerted', () => {
+    const legacy = recordFor(makeArb()); // recordFor stamps no confirmation
+    const { records, pendingCandidates } = applyScanToRecords([legacy], [makeArb()], SCOPE, NOW);
+    expect(records[0].confirmation).toBeUndefined();
+    expect(pendingCandidates).toBe(0);
+  });
+
+  it('a still-pending record re-sighted stays pending and counts as a candidate again', () => {
+    const scanA = applyScanToRecords([], [makeArb()], SCOPE, NOW);
+    const later = new Date(NOW.getTime() + 60_000);
+    const { records, pendingCandidates } = applyScanToRecords(scanA.records, [makeArb()], SCOPE, later);
+    expect(records[0].confirmation).toEqual({ status: 'pending', scanAAt: NOW.toISOString() });
+    expect(pendingCandidates).toBe(1);
+  });
+
+  it('confirmed and single_sighting are terminal — re-sighting never re-pends them or re-counts them', () => {
+    const confirmed = recordFor(makeArb(), {
+      confirmation: { status: 'confirmed', scanAAt: '2026-07-09T10:00:00Z', scanBAt: '2026-07-09T10:01:00Z', edgeDeltaPp: 0.1 },
+    });
+    const single = recordFor(makeArb({ eventId: 'evt-2' }), {
+      confirmation: { status: 'single_sighting', scanAAt: '2026-07-09T10:00:00Z' },
+    });
+    const { records, pendingCandidates } = applyScanToRecords(
+      [confirmed, single],
+      [makeArb(), makeArb({ eventId: 'evt-2' })],
+      SCOPE,
+      NOW,
+    );
+    expect(pendingCandidates).toBe(0);
+    const byEvent = new Map(records.map((r) => [r.eventId, r.confirmation?.status]));
+    expect(byEvent.get('evt-1')).toBe('confirmed');
+    expect(byEvent.get('evt-2')).toBe('single_sighting');
+  });
+
+  it('a pending record that dies (proven gone or commenced) resolves to single_sighting', () => {
+    const gone = recordFor(makeArb(), {
+      confirmation: { status: 'pending', scanAAt: '2026-07-09T10:00:00Z' },
+    });
+    const commenced = recordFor(
+      makeArb({ eventId: 'evt-started', sportKey: 'icehockey_nhl', commenceTime: '2026-07-09T11:00:00Z' }),
+      { confirmation: { status: 'pending', scanAAt: '2026-07-09T10:00:00Z' } },
+    );
+    const { records } = applyScanToRecords([gone, commenced], [], SCOPE, NOW);
+    for (const record of records) {
+      expect(record.status).toBe('dead');
+      expect(record.confirmation).toEqual({
+        status: 'single_sighting',
+        scanAAt: '2026-07-09T10:00:00Z',
+        scanBAt: NOW.toISOString(),
+      });
+    }
+  });
+
+  it('a re-sighted record that turned suspicious keeps its pending state but stops being a candidate', () => {
+    const scanA = applyScanToRecords([], [makeArb()], SCOPE, NOW);
+    const later = new Date(NOW.getTime() + 60_000);
+    const { records, pendingCandidates } = applyScanToRecords(
+      scanA.records,
+      [makeArb({ suspicious: true })],
+      SCOPE,
+      later,
+    );
+    expect(records[0].confirmation?.status).toBe('pending');
+    expect(pendingCandidates).toBe(0);
+  });
+});
+
 describe('applyScanToRecords — EV records (strategy discriminator)', () => {
   const EV_BLOCK = {
     benchmarkKey: 'pinnacle',

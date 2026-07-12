@@ -350,3 +350,70 @@ describe('OpportunityService', () => {
     expect(store.data.records).toHaveLength(1); // nothing lost
   });
 });
+
+describe('OpportunityService — confirmation pipeline (Phase 16 Part A)', () => {
+  it('recordScan reports the pending-candidate count — the scan-B trigger', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    const withCandidate = await service.recordScan([makeArb()], SCOPE);
+    expect(withCandidate.pendingCandidates).toBe(1);
+
+    const suspiciousOnly = await service.recordScan(
+      [makeArb({ eventId: 'evt-sus', suspicious: true })],
+      SCOPE,
+    );
+    expect(suspiciousOnly.pendingCandidates).toBe(0);
+  });
+
+  it('pendingConfirmations returns exactly the records awaiting scan B', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    await service.recordScan([makeArb(), makeArb({ eventId: 'evt-sus', suspicious: true })], SCOPE);
+
+    const pending = await service.pendingConfirmations();
+    expect(pending).toHaveLength(1);
+    expect(pending[0].confirmation?.status).toBe('pending');
+    expect(pending[0].eventId).toBe('evt-1');
+  });
+
+  it('applyConfirmations moves only still-pending records and returns the confirmed ones', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    await service.recordScan([makeArb(), makeArb({ eventId: 'evt-2' })], SCOPE);
+    const [a, b] = store.data.records;
+
+    const scanBAt = '2026-07-09T12:01:00Z';
+    const confirmed = await service.applyConfirmations([
+      { fingerprint: a.fingerprint, status: 'confirmed', scanBAt, edgeDeltaPp: 0.2 },
+      { fingerprint: b.fingerprint, status: 'single_sighting', scanBAt },
+      { fingerprint: 'unknown', status: 'confirmed', scanBAt },
+    ]);
+    expect(confirmed.map((r) => r.fingerprint)).toEqual([a.fingerprint]);
+    expect(a.confirmation).toMatchObject({ status: 'confirmed', scanBAt, edgeDeltaPp: 0.2 });
+    expect(b.confirmation).toMatchObject({ status: 'single_sighting', scanBAt });
+    expect(b.confirmation?.edgeDeltaPp).toBeUndefined();
+
+    // Terminal states never move again (idempotent under scan/B races).
+    const again = await service.applyConfirmations([
+      { fingerprint: a.fingerprint, status: 'single_sighting', scanBAt: '2026-07-09T13:00:00Z' },
+    ]);
+    expect(again).toEqual([]);
+    expect(a.confirmation?.status).toBe('confirmed');
+  });
+
+  it('expirePendingConfirmations resolves every pending record to single_sighting', async () => {
+    const store = new FakeStore();
+    const service = new OpportunityService(store, new FakeArchive(), () => NOW);
+    await service.recordScan([makeArb(), makeArb({ eventId: 'evt-2' })], SCOPE);
+
+    const expired = await service.expirePendingConfirmations();
+    expect(expired).toBe(2);
+    for (const record of store.data.records) {
+      expect(record.confirmation).toMatchObject({
+        status: 'single_sighting',
+        scanBAt: NOW.toISOString(),
+      });
+    }
+    expect(await service.expirePendingConfirmations()).toBe(0);
+  });
+});

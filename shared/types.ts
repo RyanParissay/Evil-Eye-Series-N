@@ -671,6 +671,12 @@ export interface ScanLogEntry {
   requestsUsedTotal: number | null;
   distinctBooks: string[];
   eventCount: number;
+  /**
+   * Phase 16 Part A: confirmation candidates this scan left pending (≥1 ⇒
+   * a scan B followed). Feeds the measured pair hit rate. Absent on
+   * pre-Phase-16 lines — those are excluded from the measurement.
+   */
+  confirmationCandidates?: number;
 }
 
 /**

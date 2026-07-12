@@ -76,6 +76,30 @@ export const SCHEDULER_MAX_SLEEP_MS = 60_000;
  *  outside quiet hours — replaces the retired client grading tick. */
 export const SCHEDULER_SCORE_POLL_INTERVAL_MS = 5 * 60_000;
 
+/* ————— Confirmation pairs (Phase 16 Part A) ————— */
+
+/** Default seconds between scan A and its conditional confirmation scan B
+ *  (SchedulerSettings.confirmationIntervalSecs normalizes to this). */
+export const DEFAULT_CONFIRMATION_INTERVAL_SECS = 60;
+
+/** A pair confirms only when the headline edge (arb → profitPct, EV →
+ *  ev.edgePct, middle → middle.costPct) moved no more than this many
+ *  percentage points between scans A and B. Inclusive on both sides. */
+export const CONFIRMATION_EDGE_TOLERANCE_PP = 0.5;
+
+/** If scan B cannot fire within this many confirmation intervals of its due
+ *  time (quiet hours, scheduler stop, restart), the pending candidates
+ *  resolve to 'single_sighting' — an unconfirmed opportunity is never acted
+ *  on. Zero credits: resolving is bookkeeping, not a provider call. */
+export const CONFIRMATION_GRACE_INTERVALS = 5;
+
+/** Confirmation hit rate (share of scans with ≥1 candidate) is MEASURED
+ *  from the last 14 days of scan history once this many logged scans carry
+ *  the candidates field; before that it is labeled ASSUMED at 30%. */
+export const CONFIRMATION_HIT_RATE_WINDOW_MS = 14 * 24 * 3_600_000;
+export const CONFIRMATION_HIT_RATE_MIN_SAMPLES = 50;
+export const CONFIRMATION_ASSUMED_HIT_RATE = 0.3;
+
 /** Where last-scan metadata persists across server restarts (gitignored). */
 export const LAST_SCAN_FILE = 'data/last-scan.json';
 

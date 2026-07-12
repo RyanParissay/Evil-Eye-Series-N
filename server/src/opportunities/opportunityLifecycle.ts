@@ -18,6 +18,13 @@ export interface LifecycleResult {
   records: OpportunityRecord[];
   newCount: number;
   deadCount: number;
+  /**
+   * Phase 16 Part A: how many records this scan left awaiting a
+   * confirmation scan B — active, pending, non-suspicious/same-book records
+   * sighted THIS scan. ≥1 makes this scan a scan A; 0 means no scan B fires
+   * and no extra credit is ever spent.
+   */
+  pendingCandidates: number;
 }
 
 export function applyScanToRecords(
@@ -84,6 +91,15 @@ export function applyScanToRecords(
         statusChangedAt: at,
         alerted: false,
         alertedAt: null,
+        // Phase 16 Part A: eligible detections enter the confirmation
+        // pipeline pending; flagged ones never do (they are shown, never
+        // acted on, so they must not spend credits on a scan B either).
+        // Pre-Phase-16 records keep NO confirmation field — the pipeline
+        // ignores them forever, so they are never retro-alerted.
+        ...(!arb.suspicious &&
+          !arb.sameBookmaker && {
+            confirmation: { status: 'pending' as const, scanAAt: at },
+          }),
       });
     }
   }
@@ -103,10 +119,31 @@ export function applyScanToRecords(
       record.status = 'dead';
       record.statusChangedAt = at;
       deadCount += 1;
+      // Vanished (or commenced) before its scan B could judge it: the
+      // honest terminal is single_sighting — telemetry keeps it, nothing
+      // ever acts on it (Phase 16 Part A).
+      if (record.confirmation?.status === 'pending') {
+        record.confirmation = { ...record.confirmation, status: 'single_sighting', scanBAt: at };
+      }
     }
   }
 
-  return { records: [...byFingerprint.values()], newCount, deadCount };
+  // 3. Phase 16 Part A: candidates this scan leaves awaiting scan B —
+  //    counted AFTER the kill pass so nothing dead is ever a candidate.
+  let pendingCandidates = 0;
+  for (const record of byFingerprint.values()) {
+    if (
+      seenNow.has(record.fingerprint) &&
+      record.status === 'active' &&
+      record.confirmation?.status === 'pending' &&
+      !record.suspicious &&
+      !record.sameBookmaker
+    ) {
+      pendingCandidates += 1;
+    }
+  }
+
+  return { records: [...byFingerprint.values()], newCount, deadCount, pendingCandidates };
 }
 
 /**

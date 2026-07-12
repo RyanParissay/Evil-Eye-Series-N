@@ -88,12 +88,14 @@ export interface BookmakerIntegration {
   recordSeen(events: OddsEvent[]): Promise<void>;
 }
 
-/** What runScan needs from OpportunityService — structural, for tests. */
+/** What runScan needs from OpportunityService — structural, for tests.
+ *  The return carries the confirmation-candidate count (Phase 16 Part A);
+ *  void is tolerated so simple test fakes stay valid. */
 export interface OpportunityLogIntegration {
   recordScan(
     opportunities: ArbOpportunity[],
     scope: { sportsScanned: string[]; regionTab: string },
-  ): Promise<void>;
+  ): Promise<{ pendingCandidates: number } | void>;
 }
 
 /** What runScan needs from SnapshotStore — structural, for tests. */
@@ -246,12 +248,18 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
       console.warn('Snapshot persistence failed:', err);
     }
   }
+  // Phase 16 Part A: persistence reports how many records this scan left
+  // pending confirmation — ≥1 makes this scan a scan A whose scan B the
+  // scheduler fires after confirmationIntervalSecs; 0 means no scan B and
+  // zero extra credits. Logged per scan (6½) for the measured hit rate.
+  let confirmationCandidates = 0;
   if (deps.opportunityLog) {
     try {
-      await deps.opportunityLog.recordScan(allDetected, {
+      const recorded = await deps.opportunityLog.recordScan(allDetected, {
         sportsScanned: scannedKeys,
         regionTab: tab.key,
       });
+      confirmationCandidates = recorded?.pendingCandidates ?? 0;
     } catch (err) {
       console.warn('Opportunity persistence failed:', err);
     }
@@ -317,6 +325,7 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
         requestsUsedTotal: usage.requestsUsedTotal,
         distinctBooks: [...new Set(rawEvents.flatMap((e) => e.bookmakers.map((b) => b.key)))],
         eventCount: rawEvents.length,
+        confirmationCandidates,
       });
     } catch (err) {
       console.warn('Scan-history append failed:', err);

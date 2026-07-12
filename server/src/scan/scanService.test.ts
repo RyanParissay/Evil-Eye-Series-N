@@ -412,6 +412,44 @@ describe('runScan', () => {
     });
   });
 
+  it('logs the confirmation-candidate count from persistence on the scan-history line (Phase 16 Part A)', async () => {
+    const appended: unknown[] = [];
+    await runScan(
+      deps(stubProvider([totalsArbEvent()]), {
+        markets: ['totals'],
+        opportunityLog: {
+          async recordScan() {
+            return { pendingCandidates: 3 };
+          },
+        },
+        scanLog: {
+          async append(entry) {
+            appended.push(entry);
+          },
+        },
+      }),
+      { topN: 5, tab: CA_TAB },
+    );
+    expect(appended[0]).toMatchObject({ confirmationCandidates: 3 });
+  });
+
+  it('a legacy/void opportunityLog (or none at all) logs zero candidates', async () => {
+    const appended: Array<{ confirmationCandidates?: number }> = [];
+    await runScan(
+      deps(stubProvider([totalsArbEvent()]), {
+        markets: ['totals'],
+        opportunityLog: { async recordScan() {} },
+        scanLog: {
+          async append(entry) {
+            appended.push(entry);
+          },
+        },
+      }),
+      { topN: 5, tab: CA_TAB },
+    );
+    expect(appended[0].confirmationCandidates).toBe(0);
+  });
+
   it('accrues the book leaderboard with the raw feed and all detected strategies (Phase 15 #1)', async () => {
     const accrued: Array<{ events: unknown[]; opportunities: unknown[] }> = [];
     const result = await runScan(
