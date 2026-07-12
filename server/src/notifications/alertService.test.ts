@@ -226,58 +226,56 @@ describe('alertWorthy (the strategy-agnostic selection core)', () => {
   });
 });
 
-describe('formatAlertMessage', () => {
-  it('includes event, market, profit and both legs', () => {
-    const message = formatAlertMessage(makeArb());
-    expect(message).toContain('Lakers @ Celtics');
-    expect(message).toContain('h2h');
-    expect(message).toContain('2.34%');
-    expect(message).toContain('Bet365: Los Angeles Lakers @2.1');
-    expect(message).toContain('Pinnacle: Boston Celtics @2.05');
-  });
+describe('formatAlertMessage (Phase 15 exact arb copy)', () => {
+  const plan = {
+    stakes: [246.99, 253.01],
+    totalStaked: 500,
+    guaranteedProfit: 18.68,
+    capped: false,
+    cappedBy: null,
+  };
+  // Constructed from local components (not a UTC ISO string) so the
+  // expected HH:MM is identical no matter the host machine's timezone.
+  const ODDS_AS_OF = new Date(2026, 6, 9, 14, 5);
 
-  it('appends the cockpit deep link when an app URL is configured', () => {
+  it('produces the exact pinned format: legs, profit, odds time, cockpit link — nothing else', () => {
     const arb = makeArb();
     const id = opportunityFingerprint(arb).slice(0, 16);
-    const message = formatAlertMessage(arb, 'http://localhost:5173');
-    expect(message).toContain(`http://localhost:5173/opportunity/${id}`);
-    // No URL configured → no dangling link.
-    expect(formatAlertMessage(arb)).not.toContain('/opportunity/');
+    const message = formatAlertMessage(arb, 'http://localhost:5173', plan, ODDS_AS_OF);
+    expect(message).toBe(
+      [
+        'Bet365 | Los Angeles Lakers @ 2.1 | $246.99',
+        'Pinnacle | Boston Celtics @ 2.05 | $253.01',
+        'Profit: $18.68 (2.34%)',
+        'odds as of 14:05',
+        `http://localhost:5173/opportunity/${id}`,
+      ].join('\n'),
+    );
   });
 
-  it('renders exact dollar stakes when a plan is supplied, flagging caps', () => {
-    const plan = {
-      stakes: [246.99, 253.01],
-      totalStaked: 500,
-      guaranteedProfit: 18.68,
-      capped: false,
-      cappedBy: null,
-    };
-    const message = formatAlertMessage(makeArb(), undefined, plan);
-    expect(message).toContain('Bet365: Los Angeles Lakers @2.1 → $246.99');
-    expect(message).toContain('Pinnacle: Boston Celtics @2.05 → $253.01');
-    expect(message).toContain('Stake $500.00 for +$18.68 guaranteed');
+  it('omits the cockpit link line when no APP_URL is configured', () => {
+    const message = formatAlertMessage(makeArb(), undefined, plan, ODDS_AS_OF);
+    expect(message).not.toContain('/opportunity/');
+    expect(message.split('\n')).toHaveLength(4); // 2 legs + profit + odds-as-of, no link
+  });
 
-    const capped = formatAlertMessage(makeArb(), undefined, {
-      ...plan,
-      stakes: [98.79, 101.21],
-      totalStaked: 200,
-      guaranteedProfit: 7.47,
-      capped: true,
-      cappedBy: 'pinnacle',
-    });
-    expect(capped).toContain('capped by pinnacle balance');
+  it('falls back to the engine per-$100 split when no dollar plan is available', () => {
+    const message = formatAlertMessage(makeArb(), undefined, undefined, ODDS_AS_OF);
+    expect(message).toContain('Bet365 | Los Angeles Lakers @ 2.1 | $48.78');
+    expect(message).toContain('Pinnacle | Boston Celtics @ 2.05 | $51.22');
+    expect(message).toContain('Profit: $2.34 (2.34%)');
 
-    // A collapsed plan (a book blocks any stake) must not print $0 nonsense.
+    // A collapsed plan (a book blocks any stake) falls back the same way —
+    // never $0 nonsense.
     const blocked = formatAlertMessage(makeArb(), undefined, {
       stakes: [0, 0],
       totalStaked: 0,
       guaranteedProfit: 0,
       capped: true,
       cappedBy: 'pinnacle',
-    });
+    }, ODDS_AS_OF);
     expect(blocked).not.toContain('$0.00');
-    expect(blocked).toContain('pinnacle balance blocks any stake');
+    expect(blocked).toContain('$48.78');
   });
 
   it('shows signed lines for point-based legs', () => {
@@ -288,9 +286,18 @@ describe('formatAlertMessage', () => {
         { ...makeArb().legs[1], point: 3.5 },
       ],
     });
-    const message = formatAlertMessage(arb);
+    const message = formatAlertMessage(arb, undefined, undefined, ODDS_AS_OF);
     expect(message).toContain('-3.5');
     expect(message).toContain('+3.5');
+  });
+
+  it('contains nothing else — no emoji, event name, sport, or the word "guaranteed"', () => {
+    const arb = makeArb();
+    const message = formatAlertMessage(arb, 'http://localhost:5173', plan, ODDS_AS_OF);
+    expect(message).not.toContain(arb.eventName);
+    expect(message).not.toContain(arb.sportTitle);
+    expect(message).not.toContain('🔔');
+    expect(message.toLowerCase()).not.toContain('guaranteed');
   });
 });
 

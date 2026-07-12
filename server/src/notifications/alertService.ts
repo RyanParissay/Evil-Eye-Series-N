@@ -92,44 +92,53 @@ export function selectAlerts(
   return { planned, droppedByRateLimit };
 }
 
+/**
+ * Exact pinned format (Phase 15 design doc) — nothing else, no emoji, no
+ * event line, no sport:
+ *   <Book> | <side> @ <odds> | $<amount>
+ *   <Book> | <side> @ <odds> | $<amount>
+ *   Profit: $X.XX (Y.YY%)
+ *   odds as of HH:MM
+ *   <APP_URL>/opportunity/<id>   (omitted when APP_URL is unset)
+ */
 export function formatAlertMessage(
   arb: ArbOpportunity,
   appUrl?: string,
   plan?: StakePlan | null,
+  oddsAsOf: Date = new Date(),
 ): string {
-  // A plan that collapsed to zero (a book's balance blocks any stake)
-  // reads as a warning, not as "$0.00" dollar amounts.
+  // A plan that collapsed to zero (a book's balance blocks any stake) — or
+  // no plan at all — falls back to the engine's own $100-basis split
+  // rather than printing $0 nonsense.
   const stakeable = plan != null && plan.totalStaked > 0;
-  const legs = arb.legs
-    .map(
-      (leg, i) =>
-        `${leg.bookmakerTitle}: ${leg.outcome}${leg.point != null ? ` ${formatPoint(leg.point)}` : ''} @${leg.odds}` +
-        (stakeable ? ` → $${plan.stakes[i].toFixed(2)}` : ''),
-    )
-    .join(' / ');
-  const money = stakeable
-    ? ` Stake $${plan.totalStaked.toFixed(2)} for +$${plan.guaranteedProfit.toFixed(2)} guaranteed${
-        plan.capped ? ` (capped by ${plan.cappedBy} balance)` : ''
-      }.`
-    : plan?.capped
-      ? ` ⚠ ${plan.cappedBy} balance blocks any stake — update balances.`
-      : '';
-  const starts = new Date(arb.commenceTime).toLocaleString('en-CA', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
+  const fallbackTotal = arb.legs.reduce((sum, leg) => sum + leg.stake, 0);
+  const legLines = arb.legs.map((leg, i) => {
+    const side = `${leg.outcome}${leg.point != null ? ` ${formatPoint(leg.point)}` : ''}`;
+    const amount = stakeable ? plan.stakes[i] : leg.stake;
+    return `${leg.bookmakerTitle} | ${side} @ ${leg.odds} | $${amount.toFixed(2)}`;
   });
+  const profitDollars = stakeable ? plan.guaranteedProfit : fallbackTotal * (arb.profitPct / 100);
+  const lines = [
+    ...legLines,
+    `Profit: $${profitDollars.toFixed(2)} (${arb.profitPct.toFixed(2)}%)`,
+    `odds as of ${formatHHMM(oddsAsOf)}`,
+  ];
   // The cockpit deep link: record ids are the fingerprint's 16-char prefix,
   // so the URL is stable across re-detections.
-  const link = appUrl
-    ? ` ${appUrl.replace(/\/$/, '')}/opportunity/${opportunityIdFromFingerprint(opportunityFingerprint(arb))}`
-    : '';
-  return `🔔 New arb: ${arb.eventName} (${arb.marketKey}) — ${arb.profitPct.toFixed(2)}% return. ${legs}.${money} Starts ${starts}.${link}`;
+  if (appUrl) {
+    const id = opportunityIdFromFingerprint(opportunityFingerprint(arb));
+    lines.push(`${appUrl.replace(/\/$/, '')}/opportunity/${id}`);
+  }
+  return lines.join('\n');
 }
 
 function formatPoint(point: number): string {
   return point > 0 ? `+${point}` : String(point);
+}
+
+/** 24h local server time — "odds as of" reads as when the price was seen. */
+function formatHHMM(date: Date): string {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
 export interface AlertDeps {
@@ -166,7 +175,7 @@ export async function notifyNewOpportunities(
       try {
         await deps.sender.send(
           subscription.phoneE164,
-          formatAlertMessage(opportunity, deps.appUrl, deps.planStakes?.(opportunity)),
+          formatAlertMessage(opportunity, deps.appUrl, deps.planStakes?.(opportunity), now),
         );
         subscription.failedSendCount = 0;
         subscription.sendTimestamps.push(now.toISOString());
