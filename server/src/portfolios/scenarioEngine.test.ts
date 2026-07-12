@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { GradeResult, OpportunityRecord, RecordGrading } from '@shared/types';
 import type { ScanGap } from '../ops/gapDetector';
-import { perSignalReturns, runScenarios, SERIES_STARTING_BANKROLL } from './scenarioEngine';
+import {
+  exportPortfoliosCsv,
+  perSignalReturns,
+  runScenarios,
+  SERIES_STARTING_BANKROLL,
+  type PortfolioSeries,
+} from './scenarioEngine';
 
 function grading(result: GradeResult, pnlPer100: number, flags: string[] = []): RecordGrading {
   return {
@@ -352,5 +358,56 @@ describe('perSignalReturns', () => {
   it('an empty series has no returns', () => {
     const report = runScenarios([], []);
     expect(perSignalReturns(report.series[0])).toEqual([]);
+  });
+});
+
+describe('exportPortfoliosCsv', () => {
+  function series(overrides: Partial<PortfolioSeries> = {}): PortfolioSeries {
+    return {
+      key: 'arb_2',
+      label: 'Arb ≥2%',
+      group: 'arb',
+      startingBankroll: SERIES_STARTING_BANKROLL,
+      bankroll: 10_200,
+      pnl: 200,
+      roiPct: 2,
+      records: 3,
+      wins: 2,
+      losses: 1,
+      pushes: 0,
+      voids: 0,
+      skipped: { count: 1, events: [{ at: '2026-01-05T00:00:00Z', recordId: 'skipped1' }] },
+      buckets: { preV13: 0, needsRules: 0, stale: 0, open: 0, excluded: 0 },
+      maxDrawdown: 50,
+      equity: [],
+      ...overrides,
+    };
+  }
+
+  function collect(rows: PortfolioSeries[]): string[] {
+    const chunks: string[] = [];
+    exportPortfoliosCsv(rows, (chunk) => chunks.push(chunk));
+    return chunks.join('').split('\n').filter((l) => l.length > 0);
+  }
+
+  it('emits a header plus one row per series: id, entries, settled count, realized P&L, ending bankroll, skipped count', () => {
+    const lines = collect([series()]);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe(
+      'series_id,entries,settled_count,realized_pnl,ending_bankroll,skipped_insufficient_count',
+    );
+    // entries=records=3, settled=records+skipped=4, pnl=200, bankroll=10200, skipped=1
+    expect(lines[1]).toBe('"arb_2",3,4,200,10200,1');
+  });
+
+  it('a series with no skips settles exactly its placed records', () => {
+    const lines = collect([series({ key: 'middle', records: 5, skipped: { count: 0, events: [] } })]);
+    expect(lines[1]).toBe('"middle",5,5,200,10200,0');
+  });
+
+  it('empty input is just the header', () => {
+    expect(collect([])).toEqual([
+      'series_id,entries,settled_count,realized_pnl,ending_bankroll,skipped_insufficient_count',
+    ]);
   });
 });

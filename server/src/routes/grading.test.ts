@@ -84,4 +84,48 @@ describe('/api/grading', () => {
     const missing = await request(app).post('/api/grading/manual-grade').send({ id: 'nope', result: 'win' });
     expect(missing.status).toBe(404);
   });
+
+  it('GET /export.csv streams graded records as Excel-safe CSV', async () => {
+    const record: OpportunityRecord = {
+      id: 'graded1',
+      fingerprint: 'f'.repeat(64),
+      strategy: 'arb',
+      eventId: 'evt-1',
+      sportKey: 'basketball_nba',
+      sportTitle: 'NBA',
+      eventName: 'Boston Celtics @ Los Angeles Lakers',
+      commenceTime: '2026-07-11T19:00:00Z',
+      marketKey: 'h2h',
+      legs: [],
+      profitPctAtDetection: 5,
+      profitPct: 5,
+      arbIndex: 1,
+      status: 'completed',
+      suspicious: false,
+      sameBookmaker: false,
+      regionTab: 'ca',
+      detectedAt: NOW.toISOString(),
+      lastSeenAt: NOW.toISOString(),
+      statusChangedAt: NOW.toISOString(),
+      alerted: false,
+      alertedAt: null,
+      grading: {
+        result: 'win',
+        legResults: ['win'],
+        pnlPer100: 12.5,
+        flags: [],
+        gradedAt: '2026-07-11T20:00:00Z',
+        source: 'auto',
+        audit: [],
+      },
+    };
+    const { app } = harness({ records: async () => [record] });
+    const res = await request(app).get('/api/grading/export.csv');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/csv');
+    expect(res.text.split('\n')[0]).toBe(
+      'id,strategy,sport,event,commence,result,pnl_per_100,source,flags,graded_at',
+    );
+    expect(res.text).toContain('"graded1","arb","NBA"');
+  });
 });

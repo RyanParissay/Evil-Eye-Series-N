@@ -16,6 +16,7 @@ import {
   rulesForSport,
 } from '../config/gradingRules';
 import { gradeRecord, manualPnlPer100, type FinalScore } from '../engine/grading';
+import { csvEscape } from '../ledger/ledgerService';
 import type { UsageInfo } from '../providers/OddsProvider';
 import type { GradingDataStore } from './gradingStore';
 
@@ -240,4 +241,39 @@ export function gradingBuckets(records: OpportunityRecord[]): GradingBuckets {
     }
   }
   return buckets;
+}
+
+/* ————— CSV export (deliverable 6) ————— */
+
+/**
+ * Graded records only, one row per record, streamed to the sink chunk by
+ * chunk — same Excel-safe conventions as ledgerService's exportCsv
+ * (quoted, formula-defanged via csvEscape).
+ */
+export function gradedRecordsCsv(
+  records: OpportunityRecord[],
+  write: (chunk: string) => void,
+): void {
+  write(
+    ['id', 'strategy', 'sport', 'event', 'commence', 'result', 'pnl_per_100', 'source', 'flags', 'graded_at'].join(
+      ',',
+    ) + '\n',
+  );
+  for (const record of records) {
+    const grading = record.grading;
+    if (!grading) continue;
+    const row = [
+      record.id,
+      record.strategy,
+      record.sportTitle,
+      record.eventName,
+      record.commenceTime,
+      grading.result,
+      grading.pnlPer100,
+      grading.source,
+      grading.flags.join('|'),
+      grading.gradedAt,
+    ];
+    write(row.map(csvEscape).join(',') + '\n');
+  }
 }

@@ -32,6 +32,7 @@
  *     buckets, and the equity curve are all untouched by a skip.
  */
 import type { OpportunityRecord } from '@shared/types';
+import { csvEscape } from '../ledger/ledgerService';
 import type { ScanGap } from '../ops/gapDetector';
 
 export const SERIES_STARTING_BANKROLL = 10_000;
@@ -234,6 +235,31 @@ export function perSignalReturns(series: PortfolioSeries): number[] {
     returns.push(round6((bankrolls[i] - bankrolls[i - 1]) / series.startingBankroll));
   }
   return returns;
+}
+
+/* ————— CSV export (deliverable 6) ————— */
+
+/**
+ * One row per series, streamed to the sink chunk by chunk — same
+ * Excel-safe conventions as ledgerService's exportCsv. "entries" is the
+ * records that actually moved the bankroll (series.records); "settled
+ * count" adds skipped-insufficient events back in — every matching record
+ * that reached a known grading outcome, whether or not THIS series' current
+ * bankroll could afford to place it.
+ */
+export function exportPortfoliosCsv(
+  series: PortfolioSeries[],
+  write: (chunk: string) => void,
+): void {
+  write(
+    ['series_id', 'entries', 'settled_count', 'realized_pnl', 'ending_bankroll', 'skipped_insufficient_count'].join(
+      ',',
+    ) + '\n',
+  );
+  for (const s of series) {
+    const row = [s.key, s.records, s.records + s.skipped.count, s.pnl, s.bankroll, s.skipped.count];
+    write(row.map(csvEscape).join(',') + '\n');
+  }
 }
 
 function round2(value: number): number {

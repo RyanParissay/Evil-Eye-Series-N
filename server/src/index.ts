@@ -10,6 +10,8 @@ import { BookmakerService } from './bookmakers/bookmakerService';
 import { BookmakerStore } from './bookmakers/bookmakerStore';
 import {
   BOOKMAKERS_FILE,
+  DATA_DIR,
+  DEFAULT_BACKUP_DIR,
   DEFAULT_PORT,
   GRADING_FILE,
   LAST_SCAN_FILE,
@@ -25,6 +27,7 @@ import {
   SCAN_HISTORY_DIR,
   WHATSAPP_DATA_FILE,
 } from './config/constants';
+import { BackupService } from './ops/backupService';
 import { GradingService } from './grading/gradingService';
 import { GradingStore } from './grading/gradingStore';
 import { createGradingRouter } from './routes/grading';
@@ -118,6 +121,15 @@ app.use('/api/bookmakers', createBookmakersRouter(bookmakerService));
 app.use('/api/ledger', createLedgerRouter(ledgerService));
 const scanHistoryStore = new ScanHistoryStore(path.join(serverRoot, SCAN_HISTORY_DIR));
 const opsStore = new OpsStore(path.join(serverRoot, OPS_FILE));
+
+// Phase 15 #6: daily backup of server/data/ (everything except the backups
+// dir itself), pruned to the newest 14. No server-side timers — triggered
+// here at startup and again fire-and-forget after each scan below; both
+// no-op if today's dated dir already exists. A backup failure must never
+// break startup or a scan.
+const backupDir = process.env.BACKUP_DIR?.trim() || path.join(serverRoot, DEFAULT_BACKUP_DIR);
+const backupService = new BackupService(path.join(serverRoot, DATA_DIR), backupDir);
+void backupService.runIfNeeded().catch((err) => console.warn('Startup backup failed:', err));
 
 // The paper haircut can be MEASURED from survival once enough history exists.
 const paperService = new PaperService(
@@ -380,6 +392,16 @@ app.use(
         });
       } catch (err) {
         console.warn('Grading poll failed:', err);
+      }
+
+      // Backups piggyback on scans too (Phase 15 #6) — fire-and-forget,
+      // no-ops if today's dated dir already exists.
+      try {
+        void backupService.runIfNeeded().catch((err) => {
+          console.warn('Backup failed:', err);
+        });
+      } catch (err) {
+        console.warn('Backup failed:', err);
       }
     },
   }),

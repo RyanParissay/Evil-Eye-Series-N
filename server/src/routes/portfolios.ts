@@ -10,6 +10,7 @@ import type { OpportunityRecord, OpsSettings, ScanLogEntry } from '@shared/types
 import { detectScanGaps } from '../ops/gapDetector';
 import { evaluateWeights, optimizeWeights } from '../portfolios/optimizer';
 import {
+  exportPortfoliosCsv,
   perSignalReturns,
   runScenarios,
   type PortfolioGroup,
@@ -105,6 +106,18 @@ export function createPortfolioRouter(deps: PortfolioRouterDeps): Router {
 
       const optimized = optimizeWeights(seriesReturns, 70);
       res.json({ ...optimized, model: true });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get('/export.csv', async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const report = await buildReport(deps, now());
+      res.setHeader('content-type', 'text/csv; charset=utf-8');
+      res.setHeader('content-disposition', 'attachment; filename="evil-eye-portfolios.csv"');
+      exportPortfoliosCsv(report.series, (chunk) => res.write(chunk));
+      res.end();
     } catch (err) {
       next(err);
     }

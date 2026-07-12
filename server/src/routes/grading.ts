@@ -7,7 +7,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import type { GradeResult, OpportunityRecord, OpsSettings, ScanLogEntry } from '@shared/types';
 import { SCORES_DAILY_CREDIT_CAP } from '../config/gradingRules';
-import { gradingBuckets, type GradingOutcome, type PollSummary } from '../grading/gradingService';
+import { gradedRecordsCsv, gradingBuckets, type GradingOutcome, type PollSummary } from '../grading/gradingService';
 import type { GradingData } from '../grading/gradingStore';
 import { detectScanGaps } from '../ops/gapDetector';
 import { errorBody } from './api';
@@ -84,6 +84,18 @@ export function createGradingRouter(deps: GradingRouterDeps): Router {
         capped: scoresSpendToday >= SCORES_DAILY_CREDIT_CAP,
         gaps: detectScanGaps(scans, opsSettings, now()),
       });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get('/export.csv', async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const records = await deps.records();
+      res.setHeader('content-type', 'text/csv; charset=utf-8');
+      res.setHeader('content-disposition', 'attachment; filename="evil-eye-graded-records.csv"');
+      gradedRecordsCsv(records, (chunk) => res.write(chunk));
+      res.end();
     } catch (err) {
       next(err);
     }

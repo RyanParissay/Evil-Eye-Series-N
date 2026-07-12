@@ -119,6 +119,12 @@ export const SCAN_HISTORY_DIR = 'data/scan-history';
 /** Score-polling ledger: daily credit spend + per-event poll state (gitignored). */
 export const GRADING_FILE = 'data/grading.json';
 
+/** Everything under here gets backed up daily (gitignored). */
+export const DATA_DIR = 'data';
+
+/** Default BACKUP_DIR when the env var is unset — override via BACKUP_DIR. */
+export const DEFAULT_BACKUP_DIR = 'data/backups';
+
 /**
  * Re-verify marks a record degraded only when fresh profit fell more than
  * this many percentage points below the detection profit — a 2.34% → 2.31%

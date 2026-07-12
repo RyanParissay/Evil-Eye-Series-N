@@ -181,3 +181,17 @@ describe('POST /api/portfolios/optimize', () => {
     }
   });
 });
+
+describe('GET /api/portfolios/export.csv', () => {
+  it('streams one CSV row per series, Excel-safe', async () => {
+    const res = await request(harness(GATE_CLEARING_RECORDS)).get('/api/portfolios/export.csv');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/csv');
+    const lines = res.text.split('\n').filter((l) => l.length > 0);
+    expect(lines[0]).toBe(
+      'series_id,entries,settled_count,realized_pnl,ending_bankroll,skipped_insufficient_count',
+    );
+    expect(lines).toHaveLength(14); // header + 13 series
+    expect(lines.some((l) => l.startsWith('"arb_2",'))).toBe(true);
+  });
+});

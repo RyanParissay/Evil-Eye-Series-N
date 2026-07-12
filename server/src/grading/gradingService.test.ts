@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import type { ArbOpportunity, OpportunityRecord, RecordGrading } from '@shared/types';
 import { OpportunityService } from '../opportunities/opportunityService';
 import type { OpportunityArchiveWriter, OpportunityData, OpportunityDataStore } from '../opportunities/opportunityStore';
-import { GradingService, gradingBuckets, type ScoresProvider } from './gradingService';
+import { GradingService, gradedRecordsCsv, gradingBuckets, type ScoresProvider } from './gradingService';
 import type { GradingData, GradingDataStore } from './gradingStore';
 
 const NOW = new Date('2026-07-11T23:00:00Z');
@@ -404,5 +404,101 @@ describe('gradingBuckets', () => {
 
   it('empty input is all zeros', () => {
     expect(gradingBuckets([])).toEqual({ graded: 0, open: 0, needsRules: 0, stale: 0, preV13: 0 });
+  });
+});
+
+describe('gradedRecordsCsv', () => {
+  function baseRecord(overrides: Partial<OpportunityRecord> = {}): OpportunityRecord {
+    return {
+      id: 'abc123',
+      fingerprint: 'abc123def456',
+      strategy: 'arb',
+      eventId: 'evt-1',
+      sportKey: 'basketball_nba',
+      sportTitle: 'NBA',
+      eventName: 'Boston Celtics @ Los Angeles Lakers',
+      commenceTime: COMMENCE,
+      marketKey: 'h2h',
+      legs: [],
+      profitPctAtDetection: 5,
+      profitPct: 5,
+      arbIndex: 1,
+      status: 'active',
+      suspicious: false,
+      sameBookmaker: false,
+      regionTab: 'ca',
+      detectedAt: NOW.toISOString(),
+      lastSeenAt: NOW.toISOString(),
+      statusChangedAt: NOW.toISOString(),
+      alerted: false,
+      alertedAt: null,
+      ...overrides,
+    };
+  }
+
+  function collect(records: OpportunityRecord[]): string[] {
+    const chunks: string[] = [];
+    gradedRecordsCsv(records, (chunk) => chunks.push(chunk));
+    return chunks.join('').split('\n').filter((l) => l.length > 0);
+  }
+
+  it('emits a header plus one row per graded record, skipping ungraded ones', () => {
+    const graded = baseRecord({
+      id: 'graded1',
+      grading: {
+        result: 'win',
+        legResults: ['win'],
+        pnlPer100: 12.5,
+        flags: ['manually_graded'],
+        gradedAt: '2026-07-11T10:00:00Z',
+        source: 'manual',
+        audit: [],
+      },
+    });
+    const ungraded = baseRecord({ id: 'open1' });
+
+    const lines = collect([graded, ungraded]);
+    expect(lines).toHaveLength(2); // header + one graded row
+    expect(lines[0]).toBe(
+      'id,strategy,sport,event,commence,result,pnl_per_100,source,flags,graded_at',
+    );
+    expect(lines[1]).toBe(
+      [
+        '"graded1"',
+        '"arb"',
+        '"NBA"',
+        '"Boston Celtics @ Los Angeles Lakers"',
+        `"${COMMENCE}"`,
+        '"win"',
+        '12.5',
+        '"manual"',
+        '"manually_graded"',
+        '"2026-07-11T10:00:00Z"',
+      ].join(','),
+    );
+  });
+
+  it('formula-defangs and quotes event names for Excel safety', () => {
+    const graded = baseRecord({
+      id: 'graded2',
+      eventName: '=HYPERLINK("evil")',
+      grading: {
+        result: 'loss',
+        legResults: ['loss'],
+        pnlPer100: -100,
+        flags: [],
+        gradedAt: '2026-07-11T10:00:00Z',
+        source: 'auto',
+        audit: [],
+      },
+    });
+    const lines = collect([graded]);
+    expect(lines[1]).toContain('"\'=HYPERLINK(""evil"")"');
+  });
+
+  it('empty input is just the header', () => {
+    expect(collect([])).toEqual([
+      'id,strategy,sport,event,commence,result,pnl_per_100,source,flags,graded_at',
+    ]);
   });
 });
