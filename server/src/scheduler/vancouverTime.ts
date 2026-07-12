@@ -18,6 +18,11 @@ export const QUIET_START_MIN = 1 * 60;
 /** 08:00 local, exclusive. */
 export const QUIET_END_MIN = 8 * 60;
 
+/** Shared copy for the route-level quiet-hours guards (manual scans + cockpit
+ *  re-verify) — the spec's "quiet hours until 08:00" message. */
+export const QUIET_HOURS_MESSAGE =
+  'Quiet hours — the eye rests until 08:00 (America/Vancouver). No scans or re-verifies run 01:00–08:00.';
+
 export interface VancouverLocal {
   /** Full year. */
   year: number;

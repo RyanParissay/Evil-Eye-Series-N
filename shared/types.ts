@@ -803,6 +803,8 @@ export type ApiErrorCode =
   | 'not_found'
   /** The resource exists but the requested change is not valid from its current state. */
   | 'conflict'
+  /** Quiet hours (01:00–08:00 America/Vancouver): no Odds API calls of any kind. */
+  | 'quiet_hours'
   | 'internal';
 
 export interface ApiErrorBody {

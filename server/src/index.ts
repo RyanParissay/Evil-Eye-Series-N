@@ -66,6 +66,7 @@ import { MockOddsProvider } from './providers/MockOddsProvider';
 import type { OddsProvider } from './providers/OddsProvider';
 import { TheOddsApiProvider } from './providers/TheOddsApiProvider';
 import { apiErrorHandler, createApiRouter } from './routes/api';
+import { quietHoursGuard } from './routes/quietHoursGuard';
 import { createBookmakersRouter } from './routes/bookmakers';
 import { createOpportunitiesRouter } from './routes/opportunities';
 import { createWhatsAppRouter } from './routes/whatsapp';
@@ -269,6 +270,10 @@ app.use(
   }),
 );
 const reconcileDeps = { opportunities: opportunityService, books: bookmakerService };
+// Quiet hours (01:00–08:00 America/Vancouver) block cockpit re-verify too —
+// it's a live provider call. Registered before the router so a quiet-hours
+// request 503s before verifyOpportunity can spend a credit.
+app.post('/api/opportunities/:id/verify', quietHoursGuard());
 app.use(
   '/api/opportunities',
   createOpportunitiesRouter(
@@ -280,6 +285,10 @@ app.use(
     },
   ),
 );
+// Manual scans are blocked in quiet hours too (spec: "zero calls of any
+// kind"). Manual scans stay never-blocked by the credit budget — that guard
+// lives only in the scheduler's plan — but quiet hours bind everything.
+app.post('/api/scan', quietHoursGuard());
 app.use(
   '/api',
   createApiRouter({

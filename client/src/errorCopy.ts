@@ -12,6 +12,8 @@ export function errorTitle(code: ApiErrorCode): string {
       return 'Out of API credits.';
     case 'network':
       return 'Network failure.';
+    case 'quiet_hours':
+      return 'Quiet hours — the eye is resting.';
     default:
       return 'Scan failed.';
   }
@@ -25,6 +27,8 @@ export function errorHint(code: ApiErrorCode): string {
       return 'Your monthly credit allowance is spent — wait for reset or upgrade the plan.';
     case 'network':
       return 'Check your connection and that the server can reach the-odds-api.com, then retry.';
+    case 'quiet_hours':
+      return 'No Odds API calls run 01:00–08:00 America/Vancouver. Try again after 08:00.';
     default:
       return 'Retry the scan; if it persists, check the server logs.';
   }
