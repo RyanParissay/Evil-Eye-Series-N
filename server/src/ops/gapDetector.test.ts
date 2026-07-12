@@ -12,6 +12,7 @@ const SETTINGS: OpsSettings = {
   monthlyCreditBudget: 20_000,
   autoStopPct: 95,
   markets: { totals: false, spreads: false },
+  confirmSecondSighting: false,
 };
 
 /** Local wall-clock time on a fixed date, round-tripped through ISO — safe

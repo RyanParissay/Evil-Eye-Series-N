@@ -564,6 +564,13 @@ export interface OpsSettings {
    * Default OFF; flip only with the budget to match.
    */
   markets: { totals: boolean; spreads: boolean };
+  /**
+   * Default OFF. When ON, a record may alert only once it's been sighted
+   * in ≥2 scans (lastSeenAt strictly after detectedAt) — delays every
+   * alert by one scan interval, filtering ghosts that vanish before the
+   * next scan. Applies to arb, EV, and middle alerts alike.
+   */
+  confirmSecondSighting: boolean;
 }
 
 export interface MiddlesSettings {

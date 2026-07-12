@@ -28,7 +28,7 @@ import {
 import { GradingService } from './grading/gradingService';
 import { GradingStore } from './grading/gradingStore';
 import { createGradingRouter } from './routes/grading';
-import { notifyNewOpportunities } from './notifications/alertService';
+import { filterConfirmedSightings, notifyNewOpportunities } from './notifications/alertService';
 import { WhatsAppStore } from './notifications/subscriptionStore';
 import { senderFromEnv } from './notifications/whatsappSender';
 import { OpportunityService } from './opportunities/opportunityService';
@@ -282,15 +282,19 @@ app.use(
       const arbs = alertable.filter((o) => !o.ev && !o.middle);
       const evBets = alertable.filter((o) => o.ev);
       const middleBets = alertable.filter((o) => o.middle);
-      const [fundSettings, books, evSettings, middlesSettings] = await Promise.all([
+      const [fundSettings, books, evSettings, middlesSettings, opsSettings] = await Promise.all([
         fundService.settings(),
         bookmakerService.list(),
         evStore.read(),
         middlesStore.read(),
+        opsStore.read(),
       ]);
-      // The paper fund watches the SAME alertable stream a phone would —
-      // arbs at the paper threshold, middles at the alert breakeven cap
-      // (stored at their worst-case FLOOR). EV proof stays grading-only.
+      // The paper fund watches the SAME alertable stream a phone would when
+      // second-sighting confirmation is off (its default) — arbs at the
+      // paper threshold, middles at the alert breakeven cap (stored at
+      // their worst-case FLOOR). EV proof stays grading-only. Paper entry
+      // timing is intentionally NOT gated by confirmSecondSighting — that
+      // toggle is scoped to phone alerts (Phase 15 #3).
       try {
         await paperService.considerEntries(
           [...arbs, ...middleBets],
@@ -299,6 +303,24 @@ app.use(
       } catch (err) {
         console.warn('Paper fund entry failed:', err);
       }
+
+      // Second-sighting confirmation (ops toggle, default off): an
+      // opportunity may reach a phone alert only once it's been seen in ≥2
+      // scans, filtering ghosts that vanish before the next one. The
+      // candidate set becomes records SEEN THIS SCAN not yet confirmed —
+      // applies uniformly to arb, EV, and middle candidates.
+      let alertArbs = arbs;
+      let alertEvBets = evBets;
+      let alertMiddleBets = middleBets;
+      if (opsSettings.confirmSecondSighting) {
+        const records = await opportunityService.list();
+        const sightingByFingerprint = new Map(records.map((r) => [r.fingerprint, r]));
+        const sightingOf = (fingerprint: string) => sightingByFingerprint.get(fingerprint);
+        alertArbs = filterConfirmedSightings(arbs, true, sightingOf);
+        alertEvBets = filterConfirmedSightings(evBets, true, sightingOf);
+        alertMiddleBets = filterConfirmedSightings(middleBets, true, sightingOf);
+      }
+
       const balances = new Map(books.map((b) => [b.key, b.balance ?? null]));
       const { sentFingerprints } = await notifyNewOpportunities(
         {
@@ -310,10 +332,10 @@ app.use(
               ? (arb) => planStakes(arb.legs, fundSettings.defaultStake, balances)
               : undefined,
         },
-        arbs,
+        alertArbs,
       );
       let evSent: string[] = [];
-      if (evBets.length > 0) {
+      if (alertEvBets.length > 0) {
         try {
           const result = await notifyEvBets(
             {
@@ -323,7 +345,7 @@ app.use(
               evThresholdPercent: evSettings.alertMinEdgePct,
               stake: fundSettings.defaultStake > 0 ? fundSettings.defaultStake : undefined,
             },
-            evBets,
+            alertEvBets,
           );
           evSent = result.sentFingerprints;
         } catch (err) {
@@ -331,7 +353,7 @@ app.use(
         }
       }
       let middleSent: string[] = [];
-      if (middleBets.length > 0) {
+      if (alertMiddleBets.length > 0) {
         try {
           const result = await notifyMiddleBets(
             {
@@ -341,7 +363,7 @@ app.use(
               maxBreakevenPct: middlesSettings.alertMaxBreakevenPct,
               stake: fundSettings.defaultStake > 0 ? fundSettings.defaultStake : undefined,
             },
-            middleBets,
+            alertMiddleBets,
           );
           middleSent = result.sentFingerprints;
         } catch (err) {

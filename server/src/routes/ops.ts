@@ -243,6 +243,12 @@ function parseOpsPatch(
     }
     patch.markets = { totals: markets.totals, spreads: markets.spreads };
   }
+  if ('confirmSecondSighting' in raw) {
+    if (typeof raw.confirmSecondSighting !== 'boolean') {
+      return { ok: false, message: 'confirmSecondSighting must be boolean' };
+    }
+    patch.confirmSecondSighting = raw.confirmSecondSighting;
+  }
   if (Object.keys(patch).length === 0) return { ok: false, message: 'Empty settings patch' };
   return { ok: true, patch };
 }

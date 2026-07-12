@@ -13,6 +13,7 @@ const OPS_SETTINGS: OpsSettings = {
   monthlyCreditBudget: 20_000,
   autoStopPct: 95,
   markets: { totals: false, spreads: false },
+  confirmSecondSighting: false,
 };
 
 function grading(result: GradeResult, pnlPer100: number): RecordGrading {

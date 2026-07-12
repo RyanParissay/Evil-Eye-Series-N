@@ -29,6 +29,7 @@ const DEFAULTS: OpsSettings = {
   monthlyCreditBudget: 20_000,
   autoStopPct: 95,
   markets: { totals: false, spreads: false },
+  confirmSecondSighting: false,
 };
 
 function harness(scans: ScanLogEntry[] = []) {
@@ -80,11 +81,23 @@ describe('/api/ops', () => {
       { autoStopPct: 150 },
       { weekday: { startMinutes: -5, endMinutes: 100 } },
       { monthlyCreditBudget: -1 },
+      { confirmSecondSighting: 'yes' },
       {},
     ]) {
       const bad = await request(app).patch('/api/ops/settings').send(body);
       expect(bad.status).toBe(400);
     }
+  });
+
+  it('PATCH toggles confirmSecondSighting', async () => {
+    const { app } = harness();
+    const on = await request(app).patch('/api/ops/settings').send({ confirmSecondSighting: true });
+    expect(on.status).toBe(200);
+    expect(on.body.confirmSecondSighting).toBe(true);
+
+    const off = await request(app).patch('/api/ops/settings').send({ confirmSecondSighting: false });
+    expect(off.status).toBe(200);
+    expect(off.body.confirmSecondSighting).toBe(false);
   });
 
   it('cost estimate reflects market toggles: OFF = today, each toggle multiplies', async () => {

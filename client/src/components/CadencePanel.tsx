@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { OpsSettings } from '../../../shared/types';
-import { fetchCostEstimate, patchOpsSettings, type CostEstimate } from '../api';
+import type { OpsSettings, SurvivalStats } from '../../../shared/types';
+import { fetchCostEstimate, fetchSurvival, patchOpsSettings, type CostEstimate } from '../api';
 import type { BudgetState, CadenceState } from '../cadence';
 import { formatCountdown, msUntilNextScan } from '../autoScan';
 
@@ -32,6 +32,7 @@ export function CadencePanel({
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<CostEstimate | null>(null);
+  const [survival, setSurvival] = useState<SurvivalStats | null>(null);
 
   // Pre-scan cost, from the live fetch plan + enabled markets — the
   // number that moves when a market toggle does. Never silent.
@@ -40,6 +41,14 @@ export function CadencePanel({
       .then(setEstimate)
       .catch(() => setEstimate(null));
   }, [regionTab, topN, settings.markets.totals, settings.markets.spreads]);
+
+  // The survival readout beside the second-sighting toggle — same
+  // zero-credit evidence /api/ops/survival already computes.
+  useEffect(() => {
+    fetchSurvival()
+      .then(setSurvival)
+      .catch(() => setSurvival(null));
+  }, []);
 
   async function apply(patch: Partial<OpsSettings>) {
     setError(null);
@@ -173,6 +182,28 @@ export function CadencePanel({
               }
             />
           </label>
+          <div className="cadence-second-sight">
+            <label className="micro-label cadence-market">
+              confirm second sighting
+              <input
+                type="checkbox"
+                checked={settings.confirmSecondSighting}
+                onChange={(e) => void apply({ confirmSecondSighting: e.target.checked })}
+              />
+            </label>
+            <span className="micro-label">
+              delays every alert by one scan interval (~5 min); filters ghosts
+              {survival && survival.overall.samples > 0 && (
+                <>
+                  {' · '}
+                  {survival.overall.rate == null
+                    ? '—'
+                    : `${Math.round(survival.overall.rate * 100)}%`}{' '}
+                  survive one scan interval · {survival.overall.samples} samples
+                </>
+              )}
+            </span>
+          </div>
         </div>
       )}
       {error && <p className="micro-label cadence-error">{error}</p>}

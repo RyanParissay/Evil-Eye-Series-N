@@ -15,6 +15,7 @@ export const DEFAULT_OPS_SETTINGS: OpsSettings = {
   // Extra markets multiply every odds call's credits — the operator
   // flips these deliberately, with the budget to match (Phase 12).
   markets: { totals: false, spreads: false },
+  confirmSecondSighting: false,
 };
 
 /** Structural interface so tests can substitute an in-memory store. */

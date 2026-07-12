@@ -95,6 +95,28 @@ export function alertWorthy(
   return picks;
 }
 
+/**
+ * Second-sighting confirmation gate (ops toggle, default off; applies to
+ * arb, EV, and middle alerts alike — index.ts wires it from ops settings
+ * before splitting the candidate set by strategy). When ON, an opportunity
+ * may go on to alertWorthy only once it's been sighted in ≥2 scans
+ * (lastSeenAt strictly after detectedAt) — a record gated at first sighting
+ * clears on the scan that re-sees it. Unknown sighting history never
+ * guesses its way past the gate. Pure: the caller supplies the lookup so
+ * this stays I/O-free and unit-testable.
+ */
+export function filterConfirmedSightings(
+  opportunities: ArbOpportunity[],
+  confirmSecondSighting: boolean,
+  sightingOf: (fingerprint: string) => { detectedAt: string; lastSeenAt: string } | undefined,
+): ArbOpportunity[] {
+  if (!confirmSecondSighting) return opportunities;
+  return opportunities.filter((opportunity) => {
+    const sighting = sightingOf(opportunityFingerprint(opportunity));
+    return sighting != null && sighting.lastSeenAt > sighting.detectedAt;
+  });
+}
+
 export function selectAlerts(
   opportunities: ArbOpportunity[],
   data: WhatsAppData,

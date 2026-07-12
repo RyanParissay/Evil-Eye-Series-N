@@ -2189,6 +2189,13 @@ select.bm-input {
   accent-color: var(--yellow);
 }
 
+.cadence-second-sight {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 46ch;
+}
+
 /* ————————————————————————————————————————————————
    PORTFOLIOS — /portfolios. Namespace: .portfolio-*
    13 SIMULATED paper series + the combo optimizer. Layout only —
