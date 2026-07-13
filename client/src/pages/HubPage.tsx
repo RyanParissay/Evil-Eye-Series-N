@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type {
   ApiErrorCode,
@@ -8,6 +8,7 @@ import type {
   HubProfile,
   HubProfileReport,
   HubStake,
+  OpportunityRecord,
   OpportunityStrategy,
 } from '../../../shared/types';
 import {
@@ -16,26 +17,41 @@ import {
   deleteHubProfile,
   fetchHubLeaderboards,
   fetchHubReports,
+  fetchOpportunity,
   updateHubProfile,
   type HubProfileInput,
 } from '../api';
 import { EquityChart } from '../components/EquityChart';
 import { EyeGlyph } from '../components/EyeGlyph';
+import { SafetyBadge } from '../components/SafetyBadge';
 import { SafetyCostPanel } from '../components/SafetyCostPanel';
 import { errorHint, errorTitle } from '../errorCopy';
 import {
   describeStake,
   equityToProfitCurve,
   filterPositions,
+  openBets,
+  openBetStatus,
+  openStakeTotal,
+  placedLabel,
   resultLabel,
+  type OpenBet,
   type PositionResultFilter,
   type PositionStrategyFilter,
 } from '../hub';
+import { hasUsableRoundedStakes } from '../safetyDisplay';
+import { useSafetySettings } from '../useSafetySettings';
 
 const STRATEGIES: readonly OpportunityStrategy[] = ['arb', 'ev', 'middle'];
 const STRATEGY_LABEL: Record<OpportunityStrategy, string> = { arb: 'Arb', ev: 'EV', middle: 'Middles' };
 
-type Segment = 'profile' | 'leaderboards' | 'safety';
+type Segment = 'profile' | 'open' | 'leaderboards' | 'safety';
+const SEGMENT_LABEL: Record<Segment, string> = {
+  profile: 'PROFILE',
+  open: 'OPEN BETS',
+  leaderboards: 'LEADERBOARDS',
+  safety: 'COST OF SAFETY',
+};
 type FormMode = { kind: 'closed' } | { kind: 'new' } | { kind: 'edit'; profile: HubProfile };
 
 /**
@@ -125,7 +141,7 @@ export function HubPage() {
       </header>
 
       <div className="risk-segments" role="tablist" aria-label="Analytics Hub views">
-        {(['profile', 'leaderboards', 'safety'] as const).map((key) => (
+        {(['profile', 'open', 'leaderboards', 'safety'] as const).map((key) => (
           <button
             key={key}
             type="button"
@@ -134,7 +150,7 @@ export function HubPage() {
             className={`risk-segment${segment === key ? ' is-active' : ''}`}
             onClick={() => setSegment(key)}
           >
-            {key === 'profile' ? 'PROFILE' : key === 'leaderboards' ? 'LEADERBOARDS' : 'COST OF SAFETY'}
+            {SEGMENT_LABEL[key]}
           </button>
         ))}
       </div>
@@ -187,10 +203,13 @@ export function HubPage() {
               onStrategyFilter={setStrategyFilter}
               onResultFilter={setResultFilter}
               positions={filteredPositions}
+              onOpenBets={() => setSegment('open')}
             />
           )}
         </>
       )}
+
+      {!error && reports && segment === 'open' && <OpenBetsView reports={reports} />}
 
       {!error && leaderboards && segment === 'leaderboards' && <LeaderboardsView boards={leaderboards} />}
 
@@ -390,6 +409,7 @@ function ProfileReportView({
   onStrategyFilter,
   onResultFilter,
   positions,
+  onOpenBets,
 }: {
   report: HubProfileReport;
   strategyFilter: PositionStrategyFilter;
@@ -397,6 +417,7 @@ function ProfileReportView({
   onStrategyFilter: (v: PositionStrategyFilter) => void;
   onResultFilter: (v: PositionResultFilter) => void;
   positions: HubProfileReport['positions'];
+  onOpenBets: () => void;
 }) {
   const { profile } = report;
   return (
@@ -428,10 +449,16 @@ function ProfileReportView({
             {report.wins} / {report.losses} / {report.pushes} / {report.voids}
           </strong>
         </div>
-        <div className="ledger-stat">
+        <button
+          type="button"
+          className="ledger-stat hub-pending-link"
+          onClick={onOpenBets}
+          title="All open bets, every profile"
+        >
           <span className="micro-label">pending</span>
           <strong>{report.pending}</strong>
-        </div>
+          <span className="micro-label hub-pending-cue">open bets →</span>
+        </button>
         <div className="ledger-stat">
           <span className="micro-label">exposure</span>
           <strong>${report.exposure.toFixed(2)}</strong>
@@ -563,6 +590,224 @@ function ProfileReportView({
         </p>
       )}
     </>
+  );
+}
+
+/* ————— OPEN BETS — every profile's pending purchases, one ledger ————— */
+
+type RecordState =
+  | { kind: 'loading' }
+  | { kind: 'ready'; record: OpportunityRecord }
+  | { kind: 'unavailable' };
+
+/**
+ * The portfolio-wide at-risk view: pending positions from EVERY profile in
+ * one list (the PROFILE tab is per-profile — open risk isn't). Sorted
+ * soonest-to-resolve first, so the money that will move next is at the top.
+ * Every dollar is a server-recorded SIMULATED stake rendered verbatim; the
+ * only arithmetic here is summing those stakes for the header.
+ */
+function OpenBetsView({ reports }: { reports: HubProfileReport[] }) {
+  const bets = useMemo(() => openBets(reports), [reports]);
+  const safetySettings = useSafetySettings();
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [records, setRecords] = useState<Record<string, RecordState>>({});
+  // Keep "starts in 3h 12m" honest while the tab sits open. Display-only —
+  // no fetches ride this tick.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const profilesHolding = new Set(bets.map((b) => b.profileId)).size;
+
+  function toggle(key: string, recordId: string) {
+    const opening = expandedKey !== key;
+    setExpandedKey(opening ? key : null);
+    if (opening && !records[recordId]) {
+      setRecords((cache) => ({ ...cache, [recordId]: { kind: 'loading' } }));
+      fetchOpportunity(recordId)
+        .then((record) => setRecords((cache) => ({ ...cache, [recordId]: { kind: 'ready', record } })))
+        .catch(() => setRecords((cache) => ({ ...cache, [recordId]: { kind: 'unavailable' } })));
+    }
+  }
+
+  if (bets.length === 0) {
+    return (
+      <div className="state-block">
+        <EyeGlyph size={64} state="closed" />
+        <p className="state-title">No open bets.</p>
+        <p className="state-detail">
+          Confirmed opportunities that pass the safety gate are purchased automatically — the
+          dense scan window runs 14:00–23:00.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <section className="hub-open">
+      <div className="ledger-heads hub-open-heads">
+        <div className="ledger-stat">
+          <span className="micro-label">open bets</span>
+          <strong>{bets.length}</strong>
+        </div>
+        <div className="ledger-stat">
+          <span className="micro-label">at risk</span>
+          <strong>${openStakeTotal(bets).toFixed(2)}</strong>
+        </div>
+        <div className="ledger-stat">
+          <span className="micro-label">profiles holding</span>
+          <strong>{profilesHolding}</strong>
+        </div>
+      </div>
+
+      <p className="hub-open-note micro-label">
+        every profile's pending purchases · sorted soonest to resolve — in play first ·{' '}
+        <span className="hub-badge">simulated</span>
+      </p>
+
+      <div className="risk-table-wrap">
+        <table className="ledger-table hub-open-table">
+          <thead>
+            <tr>
+              <th>Event</th>
+              <th>Strategy</th>
+              <th>Profile</th>
+              <th>Stake</th>
+              <th>Placed</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {bets.map((bet) => {
+              const key = `${bet.profileId}:${bet.position.purchase.recordId}`;
+              const expanded = expandedKey === key;
+              return (
+                <Fragment key={key}>
+                  <OpenBetRow bet={bet} now={now} expanded={expanded} onToggle={() => toggle(key, bet.position.purchase.recordId)} />
+                  {expanded && (
+                    <tr className="hub-open-detail-row">
+                      <td colSpan={7}>
+                        <OpenBetDetail
+                          state={records[bet.position.purchase.recordId]}
+                          safetySettings={safetySettings}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function OpenBetRow({
+  bet,
+  now,
+  expanded,
+  onToggle,
+}: {
+  bet: OpenBet;
+  now: Date;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const { position } = bet;
+  const status = openBetStatus(position.commenceTime, now);
+  return (
+    <tr className={`hub-open-row${expanded ? ' is-expanded' : ''}`} onClick={onToggle}>
+      <td>
+        <span className="micro-label">{position.sportTitle || '—'}</span>
+        <br />
+        {position.eventName || '—'}
+      </td>
+      <td>
+        <span className={`hub-open-strategy is-${position.purchase.strategy}`}>
+          {STRATEGY_LABEL[position.purchase.strategy]}
+        </span>
+      </td>
+      <td>{bet.profileName}</td>
+      <td className="num">${position.purchase.stake.toFixed(2)}</td>
+      <td className="hub-open-placed">{placedLabel(position.purchase.at, now)}</td>
+      <td className="hub-open-status-cell">
+        {status.kind === 'unknown' && '—'}
+        {status.kind === 'upcoming' && (
+          <>
+            <span className="hub-open-status-note">starts in </span>
+            <strong className="num">{status.countdown}</strong>
+          </>
+        )}
+        {status.kind === 'in_play' && (
+          <>
+            <strong>in play</strong>
+            <span className="hub-open-status-note"> · awaiting grade</span>
+          </>
+        )}
+      </td>
+      <td>
+        <button
+          type="button"
+          className="hub-open-toggle micro-label"
+          aria-expanded={expanded}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle();
+          }}
+        >
+          {expanded ? 'legs ▴' : 'legs ▾'}
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function OpenBetDetail({
+  state,
+  safetySettings,
+}: {
+  state: RecordState | undefined;
+  safetySettings: ReturnType<typeof useSafetySettings>;
+}) {
+  if (!state || state.kind === 'loading') {
+    return <span className="micro-label">loading record…</span>;
+  }
+  if (state.kind === 'unavailable') {
+    return <span className="micro-label">record unavailable — aged out of the active file</span>;
+  }
+  const { record } = state;
+  const rounded = hasUsableRoundedStakes(record.legs.length, record.safety)
+    ? record.safety!.roundedStakes!
+    : null;
+  return (
+    <div className="hub-open-detail">
+      <ul className="hub-open-legs">
+        {record.legs.map((leg, i) => (
+          <li key={`${leg.bookmakerKey}-${leg.outcome}-${leg.point}`}>
+            <span className="hub-open-leg-book">{leg.bookmakerTitle}</span>
+            <span className="hub-open-leg-side">
+              {leg.outcome}
+              {leg.point != null && ` ${leg.point > 0 ? `+${leg.point}` : leg.point}`}
+              {' @ '}
+              {leg.odds.toFixed(2)}
+            </span>
+            {rounded && <span className="hub-open-leg-stake num">${rounded[i].toFixed(0)}</span>}
+          </li>
+        ))}
+      </ul>
+      <div className="hub-open-detail-side">
+        {record.safety && <SafetyBadge safety={record.safety} settings={safetySettings} compact />}
+        <Link className="card-cockpit-link micro-label" to={`/opportunity/${record.id}`}>
+          open cockpit →
+        </Link>
+      </div>
+    </div>
   );
 }
 

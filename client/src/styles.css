@@ -2778,6 +2778,159 @@ select.bm-input {
   padding: 32px 12px;
 }
 
+/* ————— Open bets (fourth segment): the at-risk ledger ————— */
+
+/* The PROFILE tab's pending tile is the doorway here — a real button
+   wearing the .ledger-stat frame, with a yellow cue on hover. */
+.hub-pending-link {
+  background: var(--black);
+  color: var(--white);
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hub-pending-link:hover,
+.hub-pending-link:focus-visible {
+  border-color: var(--yellow);
+  outline: none;
+}
+
+.hub-pending-link:hover .hub-pending-cue,
+.hub-pending-link:focus-visible .hub-pending-cue {
+  color: var(--yellow);
+}
+
+.hub-open {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 20px;
+}
+
+.hub-open-table {
+  min-width: 720px;
+}
+
+.hub-open-row {
+  cursor: pointer;
+}
+
+.hub-open-row:hover td {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* The detail row carries the closing rule for an expanded pair. */
+.hub-open-row.is-expanded td {
+  border-bottom-color: transparent;
+}
+
+/* Strategy is ink, not chrome: red = guaranteed-arb family, yellow =
+   speculative family (EV/middles) — the app's one color sentence. */
+.hub-open-strategy {
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.hub-open-strategy.is-arb {
+  color: var(--red);
+}
+
+.hub-open-strategy.is-ev,
+.hub-open-strategy.is-middle {
+  color: var(--yellow);
+}
+
+.hub-open-placed {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The status cell tells the lifecycle typographically: grey verb, bold
+   figure — "starts in 3h 12m" → "in play · awaiting grade". */
+.hub-open-status-cell {
+  white-space: nowrap;
+}
+
+.hub-open-status-cell strong {
+  font-weight: 900;
+}
+
+.hub-open-status-cell .num {
+  text-align: left;
+}
+
+.hub-open-status-note {
+  color: var(--grey);
+  font-size: 12px;
+}
+
+.hub-open-toggle {
+  background: none;
+  border: none;
+  color: var(--grey);
+  font-family: inherit;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.hub-open-toggle:hover,
+.hub-open-toggle:focus-visible {
+  color: var(--yellow);
+  outline: none;
+}
+
+.hub-open-detail-row td {
+  padding: 0 8px 16px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* Yellow left rule = the Hub's simulated family, same idiom as
+   .ledger-note's red rule. */
+.hub-open-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+  align-items: center;
+  margin-top: 10px;
+  border-left: 2px solid var(--yellow);
+  padding-left: 14px;
+}
+
+.hub-open-legs {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hub-open-legs li {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+}
+
+.hub-open-leg-book {
+  font-weight: 700;
+  min-width: 110px;
+}
+
+/* Rounded ($5-camouflage) stakes are the PRIMARY displayed dollars. */
+.hub-open-leg-stake {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.hub-open-detail-side {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-left: auto;
+}
+
 @media (max-width: 720px) {
   .hub-profile-bar {
     flex-direction: column;
