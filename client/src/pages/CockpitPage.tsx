@@ -23,6 +23,7 @@ import {
   verifyOpportunity,
   type SafetyRotationReport,
 } from '../api';
+import { cockpitClv, formatClvPct, type CockpitClv } from '../clv';
 import { loadBankroll, saveBankroll } from '../cockpit';
 import { EyeGlyph } from '../components/EyeGlyph';
 import { SafetyBadge } from '../components/SafetyBadge';
@@ -435,6 +436,8 @@ function Cockpit({
         )}
       </section>
 
+      <ClvReadout record={record} />
+
       {record.status === 'completed' && (
         <div className="cockpit-stamp" role="status">
           <span className="cockpit-stamp-title">Completed</span>
@@ -821,6 +824,82 @@ function Cockpit({
         Odds comparison and information only — verify prices at the book before staking anything.
       </footer>
     </main>
+  );
+}
+
+/**
+ * Phase 18: the record's own CLV, shown ONLY once its closing has frozen
+ * (record.closing exists AND the event commenced — before that the close is
+ * still a rolling candidate and there is nothing honest to report). The math
+ * comes from the pure display mirror in clv.ts; server engine/clv.ts is the
+ * authority on semantics (excluded null legs, renormalized stake weights).
+ */
+function ClvReadout({ record }: { record: OpportunityRecord }) {
+  const clv: CockpitClv | null = cockpitClv(record, Date.now());
+  if (!clv) return null;
+  const captureLead = Math.round(record.closing!.minutesToCommence);
+
+  return (
+    <section className="cockpit-clv" aria-label="Closing line value">
+      <p className="micro-label">
+        closing line value · {clv.basis === 'execution' ? 'fills basis' : 'alert basis'} · close
+        captured {captureLead} min before start
+      </p>
+      {clv.rawClvPct != null ? (
+        <p className="cockpit-clv-record">
+          <span className="cockpit-clv-pair">
+            <strong className={clv.rawClvPct >= 0 ? 'is-up' : 'is-down'}>
+              {formatClvPct(clv.rawClvPct)}
+            </strong>
+            <span className="micro-label">vs close</span>
+          </span>
+          {clv.trueClvPct != null && (
+            <span className="cockpit-clv-pair">
+              <strong className={clv.trueClvPct >= 0 ? 'is-up' : 'is-down'}>
+                {formatClvPct(clv.trueClvPct)}
+              </strong>
+              <span className="micro-label">vs sharp close</span>
+            </span>
+          )}
+        </p>
+      ) : (
+        <p className="micro-label">
+          close captured, but no leg was still priced at the freeze — CLV unmeasured
+        </p>
+      )}
+      <ul className="cockpit-clv-legs">
+        {clv.legs.map((leg, i) => (
+          <li className="cockpit-clv-leg" key={`${record.legs[i].bookmakerKey}-${record.legs[i].outcome}`}>
+            <span className="micro-label">
+              {record.legs[i].bookmakerTitle} · {record.legs[i].outcome}
+            </span>
+            {leg.rawClvPct != null ? (
+              <span className="cockpit-clv-leg-figs">
+                got {leg.basisOdds.toFixed(2)} / closed {leg.closingOdds!.toFixed(2)} →{' '}
+                <strong className={leg.rawClvPct >= 0 ? 'is-up' : 'is-down'}>
+                  {formatClvPct(leg.rawClvPct)}
+                </strong>
+                {leg.trueClvPct != null && (
+                  <span className="micro-label cockpit-clv-sharp">
+                    · sharp {formatClvPct(leg.trueClvPct)}
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span className="cockpit-clv-leg-figs micro-label">
+                got {leg.basisOdds.toFixed(2)} / closed — · excluded, not priced at the freeze
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {clv.rawClvPct != null && clv.usableLegs < clv.legs.length && (
+        <p className="micro-label">
+          stake-weighted across {clv.usableLegs} of {clv.legs.length} legs — excluded legs
+          renormalize, never count as zero
+        </p>
+      )}
+    </section>
   );
 }
 
