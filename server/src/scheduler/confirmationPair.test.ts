@@ -135,14 +135,23 @@ class MemSender implements WhatsAppSender {
   }
 }
 
-/** One NBA h2h event priced by two CA-accessible books; odds are mutable so
+/** One h2h event priced by two CA-accessible books; odds are mutable so
  *  a test can drift the edge between scans A and B. */
-function makeEvent(h: Harness, homeOdds: number, awayOdds: number): OddsEvent {
+function makeEvent(
+  h: Harness,
+  homeOdds: number,
+  awayOdds: number,
+  sport: { key: string; title: string; eventId: string } = {
+    key: 'basketball_nba',
+    title: 'NBA',
+    eventId: 'evt-1',
+  },
+): OddsEvent {
   const at = new Date(h.current).toISOString();
   return {
-    id: 'evt-1',
-    sportKey: 'basketball_nba',
-    sportTitle: 'NBA',
+    id: sport.eventId,
+    sportKey: sport.key,
+    sportTitle: sport.title,
     commenceTime: new Date(h.current + 8 * 3_600_000).toISOString(),
     homeTeam: 'Celtics',
     awayTeam: 'Lakers',
@@ -183,6 +192,8 @@ interface World {
   h: Harness;
   provider: { fetchCalls: number };
   events: OddsEvent[]; // mutable between scans
+  /** Sports whose odds fetch fails (rate limit / outage) — mutable per scan. */
+  failSports: Set<string>;
   scanLog: ScanLogEntry[];
   sender: MemSender;
   opportunityService: OpportunityService;
@@ -193,9 +204,11 @@ interface World {
 }
 
 /** Compose the world exactly the way index.ts composes it. */
-function makeWorld(): World {
+function makeWorld(opts: { sports?: Array<{ key: string; title: string }> } = {}): World {
   const h = new Harness(vancouverEpochOf(2026, 1, 15, 15 * 60)); // 15:00 PST
+  const sports = opts.sports ?? [{ key: 'basketball_nba', title: 'NBA' }];
   const events: OddsEvent[] = [];
+  const failSports = new Set<string>();
   const scanLog: ScanLogEntry[] = [];
   let lastMeta: ScanMeta | null = null;
 
@@ -204,17 +217,22 @@ function makeWorld(): World {
     mode: 'mock' as const,
     async listSports(): Promise<SportsResult> {
       return {
-        sports: [
-          { key: 'basketball_nba', title: 'NBA', group: 'b', active: true, hasOutrights: false },
-        ],
+        sports: sports.map((s) => ({
+          key: s.key,
+          title: s.title,
+          group: 'b',
+          active: true,
+          hasOutrights: false,
+        })),
         usage: { requestsUsedTotal: 100, requestsRemainingTotal: 900, creditsCharged: 0 },
       };
     },
-    async fetchOdds(_sport: string, params: FetchOddsParams): Promise<OddsResult> {
+    async fetchOdds(sport: string, params: FetchOddsParams): Promise<OddsResult> {
       provider.fetchCalls += 1;
+      if (failSports.has(sport)) throw new Error(`rate limited: ${sport}`);
       const credits = params.markets.length * params.regions.length;
       return {
-        events: [...events],
+        events: events.filter((e) => e.sportKey === sport),
         usage: { requestsUsedTotal: 100, requestsRemainingTotal: 900, creditsCharged: credits },
       };
     },
@@ -297,10 +315,15 @@ function makeWorld(): World {
       const before = await opportunityService.pendingConfirmations();
       if (before.length === 0) return;
       const tab = regionTabByKey(params.regionTab)!;
-      await runScan(scanDeps, { topN: params.topN, tab });
+      const { meta } = await runScan(scanDeps, { topN: params.topN, tab });
+      // Coverage: only sports scan B SUCCESSFULLY fetched may judge
+      // candidates — meta.sportsScanned is every ATTEMPTED sport, so
+      // subtract the failures.
+      const failed = new Set(meta.sportsFailed);
+      const covered = new Set(meta.sportsScanned.filter((s) => !failed.has(s)));
       const after = await opportunityService.list();
       const confirmed = await opportunityService.applyConfirmations(
-        matchConfirmationPair(before, after, h.now()),
+        matchConfirmationPair(before, after, h.now(), covered),
       );
       await onConfirmed(confirmed);
     },
@@ -335,6 +358,7 @@ function makeWorld(): World {
     h,
     provider,
     events,
+    failSports,
     scanLog,
     sender,
     opportunityService,
@@ -434,5 +458,76 @@ describe('confirmation pair — acceptance fixtures (Phase 16 Part A)', () => {
       return rest as OpportunityRecord;
     });
     expect(computeSurvival(stripped, w.scanLog, now)).toEqual(withConfirmation);
+  });
+
+  it('a sport scan B fails to fetch leaves its candidate PENDING (never single_sighting) — a later B judges it fairly', async () => {
+    const NHL = { key: 'icehockey_nhl', title: 'NHL', eventId: 'evt-2' };
+    const w = makeWorld({
+      sports: [
+        { key: 'basketball_nba', title: 'NBA' },
+        { key: 'icehockey_nhl', title: 'NHL' },
+      ],
+    });
+    w.events.push(makeEvent(w.h, 2.1, 2.1)); // NBA ~5% arb
+    w.events.push(makeEvent(w.h, 2.1, 2.1, NHL)); // NHL ~5% arb
+    const scanAAt = w.h.current;
+    await w.scanA();
+    expect(w.scanLog[0].confirmationCandidates).toBe(2);
+
+    // Scan B's NHL fetch is rate-limited away — B under-covers.
+    w.failSports.add('icehockey_nhl');
+    await w.h.advanceTo(scanAAt + 61_000);
+
+    const byId = () => ({
+      nba: w.records().find((r) => r.sportKey === 'basketball_nba')!,
+      nhl: w.records().find((r) => r.sportKey === 'icehockey_nhl')!,
+    });
+    // B judged only what it covered: NBA confirmed + alerted; the NHL
+    // candidate was NOT judged absent — still pending, still active.
+    expect(byId().nba.confirmation).toMatchObject({ status: 'confirmed', edgeDeltaPp: 0 });
+    expect(byId().nhl.confirmation).toMatchObject({ status: 'pending' });
+    expect(byId().nhl.status).toBe('active'); // the kill pass may not touch an unfetched sport
+    expect(w.sender.sent).toHaveLength(1);
+
+    // The sport recovers; the still-due pair re-fires B on the next tick
+    // and the candidate gets its fair judgment.
+    w.failSports.clear();
+    await w.h.advanceTo(scanAAt + 30 * 60_000);
+    w.stop();
+    expect(byId().nhl.confirmation).toMatchObject({ status: 'confirmed', edgeDeltaPp: 0 });
+    expect(byId().nhl.alerted).toBe(true);
+    expect(w.sender.sent).toHaveLength(2); // each confirmed exactly once
+  });
+
+  it('an uncovered candidate that stays pending past the lapse window still expires to single_sighting — bounded retries, honest terminal', async () => {
+    const NHL = { key: 'icehockey_nhl', title: 'NHL', eventId: 'evt-2' };
+    const w = makeWorld({
+      sports: [
+        { key: 'basketball_nba', title: 'NBA' },
+        { key: 'icehockey_nhl', title: 'NHL' },
+      ],
+    });
+    w.events.push(makeEvent(w.h, 2.1, 2.1, NHL)); // the only candidate is NHL
+    const scanAAt = w.h.current;
+    await w.scanA();
+    expect(w.scanLog[0].confirmationCandidates).toBe(1);
+
+    // NHL stays unfetchable for good — every B under-covers it.
+    w.failSports.add('icehockey_nhl');
+    await w.h.advanceTo(scanAAt + 30 * 60_000);
+    w.stop();
+
+    const nhl = w.records().find((r) => r.sportKey === 'icehockey_nhl')!;
+    // The 5×-interval lapse rule resolved it (honestly, zero credits) —
+    // never a B's absent-verdict: the stamp sits at/after the expiry, not
+    // at the first B.
+    expect(nhl.confirmation?.status).toBe('single_sighting');
+    expect(Date.parse(nhl.confirmation!.scanBAt!)).toBeGreaterThanOrEqual(scanAAt + 6 * 60_000);
+    expect(nhl.status).toBe('active'); // failed fetches never killed it
+    expect(nhl.alerted).toBe(false);
+    expect(w.sender.sent).toEqual([]);
+    // Retries stayed bounded: scan A + one B per interval inside the grace
+    // window (B due at +2..+5 min after the first B at +1 min), then stop.
+    expect(w.scanLog).toHaveLength(6);
   });
 });

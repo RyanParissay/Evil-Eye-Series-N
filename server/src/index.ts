@@ -634,10 +634,18 @@ scheduler = new Scheduler({
     if (before.length === 0) return; // raced away — nothing to confirm, zero credits
     const parsed = parseScanRequest({ topN: params.topN, regionTab: params.regionTab });
     if (!parsed.ok) throw new Error(`Invalid confirmation scanParams: ${parsed.message}`);
-    await runScan(scanDeps, parsed.request);
+    const { meta } = await runScan(scanDeps, parsed.request);
+    // Coverage-aware judgment: only sports scan B SUCCESSFULLY fetched may
+    // judge candidates. meta.sportsScanned lists every ATTEMPTED sport, so
+    // subtract sportsFailed; candidates outside the covered set stay
+    // pending (a later tick re-fires B, the 5×-interval lapse rule is the
+    // honest terminal fallback). Without this, a rate-limited/partial B
+    // would mute healthy records as terminal single_sighting.
+    const failedSports = new Set(meta.sportsFailed);
+    const coveredSports = new Set(meta.sportsScanned.filter((s) => !failedSports.has(s)));
     const after = await opportunityService.list();
     const confirmedAt = new Date();
-    const outcomes = matchConfirmationPair(before, after, confirmedAt);
+    const outcomes = matchConfirmationPair(before, after, confirmedAt, coveredSports);
     // Phase 17 (WP-B): score EVERY newly-confirming record — gate-filtered
     // ones included — before the verdicts persist and the fan-out runs.
     // scoreConfirmedRecords never throws: a scoring failure is a warn and

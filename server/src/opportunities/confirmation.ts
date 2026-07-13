@@ -47,17 +47,31 @@ export interface ConfirmationOutcome {
  * A's); `after` is read once scan B's recordScan has landed (re-sighted
  * records carry scan B's lastSeenAt and headline). Non-pending records in
  * `before` are passed through untouched — never judged, never revived.
+ *
+ * `coveredSports` is the set of sports scan B SUCCESSFULLY fetched (the
+ * scan's attempted list minus its failures). A candidate whose sport is
+ * not in it is EXCLUDED from the outcomes entirely — absence of evidence
+ * is not evidence of absence, so it stays pending: the still-due pair
+ * re-fires B on a later tick, and the 5×-interval lapse rule remains the
+ * honest terminal fallback for a persistently unfetchable sport. Without
+ * this gate an under-covered B (rate-limited / partially failed) would
+ * mute healthy records as terminal single_sighting.
  */
 export function matchConfirmationPair(
   before: OpportunityRecord[],
   after: OpportunityRecord[],
   at: Date,
+  coveredSports: ReadonlySet<string>,
 ): ConfirmationOutcome[] {
   const scanBAt = at.toISOString();
   const afterByFingerprint = new Map(after.map((r) => [r.fingerprint, r]));
   const outcomes: ConfirmationOutcome[] = [];
   for (const record of before) {
     if (record.confirmation?.status !== 'pending') continue;
+    // Coverage gate: scan B can only judge sports it actually fetched.
+    // (Optional-chained so a hot-reload window between composition edits
+    // fails CLOSED — no coverage means no verdicts, never false terminals.)
+    if (!coveredSports?.has(record.sportKey)) continue;
     const seen = afterByFingerprint.get(record.fingerprint);
     // The Phase 15 second-sighting judgement: present in scan B ⇔ its
     // lastSeenAt advanced past the pre-B snapshot's.

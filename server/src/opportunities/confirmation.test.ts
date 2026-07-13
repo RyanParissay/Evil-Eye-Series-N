@@ -10,6 +10,8 @@ import {
 
 const SCAN_A_AT = '2026-07-11T12:00:00Z';
 const SCAN_B = new Date('2026-07-11T12:01:00Z');
+/** Scan B successfully fetched every sport these fixtures use. */
+const FULL_COVERAGE: ReadonlySet<string> = new Set(['basketball_nba']);
 
 function makeArb(overrides: Partial<ArbOpportunity> = {}): ArbOpportunity {
   return {
@@ -110,7 +112,7 @@ describe('headlineEdgePct', () => {
 describe('matchConfirmationPair — the ±0.5 pp rule on both sides of the boundary', () => {
   it('same identity re-sighted with the edge unchanged → confirmed, delta 0', () => {
     const before = recordFor(makeArb());
-    const outcomes = matchConfirmationPair([before], [resighted(before)], SCAN_B);
+    const outcomes = matchConfirmationPair([before], [resighted(before)], SCAN_B, FULL_COVERAGE);
     expect(outcomes).toEqual([
       {
         fingerprint: before.fingerprint,
@@ -128,6 +130,7 @@ describe('matchConfirmationPair — the ±0.5 pp rule on both sides of the bound
         [before],
         [resighted(before, { profitPct: edgeB })],
         SCAN_B,
+        FULL_COVERAGE,
       );
       expect(outcome.status).toBe('confirmed');
       expect(outcome.edgeDeltaPp).toBeCloseTo(edgeB - 2.0, 10);
@@ -141,6 +144,7 @@ describe('matchConfirmationPair — the ±0.5 pp rule on both sides of the bound
         [before],
         [resighted(before, { profitPct: edgeB })],
         SCAN_B,
+        FULL_COVERAGE,
       );
       expect(outcome.status).toBe('single_sighting');
       expect(outcome.edgeDeltaPp).toBeCloseTo(edgeB - 2.0, 10);
@@ -151,7 +155,7 @@ describe('matchConfirmationPair — the ±0.5 pp rule on both sides of the bound
     const before = recordFor(makeArb());
     // The record still exists in the store, but scan B never re-sighted it —
     // the Phase 15 second-sighting judgement (lastSeenAt vs the snapshot).
-    const outcomes = matchConfirmationPair([before], [before], SCAN_B);
+    const outcomes = matchConfirmationPair([before], [before], SCAN_B, FULL_COVERAGE);
     expect(outcomes).toEqual([
       { fingerprint: before.fingerprint, status: 'single_sighting', scanBAt: SCAN_B.toISOString() },
     ]);
@@ -159,7 +163,7 @@ describe('matchConfirmationPair — the ±0.5 pp rule on both sides of the bound
 
   it('vanished from the store entirely → single_sighting', () => {
     const before = recordFor(makeArb());
-    const [outcome] = matchConfirmationPair([before], [], SCAN_B);
+    const [outcome] = matchConfirmationPair([before], [], SCAN_B, FULL_COVERAGE);
     expect(outcome).toMatchObject({ status: 'single_sighting' });
     expect(outcome.edgeDeltaPp).toBeUndefined();
   });
@@ -174,9 +178,9 @@ describe('matchConfirmationPair — the ±0.5 pp rule on both sides of the bound
     };
     const before = recordFor(makeArb({ ev, legs: [makeArb().legs[0]] }));
     const within = resighted(before, { ev: { ...ev, edgePct: 4.4 } });
-    expect(matchConfirmationPair([before], [within], SCAN_B)[0].status).toBe('confirmed');
+    expect(matchConfirmationPair([before], [within], SCAN_B, FULL_COVERAGE)[0].status).toBe('confirmed');
     const beyond = resighted(before, { ev: { ...ev, edgePct: 4.6 } });
-    expect(matchConfirmationPair([before], [beyond], SCAN_B)[0].status).toBe('single_sighting');
+    expect(matchConfirmationPair([before], [beyond], SCAN_B, FULL_COVERAGE)[0].status).toBe('single_sighting');
   });
 
   it('middle pairs compare middle.costPct', () => {
@@ -193,9 +197,9 @@ describe('matchConfirmationPair — the ±0.5 pp rule on both sides of the bound
     };
     const before = recordFor(makeArb({ middle, profitPct: -3.0 }));
     const within = resighted(before, { middle: { ...middle, costPct: 3.5 } });
-    expect(matchConfirmationPair([before], [within], SCAN_B)[0].status).toBe('confirmed');
+    expect(matchConfirmationPair([before], [within], SCAN_B, FULL_COVERAGE)[0].status).toBe('confirmed');
     const beyond = resighted(before, { middle: { ...middle, costPct: 3.51 } });
-    expect(matchConfirmationPair([before], [beyond], SCAN_B)[0].status).toBe('single_sighting');
+    expect(matchConfirmationPair([before], [beyond], SCAN_B, FULL_COVERAGE)[0].status).toBe('single_sighting');
   });
 
   it('only pending records are judged — confirmed/single_sighting/absent confirmations pass through untouched', () => {
@@ -203,7 +207,42 @@ describe('matchConfirmationPair — the ±0.5 pp rule on both sides of the bound
       confirmation: { status: 'confirmed', scanAAt: SCAN_A_AT, scanBAt: SCAN_A_AT },
     });
     const legacy = recordFor(makeArb({ eventId: 'evt-l' }), { confirmation: undefined });
-    expect(matchConfirmationPair([confirmed, legacy], [confirmed, legacy], SCAN_B)).toEqual([]);
+    expect(matchConfirmationPair([confirmed, legacy], [confirmed, legacy], SCAN_B, FULL_COVERAGE)).toEqual([]);
+  });
+});
+
+describe('matchConfirmationPair — scan B coverage (post-P17 hardening)', () => {
+  it('a candidate whose sport scan B never successfully fetched is EXCLUDED — no outcome, stays pending', () => {
+    const before = recordFor(makeArb());
+    // Absent from B's view of the store — but B never fetched the sport, so
+    // absence of evidence is not evidence of absence: no verdict at all.
+    expect(matchConfirmationPair([before], [before], SCAN_B, new Set())).toEqual([]);
+    expect(matchConfirmationPair([before], [], SCAN_B, new Set())).toEqual([]);
+  });
+
+  it('exclusion is by coverage alone — even a store-visible re-sighting is not judged when B did not fetch the sport', () => {
+    const before = recordFor(makeArb());
+    const outcomes = matchConfirmationPair(
+      [before],
+      [resighted(before)],
+      SCAN_B,
+      new Set(['icehockey_nhl']),
+    );
+    expect(outcomes).toEqual([]);
+  });
+
+  it('covered-but-absent still resolves single_sighting while an uncovered sibling stays pending', () => {
+    const covered = recordFor(makeArb());
+    const uncovered = recordFor(makeArb({ eventId: 'evt-2', sportKey: 'icehockey_nhl' }));
+    const outcomes = matchConfirmationPair(
+      [covered, uncovered],
+      [covered, uncovered],
+      SCAN_B,
+      FULL_COVERAGE,
+    );
+    expect(outcomes).toEqual([
+      { fingerprint: covered.fingerprint, status: 'single_sighting', scanBAt: SCAN_B.toISOString() },
+    ]);
   });
 });
 

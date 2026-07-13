@@ -153,11 +153,13 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
   );
 
   const results: OddsResult[] = [];
+  const sportsSucceeded: string[] = [];
   const sportsFailed: string[] = [];
   let firstFailure: unknown = null;
   settled.forEach((outcome, i) => {
     if (outcome.status === 'fulfilled') {
       results.push(outcome.value);
+      sportsSucceeded.push(targets[i].key);
     } else {
       sportsFailed.push(targets[i].key);
       firstFailure ??= outcome.reason;
@@ -234,7 +236,14 @@ export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<Sca
   //      opportunity records (IDs, lifecycle). Neither failure is fatal,
   //      but recording MUST precede alert dispatch so markAlerted has
   //      records to flag.
-  const scannedKeys = targets.map((s) => s.key);
+  //      COVERAGE DISCIPLINE: persistence sees only the sports this scan
+  //      SUCCESSFULLY fetched. The lifecycle kill-pass, the confirmation
+  //      pair, survival, and /scans all read these lists as covered-by-
+  //      this-scan — a failed fetch proves nothing about its sport, so an
+  //      under-covered scan must never kill or mis-judge by absence. The
+  //      response meta alone keeps attempted (sportsScanned) + failures
+  //      (sportsFailed); successful coverage is the difference.
+  const scannedKeys = sportsSucceeded;
   if (deps.snapshots) {
     try {
       await deps.snapshots.save({

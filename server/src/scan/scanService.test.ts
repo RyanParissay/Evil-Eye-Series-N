@@ -125,6 +125,47 @@ describe('runScan', () => {
     expect(result.opportunities).toHaveLength(1);
   });
 
+  it('a failed sport is excluded from the coverage handed to persistence — the response alone reports attempted + failed', async () => {
+    const scopes: string[][] = [];
+    const snapshots: string[][] = [];
+    const logged: string[][] = [];
+    const provider = stubProvider([totalsArbEvent()], {
+      sports: ['basketball_nba', 'icehockey_nhl'],
+      failSports: ['icehockey_nhl'],
+    });
+    const result = await runScan(
+      deps(provider, {
+        markets: ['totals'],
+        opportunityLog: {
+          async recordScan(_opportunities, scope) {
+            scopes.push(scope.sportsScanned);
+          },
+        },
+        snapshots: {
+          async save(snapshot) {
+            snapshots.push(snapshot.sportsScanned);
+          },
+        },
+        scanLog: {
+          async append(entry) {
+            logged.push(entry.sportsScanned);
+          },
+        },
+      }),
+      { topN: 5, tab: CA_TAB },
+    );
+    // The HTTP response keeps both lists: every attempted sport plus the
+    // failures — successful coverage is the difference.
+    expect(result.meta.sportsScanned).toEqual(['basketball_nba', 'icehockey_nhl']);
+    expect(result.meta.sportsFailed).toEqual(['icehockey_nhl']);
+    // Persistence must see only what was actually fetched: the lifecycle
+    // kill-pass, pair judgment, survival, and /scans all treat these lists
+    // as covered-by-this-scan — a failed sport proves nothing.
+    expect(scopes).toEqual([['basketball_nba']]);
+    expect(snapshots).toEqual([['basketball_nba']]);
+    expect(logged).toEqual([['basketball_nba']]);
+  });
+
   it('throws the underlying failure when every sport fails', async () => {
     const provider = stubProvider([], { failSports: ['basketball_nba'] });
     await expect(runScan(deps(provider), { topN: 5, tab: CA_TAB })).rejects.toThrow('boom');

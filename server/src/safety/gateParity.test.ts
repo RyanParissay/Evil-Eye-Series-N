@@ -395,10 +395,14 @@ function makeWorld(options: { brokenSnapshots?: boolean; safeMode?: boolean } = 
       const before = await opportunityService.pendingConfirmations();
       if (before.length === 0) return;
       const tab = regionTabByKey(params.regionTab)!;
-      await runScan(scanDeps, { topN: params.topN, tab });
+      const { meta } = await runScan(scanDeps, { topN: params.topN, tab });
+      // Coverage: only sports scan B SUCCESSFULLY fetched may judge
+      // candidates (attempted minus failed) — index.ts verbatim.
+      const failedSports = new Set(meta.sportsFailed);
+      const coveredSports = new Set(meta.sportsScanned.filter((s) => !failedSports.has(s)));
       const after = await opportunityService.list();
       const confirmedAt = h.now();
-      const outcomes = matchConfirmationPair(before, after, confirmedAt);
+      const outcomes = matchConfirmationPair(before, after, confirmedAt, coveredSports);
       const afterByFingerprint = new Map(after.map((r) => [r.fingerprint, r]));
       const confirming = outcomes
         .filter((o) => o.status === 'confirmed')
