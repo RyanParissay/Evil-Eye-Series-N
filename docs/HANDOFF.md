@@ -1,10 +1,62 @@
-# HANDOFF — 2026-07-13 (Phase 18 SERVER complete; CLV UI next)
+# HANDOFF — 2026-07-13 (Phase 18 COMPLETE: server + CLV UI)
 
-## For the incoming agent (Phase 18 UI): read first, in order
-1. CLAUDE.md (new `clv/` layering entry + the CLV capture gotcha)
+## For the incoming agent: read first, in order
+1. CLAUDE.md (the `clv/` layering entry + the CLV capture gotcha)
 2. docs/prompts/phase-18.md (Ryan-approved spec, binding)
 3. shared/types.ts — RecordClosing, ClvCell, ClvSummary, confirmedLegOdds
 4. docs/PROGRESS.md  5. this section
+
+## Phase 18 UI — DONE this session (Fable, on main)
+- **Ledger CLV section** (client/src/components/ClvPanel.tsx, rendered by
+  EvidencePanel between the scoreboard and the evidence tables), reading
+  order = honesty order:
+  1. Coverage header ("41 of 47 records carry a closing line · median
+     capture 45 min before start"; frozen-only median, "first freeze
+     pending" while null). recordsWithClosing === 0 → ONE directive empty
+     line ("Closing lines start freezing with tonight's games"), nothing else.
+  2. Headline tiles: ALERTED signal CLV per strategy. Where trueClv exists
+     it is the authoritative big number ("vs sharp close") and own-book raw
+     drops to a secondary line; execution (fills basis) appends as a final
+     line where completed fills exist.
+  3. The gate ledger — THE differentiator: alerted / safety-filtered /
+     single-sighting per strategy on ONE structural grid (.clv-gates is the
+     grid; groups and rows are display:contents), so every diverging bar
+     shares one zero axis. Positive mean CLV runs right in red (the app's
+     money-up ink), negative left in grey. Margin line per strategy in pp;
+     a challenger cell whose mean ≥ alerted at n≥10 gets a red "≥ alerted"
+     chip + "the gate may be discarding value" note. Small-N challengers
+     can NEVER trigger the flag.
+  4. byBook table, top 8 rows by LEG count (byBook cell.records = legs),
+     with a "sharp" column where the benchmark quoted.
+  - Small-N honesty app-wide: any cell with n<10 renders muted grey with an
+    "n<10" chip (chip-mock, not warn — honesty, not danger).
+- **Cockpit CLV readout** (/opportunity/:id): shown ONLY when
+  record.closing exists AND the event commenced (a rolling closing shows
+  nothing — the close hasn't frozen). Basis label (fills basis when
+  execution.filledLegs exist, else alert basis) + capture lead, the
+  stake-weighted record figure raw + true, per-leg "got 2.10 / closed
+  1.95 → +7.69% · sharp +3.95%"; unpriced legs read "closed — · excluded,
+  not priced at the freeze" with a renormalization note.
+- **client/src/clv.ts** — pure display helpers, 31 hand-computed tests.
+  cockpitClv is the ONE place the client computes CLV: a display-grade
+  mirror of server engine/clv.ts (excluded null legs, renormalized
+  weights, degenerate equal-weight fallback; the ENGINE is the authority —
+  one deliberate divergence: zero-usable-legs returns per-leg rows so the
+  cockpit can explain WHY it's unmeasured instead of going silent).
+- **Display semantics pinned in tests**: meanClvPct is a percentage value
+  (5 → "+5.00%"); beat shares are fractions ×100 ("62%"); differences
+  between cells are pp ("+1.80pp"). CLV is measured evidence: is-up red /
+  is-down grey, NEVER yellow, no "guaranteed" language.
+- Verified visually (temp-copy repo on :8814/:5175, seeded fixtures) at
+  1280 + 390: healthy story (alerted +2.1 / filtered +0.3 / single
+  −0.5), the ≥-alerted warn state, small-N cells, missing trueClv,
+  zero-coverage empty state, cockpit frozen/excluded-leg/rolling records.
+  No page-level horizontal scroll at 390 (probe-checked).
+- Tests: 686 server + 99 client (68 + 31), root typecheck green.
+- NOTE (pre-existing, not this session's): routes/clv.test.ts's 500-path
+  test emits an unhandled 'archive read failed' rejection that can
+  NONDETERMINISTICALLY fail an unrelated test in full-suite runs (seen
+  once; reruns green 686). Worth pinning down in a hardening pass.
 
 ## Where we are — Phase 18 (CLV capture), SERVER done this session (Opus)
 - Zero-credit closing capture is LIVE: clv/clvCapture.ts (PURE, no provider)
@@ -44,15 +96,11 @@
 - Records without a closing are surfaced ONLY in coverage — never zeroed into
   a cell. Honest numbers, unchanged Phase-18 posture.
 
-## Phase 18 UI (NEXT, Sonnet) — endpoint ready
-- GET /api/clv/summary is the only new endpoint. Build: the Ledger evidence
-  panel's CLV section (coverage header + signal-vs-execution + byBook), and the
-  cockpit's own-record CLV line once its closing freezes (record.closing on the
-  OpportunityRecord; compute display via the shape above — the CLIENT does no
-  CLV math, mirror the ledger discipline). YELLOW is NOT a CLV color — CLV is
-  neither speculative nor simulated; it's a measurement.
-- Tests: 686 server + 68 client, root typecheck green, tree boots clean
-  (verified GET /api/clv/summary on :8788 mock). Server work committed on main.
+## Phase 18 UI — built (see the section at the top of this file)
+- GET /api/clv/summary was the only new endpoint; the client does no
+  aggregate CLV math (cockpitClv is the one sanctioned display mirror).
+  YELLOW is NOT a CLV color — CLV is neither speculative nor simulated;
+  it's a measurement.
 
 ---
 # HANDOFF — 2026-07-12 (Phase 17 WP-B complete; WP-C UI next)

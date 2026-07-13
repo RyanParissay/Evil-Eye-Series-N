@@ -73,7 +73,7 @@ Known issues / accepted limitations:
       20:17Z incident left as-is (documented in HANDOFF; their events
       commence within days). 652 server + 68 client tests green.
 
-- [~] Phase 18 — CLV capture (SERVER complete this session; UI next). Zero
+- [x] Phase 18 — CLV capture. SERVER (Opus) + UI (Fable, 2026-07-13) done. Zero
       credits STRUCTURAL: engine/clv.ts (PURE raw + de-vigged true CLV%,
       per-record stake-weighted, missing closing legs EXCLUDED/renormalized,
       hand-computed goldens) + clv/clvCapture.ts (PURE, no provider — builds
@@ -88,9 +88,14 @@ Known issues / accepted limitations:
       honesty header (frozen-only median), signal cells by strategy × gate
       outcome (alerted/safety-filtered via LIVE passesSafetyGate/
       single_sighting), execution cells by strategy, byBook — every cell
-      asserted exactly against a hand-built fixture. 686 server + 68 client
-      tests green, typecheck clean, boots clean. UI (Ledger CLV panel + cockpit
-      own-record CLV line) is the remaining Sonnet WP.
+      asserted exactly against a hand-built fixture. UI: Ledger CLV section
+      (client/src/components/ClvPanel.tsx — coverage honesty header, alerted
+      headline tiles with trueClv primary, the one-grid gate ledger with a
+      shared zero axis + "≥ alerted" discarding-value flag, byBook by legs,
+      n<10 muted+chipped) and the cockpit's own-record CLV readout, shown
+      only once the close freezes (clv.ts cockpitClv, the tested display
+      mirror of engine/clv.ts). 686 server + 99 client tests green,
+      typecheck clean, screenshots verified at 1280/390.
 
 Hub v2 (deferred from Phase 16 by spec — do not build unprompted):
 - Multi-profile overlay charts; density heatmap UI polish; profile
@@ -103,7 +108,5 @@ Candidate next phases:
   distributions now accruing).
 - Props probe (out of scope through Phase 16).
 
-Next task: Phase 18 UI (Sonnet) — CLV section in the Ledger evidence panel +
-cockpit own-record CLV line, off GET /api/clv/summary (server done). Then
-candidates: Phase 11 (Kelly, once ~2 weeks of graded data exist), Hub v2
-polish, props probe.
+Next task: candidates — Phase 11 (Kelly, once ~2 weeks of graded data
+exist), Hub v2 polish, props probe.
