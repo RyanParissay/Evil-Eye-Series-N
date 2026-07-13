@@ -119,6 +119,8 @@ describe('matchConfirmationPair — the ±0.5 pp rule on both sides of the bound
         status: 'confirmed',
         scanBAt: SCAN_B.toISOString(),
         edgeDeltaPp: 0,
+        // Phase 18: scan B's fresh per-leg odds ride along (the signal-CLV basis).
+        confirmedLegOdds: before.legs.map((l) => l.odds),
       },
     ]);
   });
@@ -208,6 +210,37 @@ describe('matchConfirmationPair — the ±0.5 pp rule on both sides of the bound
     });
     const legacy = recordFor(makeArb({ eventId: 'evt-l' }), { confirmation: undefined });
     expect(matchConfirmationPair([confirmed, legacy], [confirmed, legacy], SCAN_B, FULL_COVERAGE)).toEqual([]);
+  });
+});
+
+describe('matchConfirmationPair — confirmedLegOdds stamping (Phase 18 signal basis)', () => {
+  it('a re-sighted record stamps scan B fresh leg odds (confirmed)', () => {
+    const before = recordFor(makeArb());
+    // Scan B refreshed the legs to new prices (applyScanToRecords set them).
+    const seen = resighted(before, {
+      legs: [
+        { outcome: 'Lakers', bookmakerKey: 'bet365', bookmakerTitle: 'Bet365', odds: 2.12, stake: 48, link: null },
+        { outcome: 'Celtics', bookmakerKey: 'pinnacle', bookmakerTitle: 'Pinnacle', odds: 2.04, stake: 52, link: null },
+      ],
+      profitPct: 2.34, // no drift → confirmed
+    });
+    const [outcome] = matchConfirmationPair([before], [seen], SCAN_B, FULL_COVERAGE);
+    expect(outcome.status).toBe('confirmed');
+    expect(outcome.confirmedLegOdds).toEqual([2.12, 2.04]);
+  });
+
+  it('a DRIFTED single_sighting still carries confirmedLegOdds (it was re-sighted)', () => {
+    const before = recordFor(makeArb());
+    const seen = resighted(before, { profitPct: 5.0 }); // drift ≫ 0.5 pp
+    const [outcome] = matchConfirmationPair([before], [seen], SCAN_B, FULL_COVERAGE);
+    expect(outcome.status).toBe('single_sighting');
+    expect(outcome.confirmedLegOdds).toEqual(seen.legs.map((l) => l.odds));
+  });
+
+  it('a vanished / not-advanced record carries NO confirmedLegOdds', () => {
+    const before = recordFor(makeArb());
+    expect(matchConfirmationPair([before], [before], SCAN_B, FULL_COVERAGE)[0].confirmedLegOdds).toBeUndefined();
+    expect(matchConfirmationPair([before], [], SCAN_B, FULL_COVERAGE)[0].confirmedLegOdds).toBeUndefined();
   });
 });
 

@@ -39,6 +39,15 @@ export interface ConfirmationOutcome {
   scanBAt: string;
   /** Signed headline drift A→B in pp; present only when B re-sighted it. */
   edgeDeltaPp?: number;
+  /**
+   * Phase 18: scan B's fresh per-leg odds — the signal-CLV bet basis. Present
+   * ONLY when B re-sighted the record (its legs were refreshed to scan B's
+   * prices, applyScanToRecords line "existing.legs = arb.legs"), so it rides
+   * along for BOTH a confirmed verdict AND a drifted single_sighting (the
+   * "gate declined this — how did its signal fare vs close?" telemetry). A
+   * vanished single_sighting (never re-sighted) carries no fresh odds.
+   */
+  confirmedLegOdds?: number[];
 }
 
 /**
@@ -86,6 +95,9 @@ export function matchConfirmationPair(
         Math.abs(edgeDeltaPp) <= CONFIRMATION_EDGE_TOLERANCE_PP ? 'confirmed' : 'single_sighting',
       scanBAt,
       edgeDeltaPp,
+      // Scan B refreshed `seen`'s legs to its own prices — the bet basis a
+      // bettor acting on the alert gets. Stamped for confirmed and drifted alike.
+      confirmedLegOdds: seen.legs.map((l) => l.odds),
     });
   }
   return outcomes;

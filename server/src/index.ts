@@ -33,6 +33,7 @@ import {
   SCHEDULER_SCORE_POLL_INTERVAL_MS,
   WHATSAPP_DATA_FILE,
 } from './config/constants';
+import { captureClosings } from './clv/clvCapture';
 import { BackupService } from './ops/backupService';
 import { LeaderboardStore } from './ops/leaderboardStore';
 import { HubService } from './hub/hubService';
@@ -513,8 +514,37 @@ const scanDeps: ScanDeps = {
       } catch (err) {
         console.warn('Backup failed:', err);
       }
+
+      // Phase 18: closing-line capture piggybacks on every scan — zero
+      // credits (no provider anywhere in the clv graph). It overwrites
+      // record.closing for every not-yet-commenced record whose event is in
+      // the fresh snapshot (just persisted above); frozen once commence
+      // passes. Same fire-and-forget discipline — never fails the scan.
+      try {
+        void captureClosingLines().catch((err) => {
+          console.warn('CLV capture failed:', err);
+        });
+      } catch (err) {
+        console.warn('CLV capture failed:', err);
+      }
     },
 };
+
+/**
+ * Phase 18 closing-line capture (zero credits, structural). Reads the fresh
+ * raw snapshot a scan just persisted and the active opportunity records, then
+ * overwrites the closing candidate for every not-yet-commenced covered record.
+ * Only touches record.closing fields; safe on the hot-reloading live server.
+ */
+async function captureClosingLines(): Promise<void> {
+  const snapshot = await snapshotStore.read();
+  if (!snapshot) return;
+  // Active-file records: a not-yet-commenced record always lives here (the
+  // archive is settled + long-commenced), so the capture reaches every record
+  // whose closing is still rolling — without reading the archives.
+  const records = await opportunityService.list();
+  await opportunityService.applyClosings(captureClosings(snapshot.events, records, new Date()));
+}
 
 // ── PHASE-16 HUB CONSUMER ────────────────────────────────────────────────
 // Analytics Hub (Part B, SIMULATED): each profile is a parameterized engine

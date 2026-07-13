@@ -6,6 +6,7 @@ import type {
   ArbOpportunity,
   OpportunityRecord,
   OpportunityStatus,
+  RecordClosing,
   RecordGrading,
   RecordSafety,
 } from '@shared/types';
@@ -330,6 +331,8 @@ export class OpportunityService {
       scanBAt: string;
       edgeDeltaPp?: number;
       safety?: RecordSafety;
+      /** Phase 18: scan B's fresh per-leg odds (signal-CLV basis), if re-sighted. */
+      confirmedLegOdds?: number[];
     }>,
   ): Promise<OpportunityRecord[]> {
     if (outcomes.length === 0) return [];
@@ -344,6 +347,9 @@ export class OpportunityService {
           status: outcome.status,
           scanBAt: outcome.scanBAt,
           ...(outcome.edgeDeltaPp != null && { edgeDeltaPp: outcome.edgeDeltaPp }),
+          // Phase 18: the signal-CLV bet basis — present whenever B re-sighted
+          // the record (confirmed or drifted single_sighting alike).
+          ...(outcome.confirmedLegOdds != null && { confirmedLegOdds: outcome.confirmedLegOdds }),
         };
         if (outcome.status === 'confirmed') {
           if (outcome.safety) record.safety = outcome.safety;
@@ -370,6 +376,33 @@ export class OpportunityService {
         expired += 1;
       }
       return { data, result: expired };
+    });
+  }
+
+  /**
+   * Phase 18: overwrite record.closing for the given records — the rolling
+   * closing-line capture (clv/clvCapture.ts computes the updates; this
+   * persists them). The freeze is STRUCTURAL here too: a record whose
+   * commence has passed is skipped even if handed an update, so the last
+   * pre-commence write stays put no matter how the caller raced the clock.
+   * Only active-file records are candidates (a not-yet-commenced record is
+   * always in the active file; archived records are settled + long-commenced).
+   * Returns how many closings it wrote.
+   */
+  async applyClosings(updates: Array<{ id: string; closing: RecordClosing }>): Promise<number> {
+    if (updates.length === 0) return 0;
+    const nowMs = this.now().getTime();
+    const byId = new Map(updates.map((u) => [u.id, u.closing]));
+    return this.store.update((data) => {
+      let written = 0;
+      for (const record of data.records) {
+        const closing = byId.get(record.id);
+        if (!closing) continue;
+        if (Date.parse(record.commenceTime) <= nowMs) continue; // frozen
+        record.closing = closing;
+        written += 1;
+      }
+      return { data, result: written };
     });
   }
 

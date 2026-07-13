@@ -424,6 +424,9 @@ describe('confirmation pair — acceptance fixtures (Phase 16 Part A)', () => {
     const [record] = w.records();
     expect(record.confirmation).toMatchObject({ status: 'confirmed', edgeDeltaPp: 0 });
     expect(record.confirmation?.scanBAt).toBe(new Date(scanAAt + 60_000).toISOString());
+    // Phase 18: scan B's fresh per-leg odds are stamped as the signal-CLV
+    // basis, aligned with the record's legs (real pair pipeline).
+    expect(record.confirmation?.confirmedLegOdds).toEqual(record.legs.map((l) => l.odds));
     expect(record.alerted).toBe(true);
     expect(w.sender.sent).toHaveLength(1);
     expect(w.sender.sent[0].body).toContain('Bet365');
@@ -446,6 +449,9 @@ describe('confirmation pair — acceptance fixtures (Phase 16 Part A)', () => {
     const [record] = w.records();
     expect(record.confirmation?.status).toBe('single_sighting');
     expect(record.confirmation?.edgeDeltaPp).toBeLessThan(-0.5);
+    // Phase 18: a DRIFTED single_sighting was still re-sighted, so scan B's
+    // fresh odds are stamped (the "gate declined this" signal-CLV telemetry).
+    expect(record.confirmation?.confirmedLegOdds).toEqual(record.legs.map((l) => l.odds));
     expect(record.alerted).toBe(false);
     expect(w.sender.sent).toEqual([]); // single-sighting records are never acted on
 
