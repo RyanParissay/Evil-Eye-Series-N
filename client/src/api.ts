@@ -11,6 +11,7 @@ import type {
   BookPreset,
   BookmakerConfig,
   BookmakerStatusValue,
+  ClvSummary,
   CoverageReport,
   DenseWeekStatus,
   EvSettings,
@@ -249,6 +250,11 @@ export async function fetchTelemetry(): Promise<TelemetryStats> {
 
 export async function fetchScoreboard(): Promise<Scoreboard> {
   return request<Scoreboard>('/api/ops/scoreboard');
+}
+
+/** Phase 18: the CLV read model — zero credits, server-computed. */
+export async function fetchClvSummary(): Promise<ClvSummary> {
+  return request<ClvSummary>('/api/clv/summary');
 }
 
 /** Reaction-funnel ping; first write wins server-side. Fire-and-forget. */
