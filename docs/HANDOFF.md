@@ -6,6 +6,22 @@
 3. shared/types.ts — RecordClosing, ClvCell, ClvSummary, confirmedLegOdds
 4. docs/PROGRESS.md  5. this section
 
+## Hub open-bets tab — DONE 2026-07-13 (Fable, on main, client-only)
+- /hub grew a fourth segment, OPEN BETS (between PROFILE and LEADERBOARDS):
+  every profile's PENDING positions in one list, sorted soonest-to-resolve
+  (in-play first, unknown commence last), status cell narrates the lifecycle
+  ("starts in 3h 12m" → "in play · awaiting grade"); rows expand to legs
+  (rounded stakes primary when safety.roundedStakes exists) + SafetyBadge +
+  cockpit deep link, fetched once per record id via GET /api/opportunities/:id
+  (archived 404 → quiet "record unavailable"). PROFILE's pending tile is now a
+  click-through into it. Pure helpers + 21 tests in client/src/hub.ts(.test);
+  zero client money math (openStakeTotal only sums server-provided stakes).
+  Hub segments become a 2×2 grid under 720px (page-level H-scroll at 390 was
+  pre-existing and is now fixed); expanded detail is sticky-left inside
+  .risk-table-wrap. Tests: 686 server + 120 client, root typecheck green.
+  Verified visually at 1280 + 390 (temp-copy stack :8816/:5177, seeded
+  fixtures incl. in-play / starting-soon / archived-404 / empty states).
+
 ## Phase 18 UI — DONE this session (Fable, on main)
 - **Ledger CLV section** (client/src/components/ClvPanel.tsx, rendered by
   EvidencePanel between the scoreboard and the evidence tables), reading
