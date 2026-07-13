@@ -263,6 +263,11 @@ export interface OpportunityRecord {
    * 'confirmed' after Phase 17 — including gate-filtered ones.
    */
   safety?: RecordSafety;
+  /**
+   * Phase 18: rolling closing-line candidate — overwritten by every scan
+   * covering the not-yet-commenced event; frozen once commence passes.
+   */
+  closing?: RecordClosing;
 }
 
 /* ————— Confirmation scanning (Phase 16 Part A) ————— */
@@ -282,6 +287,59 @@ export interface RecordConfirmation {
   scanBAt?: string;
   /** Signed headline-edge drift A→B in percentage points; absent unless matched. */
   edgeDeltaPp?: number;
+  /**
+   * Phase 18: scan B's fresh per-leg odds at the confirmation instant,
+   * aligned with record.legs — the signal-CLV bet basis (what a bettor
+   * acting on the alert gets). Absent on pre-Phase-18 confirmations.
+   */
+  confirmedLegOdds?: number[];
+}
+
+/* ————— CLV capture (Phase 18 — zero credits, structural) ————— */
+
+/**
+ * The rolling closing-line candidate, overwritten by every scan that
+ * covers the record's not-yet-commenced event; the last write before
+ * commence freezes as the closing line. ALL records participate —
+ * confirmed, gate-filtered, single_sighting, legacy — because the gates'
+ * selection quality is exactly what CLV measures.
+ */
+export interface RecordClosing {
+  /** Closing odds at each leg's OWN book for the exact outcome+line, aligned with record.legs; null = no longer offered there. */
+  legOdds: Array<number | null>;
+  /** Benchmark (Pinnacle) closing odds per leg's outcome+line; null where unquoted. */
+  benchmarkLegOdds?: Array<number | null>;
+  /** De-vigged fair closing probability per leg from the benchmark's line group; null where unavailable. */
+  benchmarkFairProb?: Array<number | null>;
+  capturedAt: string;
+  /** Minutes between capture and commence — the staleness of this closing approximation. */
+  minutesToCommence: number;
+}
+
+/** One CLV aggregate cell (server-computed; missing closings EXCLUDED, never zeroed). */
+export interface ClvCell {
+  records: number;
+  meanClvPct: number | null;
+  medianClvPct: number | null;
+  /** Share of records with CLV > 0. */
+  beatClosePct: number | null;
+  /** Same stats vs the de-vigged benchmark close, where available. */
+  trueClv?: { records: number; meanPct: number | null; beatPct: number | null };
+}
+
+export interface ClvSummary {
+  /** Capture coverage — the honesty header for everything below. */
+  coverage: {
+    recordsWithClosing: number;
+    recordsTotal: number;
+    /** Median minutes-to-commence of frozen closings. */
+    medianCaptureMins: number | null;
+  };
+  /** Signal CLV (confirmedLegOdds basis) by strategy × gate outcome. */
+  signal: Array<{ strategy: OpportunityStrategy; gateOutcome: 'alerted' | 'filtered' | 'single_sighting'; cell: ClvCell }>;
+  /** Execution CLV (filledLegs basis) for completed records, by strategy. */
+  execution: Array<{ strategy: OpportunityStrategy; cell: ClvCell }>;
+  byBook: Array<{ bookmakerKey: string; title: string; cell: ClvCell }>;
 }
 
 /* ————— Auto-grading (Phase 13, GRADING_RULES.md is binding) ————— */
