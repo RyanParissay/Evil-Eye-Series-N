@@ -6,7 +6,7 @@
  */
 import express from 'express';
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { OpportunityRecord, SafetySettings } from '@shared/types';
 import { DEFAULT_SAFETY_SETTINGS } from '../ops/safetyStore';
 import { apiErrorHandler } from './api';
@@ -82,6 +82,7 @@ describe('GET /api/clv/summary', () => {
   });
 
   it('a records-source failure maps through the shared error handler (500)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     const res = await request(
       app(async () => {
         throw new Error('archive read failed');
