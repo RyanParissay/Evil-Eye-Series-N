@@ -2811,7 +2811,7 @@ select.bm-input {
 }
 
 .hub-open-table {
-  min-width: 720px;
+  min-width: 680px;
 }
 
 .hub-open-row {
@@ -2889,7 +2889,8 @@ select.bm-input {
 }
 
 /* Yellow left rule = the Hub's simulated family, same idiom as
-   .ledger-note's red rule. */
+   .ledger-note's red rule. Sticky-left keeps the expanded payoff in view
+   while the wider table is swiped inside .risk-table-wrap on a phone. */
 .hub-open-detail {
   display: flex;
   flex-wrap: wrap;
@@ -2898,6 +2899,9 @@ select.bm-input {
   margin-top: 10px;
   border-left: 2px solid var(--yellow);
   padding-left: 14px;
+  position: sticky;
+  left: 0;
+  max-width: calc(100vw - 36px);
 }
 
 .hub-open-legs {
@@ -2932,6 +2936,23 @@ select.bm-input {
 }
 
 @media (max-width: 720px) {
+  /* Four segments no longer fit one row on a phone — a 2×2 grid keeps the
+     whole tab bar on screen (the page must never scroll horizontally).
+     Scoped to .hub: Risk Mode's two segments still fit inline. */
+  .hub .risk-segments {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: auto;
+  }
+
+  .hub .risk-segment {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    padding: 12px 8px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
   .hub-profile-bar {
     flex-direction: column;
     align-items: stretch;
