@@ -109,7 +109,26 @@ export interface SnapshotIntegration {
   }): Promise<void>;
 }
 
-export async function runScan(deps: ScanDeps, request: ScanRequest): Promise<ScanResponse> {
+/**
+ * Scans are strictly SERIALIZED (post-P17 hardening). The Odds API
+ * rate-limits concurrent requests, so two scans in flight starve each other
+ * of sports — and an under-covered scan B then can't judge its pending
+ * confirmation pair honestly. Every caller (manual route, scheduler scan,
+ * scheduler scan B) enters through runScan, so this module-level queue is
+ * the single serialization point: a scan requested mid-scan WAITS its turn
+ * (never rejects — a manual click during scan B just takes a few seconds),
+ * and a rejected scan never wedges the chain — the JsonStore.update pattern.
+ */
+let scanQueue: Promise<unknown> = Promise.resolve();
+
+export function runScan(deps: ScanDeps, request: ScanRequest): Promise<ScanResponse> {
+  const run = () => executeScan(deps, request);
+  const next = scanQueue.then(run, run);
+  scanQueue = next.catch(() => undefined);
+  return next;
+}
+
+async function executeScan(deps: ScanDeps, request: ScanRequest): Promise<ScanResponse> {
   const now = deps.now ?? (() => new Date());
   const { provider, store } = deps;
   const { topN, tab } = request;

@@ -365,6 +365,10 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   is read from the server log. `server/data/whatsapp.json` is runtime state.
 - `DEV_MODE=true` is the umbrella: mock odds provider + console WhatsApp,
   overriding the individual switches.
+- Scans SERIALIZE: runScan queues every invocation (manual route, scheduler
+  scan, scan B) through one in-module mutex — concurrent provider scans
+  rate-limit each other, under-cover sports, and corrupt the confirmation
+  pair's judgment. A scan during another scan waits seconds, never errors.
 - The scan fetches by The Odds API's `bookmakers` param (10 books = 1
   region-equivalent) only when STRICTLY cheaper than the tab's regions —
   see planFetch. Deliberate consequence: while active, the feed omits

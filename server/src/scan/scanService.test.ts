@@ -560,3 +560,56 @@ describe('runScan', () => {
     expect(result.opportunities).toHaveLength(0);
   });
 });
+
+describe('scan serialization — no concurrent provider scans, ever', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  it('two concurrent runScan calls never overlap: the second queues behind the first, both complete', async () => {
+    // Instrumented provider: the FIRST scan's odds fetch parks on a gate,
+    // so any unserialized second scan would interleave its own fetch.
+    const order: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let call = 0;
+    const provider = stubProvider([totalsArbEvent()]);
+    const origFetch = provider.fetchOdds.bind(provider);
+    provider.fetchOdds = async (sport, params) => {
+      const n = ++call;
+      order.push(`fetch-${n}-start`);
+      if (n === 1) await gate;
+      order.push(`fetch-${n}-end`);
+      return origFetch(sport, params);
+    };
+
+    const first = runScan(deps(provider, { markets: ['totals'] }), { topN: 5, tab: CA_TAB });
+    const second = runScan(deps(provider, { markets: ['totals'] }), { topN: 5, tab: CA_TAB });
+    // Drain the task queues: an unserialized second scan would have hit the
+    // provider by now (its listSports/fetchOdds have nothing to wait on).
+    for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
+    expect(order).toEqual(['fetch-1-start']); // second scan has not started
+
+    release();
+    const [a, b] = await Promise.all([first, second]);
+    expect(order).toEqual(['fetch-1-start', 'fetch-1-end', 'fetch-2-start', 'fetch-2-end']);
+    // Queued, never rejected: both scans return full results.
+    expect(a.opportunities).toHaveLength(1);
+    expect(b.opportunities).toHaveLength(1);
+  });
+
+  it('a failing scan never wedges the queue — the next scan still runs', async () => {
+    const failing = runScan(deps(stubProvider([], { failSports: ['basketball_nba'] })), {
+      topN: 5,
+      tab: CA_TAB,
+    });
+    const following = runScan(
+      deps(stubProvider([totalsArbEvent()]), { markets: ['totals'] }),
+      { topN: 5, tab: CA_TAB },
+    );
+    await expect(failing).rejects.toThrow('boom');
+    expect((await following).opportunities).toHaveLength(1);
+  });
+});
