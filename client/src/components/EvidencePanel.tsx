@@ -9,6 +9,7 @@ import {
   fetchTelemetry,
   type GradingStatus,
 } from '../api';
+import { ClvPanel } from './ClvPanel';
 
 /**
  * The proving-month evidence: scoreboard (the decision view), funded-book
@@ -41,6 +42,8 @@ export function EvidencePanel() {
   return (
     <>
       {scoreboard && <ScoreboardBlock data={scoreboard} />}
+
+      <ClvPanel />
 
       <div className="ledger-tables">
         <section>

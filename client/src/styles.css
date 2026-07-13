@@ -3074,3 +3074,272 @@ select.bm-input {
     max-width: 100%;
   }
 }
+
+/* ————————————————————————————————————————————————
+   CLV — Phase 18. Namespace: .clv-* (ledger) + .cockpit-clv-* (cockpit).
+   CLV is MEASURED evidence: red = positive (the money-up convention),
+   grey = negative/muted. Never yellow (not speculative), never green.
+   The signature element is the gate ledger — every gate outcome on ONE
+   shared diverging scale, zero mid-track, so "the gates keep the right
+   bets" (or don't) is legible before a single number is read.
+   ———————————————————————————————————————————————— */
+
+.clv {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.clv .is-up {
+  color: var(--red);
+}
+
+.clv .is-down {
+  color: var(--grey);
+}
+
+.clv-heads {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 16px;
+}
+
+.clv-columns {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 28px;
+  align-items: start;
+}
+
+@media (min-width: 960px) {
+  .clv-columns {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.clv-subhead {
+  padding-bottom: 8px;
+}
+
+/* — the gate ledger: one bordered unit, one shared zero axis — */
+
+/* The WHOLE unit is ONE grid (groups and rows are display:contents), so
+   every track of every strategy shares the same column — one zero axis,
+   aligned STRUCTURALLY, not by luck (per-row grids drift as soon as one
+   row grows a chip). Headings, strategy labels, and margin lines span. */
+.clv-gates {
+  border: 1px solid var(--hairline);
+  padding: 16px;
+  display: grid;
+  grid-template-columns: max-content minmax(80px, 1fr) max-content;
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.clv-gates .clv-subhead,
+.clv-gate-strategy,
+.clv-gate-margin {
+  grid-column: 1 / -1;
+}
+
+.clv-gate-group,
+.clv-gate-row {
+  display: contents;
+}
+
+.clv-gate-group + .clv-gate-group .clv-gate-strategy {
+  border-top: 1px solid var(--hairline-faint);
+  padding-top: 14px;
+  margin-top: 4px;
+}
+
+.clv-gate-strategy {
+  color: var(--white);
+}
+
+.clv-gate-label {
+  white-space: nowrap;
+}
+
+.clv-track {
+  position: relative;
+  display: block;
+  height: 12px;
+}
+
+.clv-zero {
+  position: absolute;
+  left: 50%;
+  top: -3px;
+  bottom: -3px;
+  width: 1px;
+  background: var(--white);
+  opacity: 0.55;
+}
+
+.clv-bar {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+}
+
+.clv-bar-pos {
+  left: 50%;
+  background: var(--red);
+}
+
+.clv-bar-neg {
+  right: 50%;
+  background: var(--grey);
+}
+
+.clv-gate-figs {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 2px 8px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-wrap: wrap; /* items stay whole; the cluster may break between them */
+}
+
+.clv-gate-figs strong {
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.clv-gate-margin {
+  padding-top: 2px;
+}
+
+@media (max-width: 599px) {
+  /* label + figures share a line, the bar takes the full width beneath —
+     full-width tracks keep the zero axes aligned without column-sharing
+     (unit-wide columns would force the widest figures onto every row). */
+  .clv-gates {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .clv-gate-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 2px 12px;
+  }
+
+  .clv-gate-label {
+    white-space: normal;
+  }
+
+  /* When a long label forces the figures to wrap, keep them right-aligned. */
+  .clv-gate-figs {
+    margin-left: auto;
+  }
+
+  .clv-track {
+    order: 3;
+    width: 100%;
+    margin: 4px 0 8px;
+  }
+}
+
+/* — small-N honesty: the stat is shown, but muted and chipped.
+     (Scoped .clv + element to outrank .clv .is-up and the .ledger-stat
+     money-direction colors — a small sample never gets the loud ink.) — */
+
+.clv .clv-small-n strong,
+.clv-small-n strong {
+  color: var(--grey);
+}
+
+.clv-small-n .clv-bar {
+  opacity: 0.45;
+}
+
+.clv-table-scroll {
+  overflow-x: auto;
+}
+
+.clv-table-scroll .ledger-table strong {
+  font-weight: 700;
+}
+
+/* — cockpit readout (mobile-first like the rest of .cockpit-*) — */
+
+.cockpit-clv {
+  border: 1px solid var(--hairline);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cockpit-clv .is-up {
+  color: var(--red);
+}
+
+.cockpit-clv .is-down {
+  color: var(--grey);
+}
+
+.cockpit-clv-record {
+  display: flex;
+  align-items: baseline;
+  gap: 8px 14px;
+  flex-wrap: wrap;
+}
+
+/* A value and its label wrap as one unit, never split across lines. */
+.cockpit-clv-pair {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+/* The per-leg "· sharp +x.xx%" suffix: wraps as a unit, keeps its gap. */
+.cockpit-clv-sharp {
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+.cockpit-clv-record strong {
+  font-size: 24px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.cockpit-clv-legs {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cockpit-clv-leg {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px 12px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--hairline-faint);
+  padding-bottom: 6px;
+}
+
+.cockpit-clv-leg:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.cockpit-clv-leg-figs {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cockpit-clv-leg-figs strong {
+  font-weight: 900;
+}
