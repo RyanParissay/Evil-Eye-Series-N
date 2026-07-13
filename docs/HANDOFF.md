@@ -1,3 +1,60 @@
+# HANDOFF — 2026-07-13 (Phase 18 SERVER complete; CLV UI next)
+
+## For the incoming agent (Phase 18 UI): read first, in order
+1. CLAUDE.md (new `clv/` layering entry + the CLV capture gotcha)
+2. docs/prompts/phase-18.md (Ryan-approved spec, binding)
+3. shared/types.ts — RecordClosing, ClvCell, ClvSummary, confirmedLegOdds
+4. docs/PROGRESS.md  5. this section
+
+## Where we are — Phase 18 (CLV capture), SERVER done this session (Opus)
+- Zero-credit closing capture is LIVE: clv/clvCapture.ts (PURE, no provider)
+  builds record.closing from the raw snapshot each scan already fetched —
+  per-leg own-book price, benchmark (Pinnacle) price, de-vigged fair prob —
+  for every not-yet-commenced record whose event is in the snapshot; it rides
+  runScan's notifier fire-and-forget (like leaderboards/backups). ROLLING
+  OVERWRITE + FREEZE at commence, enforced structurally in BOTH captureClosings
+  and OpportunityService.applyClosings. It ONLY writes record.closing fields —
+  safe on the hot-reloading :8787 (it will start populating closings on the
+  live server's next scans).
+- Signal-CLV basis: confirmation.confirmedLegOdds is stamped in
+  matchConfirmationPair from scan B's fresh legs for every RE-SIGHTED record
+  (confirmed AND drifted single_sighting; vanished ones get none). Verified
+  fresh via applyScanToRecords' leg refresh; persisted through applyConfirmations.
+- CLV math: engine/clv.ts (PURE) — per-leg raw + de-vigged true CLV%,
+  per-record stake-weighted (signal weights = the stored equal-risk split;
+  execution weights = filledLegs stakes), missing closing legs EXCLUDED +
+  renormalized, null when zero usable legs. Goldens hand-computed.
+- Read model: GET /api/clv/summary (clv/clvSummary.ts, routes/clv.ts).
+  Shape = ClvSummary: `coverage` {recordsWithClosing, recordsTotal,
+  medianCaptureMins (FROZEN closings only; null when none)}; `signal[]`
+  {strategy, gateOutcome:'alerted'|'filtered'|'single_sighting', cell};
+  `execution[]` {strategy, cell}; `byBook[]` {bookmakerKey, title, cell}.
+  Each `cell` is a ClvCell {records, meanClvPct, medianClvPct, beatClosePct,
+  trueClv?}. **beatClosePct / trueClv.beatPct are FRACTIONS 0..1 (share),
+  multiply by 100 for display.** meanClvPct/medianClvPct are percentage
+  POINTS (5 = +5%), rounded to 2 dp; shares rounded to 4 dp. Absent strategy/
+  book/outcome combos simply don't appear (only-present rule). trueClv is
+  omitted when no benchmarked legs.
+- Cells are OBSERVATION-counted: signal/execution `records` = records;
+  byBook `records` = LEGS (each leg is one observation attributed to its book).
+- gate outcome classification (priority): alerted (alerted===true) → filtered
+  (safety present AND fails the LIVE passesSafetyGate) → single_sighting
+  (confirmation.status). A confirmed+gate-passed+unalerted record is NOT a
+  measured gate outcome → excluded from signal (still feeds byBook + coverage).
+- Records without a closing are surfaced ONLY in coverage — never zeroed into
+  a cell. Honest numbers, unchanged Phase-18 posture.
+
+## Phase 18 UI (NEXT, Sonnet) — endpoint ready
+- GET /api/clv/summary is the only new endpoint. Build: the Ledger evidence
+  panel's CLV section (coverage header + signal-vs-execution + byBook), and the
+  cockpit's own-record CLV line once its closing freezes (record.closing on the
+  OpportunityRecord; compute display via the shape above — the CLIENT does no
+  CLV math, mirror the ledger discipline). YELLOW is NOT a CLV color — CLV is
+  neither speculative nor simulated; it's a measurement.
+- Tests: 686 server + 68 client, root typecheck green, tree boots clean
+  (verified GET /api/clv/summary on :8788 mock). Server work committed on main.
+
+---
 # HANDOFF — 2026-07-12 (Phase 17 WP-B complete; WP-C UI next)
 
 ## For the incoming agent: read these first, in order

@@ -34,6 +34,7 @@ import {
   WHATSAPP_DATA_FILE,
 } from './config/constants';
 import { captureClosings } from './clv/clvCapture';
+import { createClvRouter } from './routes/clv';
 import { BackupService } from './ops/backupService';
 import { LeaderboardStore } from './ops/leaderboardStore';
 import { HubService } from './hub/hubService';
@@ -591,6 +592,18 @@ app.use(
     records: () => ledgerService.allRecordsList(),
     hubPurchasedRecordIds,
     defaultStake: async () => (await fundService.settings()).defaultStake,
+  }),
+);
+
+// Phase 18: the CLV read model — GET /api/clv/summary. Read-only, zero
+// credits (no provider in the clv graph); the 'filtered' gate outcome is
+// evaluated LIVE against the current safety settings, over the full record
+// stream (active + archived), so frozen closings surface as they settle.
+app.use(
+  '/api/clv',
+  createClvRouter({
+    records: () => ledgerService.allRecordsList(),
+    safetySettings: () => safetyStore.read(),
   }),
 );
 

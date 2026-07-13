@@ -73,6 +73,25 @@ Known issues / accepted limitations:
       20:17Z incident left as-is (documented in HANDOFF; their events
       commence within days). 652 server + 68 client tests green.
 
+- [~] Phase 18 — CLV capture (SERVER complete this session; UI next). Zero
+      credits STRUCTURAL: engine/clv.ts (PURE raw + de-vigged true CLV%,
+      per-record stake-weighted, missing closing legs EXCLUDED/renormalized,
+      hand-computed goldens) + clv/clvCapture.ts (PURE, no provider — builds
+      record.closing from the raw snapshot: own-book + benchmark price +
+      de-vigged fair prob, for every not-yet-commenced snapshot record;
+      ROLLING OVERWRITE + FREEZE at commence, structural in both capture and
+      OpportunityService.applyClosings). Rides runScan's notifier
+      fire-and-forget. confirmation.confirmedLegOdds (signal basis) stamped in
+      matchConfirmationPair for every re-sighted record (confirmed + drifted
+      single_sighting) — asserted through the real pair pipeline. Read model
+      clv/clvSummary.ts + GET /api/clv/summary (routes/clv.ts): coverage
+      honesty header (frozen-only median), signal cells by strategy × gate
+      outcome (alerted/safety-filtered via LIVE passesSafetyGate/
+      single_sighting), execution cells by strategy, byBook — every cell
+      asserted exactly against a hand-built fixture. 686 server + 68 client
+      tests green, typecheck clean, boots clean. UI (Ledger CLV panel + cockpit
+      own-record CLV line) is the remaining Sonnet WP.
+
 Hub v2 (deferred from Phase 16 by spec — do not build unprompted):
 - Multi-profile overlay charts; density heatmap UI polish; profile
   archiving/cloning. Also noted: EquityChart's hi/$0 axis labels collide
@@ -84,4 +103,7 @@ Candidate next phases:
   distributions now accruing).
 - Props probe (out of scope through Phase 16).
 
-Next task: none queued — Phase 17 shipped. Candidates: Phase 11 (Kelly, once ~2 weeks of graded data exist), Hub v2 polish, props probe.
+Next task: Phase 18 UI (Sonnet) — CLV section in the Ledger evidence panel +
+cockpit own-record CLV line, off GET /api/clv/summary (server done). Then
+candidates: Phase 11 (Kelly, once ~2 weeks of graded data exist), Hub v2
+polish, props probe.

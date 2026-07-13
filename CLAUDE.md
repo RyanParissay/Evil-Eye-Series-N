@@ -33,7 +33,10 @@ server/src/
                  math, fairProbability.ts (de-vig: benchmark odds → fair
                  probabilities, multiplicative behind an enum seam; typed
                  rejections for missing outcomes / line mismatches — the
-                 line-group invariant extends to benchmark comparison).
+                 line-group invariant extends to benchmark comparison),
+                 clv.ts (Phase 18 CLV math: per-leg raw + de-vigged true
+                 CLV%, per-record stake-weighted with missing closing legs
+                 EXCLUDED — renormalized, never zeroed).
                  No Express, no Node built-ins, no provider imports.
   providers/     OddsProvider interface + adapters (TheOddsApi live, Mock fixtures).
                  Wire-format mapping and ProviderError creation happen ONLY here.
@@ -205,6 +208,29 @@ server/src/
                  (GET /api/safety/cost, simulated: true, zero credits).
                  ops/safetyStore.ts holds the one SafetySettings object;
                  routes/safety.ts (settings/rotation/cost) is the boundary.
+  clv/           Phase 18 — Closing Line Value capture, ZERO CREDITS BY
+                 CONSTRUCTION (no provider anywhere in clv/ or engine/clv.ts —
+                 it reuses the raw snapshot a scan already fetched). clvCapture.ts
+                 (PURE) builds a RecordClosing from the fresh snapshot — each
+                 leg's OWN-book price + benchmark (Pinnacle) price + de-vigged
+                 fair prob via engine/fairForLineGroup — for every record whose
+                 event is in the snapshot AND has not commenced; ROLLING
+                 OVERWRITE + FREEZE: every covering scan overwrites the
+                 candidate, and once commence passes the last write is frozen
+                 (OpportunityService.applyClosings re-checks commence, so the
+                 freeze is structural, not just behavioral). It rides runScan's
+                 notifier fire-and-forget (same discipline as leaderboards/
+                 backups), reading only the ACTIVE file (a not-yet-commenced
+                 record always lives there). clvSummary.ts is the read model
+                 behind GET /api/clv/summary (routes/clv.ts): coverage honesty
+                 header (records-with-closing, frozen-only median minutes),
+                 signal cells (basis confirmation.confirmedLegOdds — scan B's
+                 fresh odds stamped in matchConfirmationPair) by strategy ×
+                 gate outcome (alerted / safety-filtered via the LIVE
+                 passesSafetyGate / single_sighting), execution cells (filledLegs
+                 basis) by strategy, and byBook (each leg's own signal CLV → its
+                 book). Records without a closing are surfaced in coverage and
+                 EXCLUDED from every cell, never zeroed.
   routes/        Express boundary: parse → runScan → JSON; ProviderError → HTTP status.
                  api.ts (/api/scan, /api/last-scan) + whatsapp.ts (/api/whatsapp/*).
   config/        constants.ts (every tunable) + bookmakerLinks.ts (homepage fallbacks)
@@ -496,6 +522,20 @@ Import `shared/` from server code as `@shared/...` — the alias is declared in
   provider import anywhere in that file), not just behavioral. Share is
   always recomputed against the CURRENT totalScans at read time, never
   frozen at accrual time.
+- CLV capture (clv/, Phase 18) is ZERO CREDITS STRUCTURALLY — no provider
+  import anywhere in clv/ or engine/clv.ts; it only reads the raw snapshot a
+  scan already fetched. record.closing is a ROLLING candidate: every covering
+  scan overwrites it while the event is pre-commence, and the last write before
+  commence FREEZES (never overwritten after). The freeze is enforced in BOTH
+  captureClosings (omits commenced records) AND applyClosings (re-checks
+  commence at write time) — structural, not just behavioral. ALL records
+  participate (confirmed, gate-filtered, single_sighting, legacy) — the gates'
+  selection quality is exactly what CLV measures. Missing closing legs are
+  EXCLUDED from the stake-weighted mean (weights renormalize), never zeroed; a
+  record with zero usable legs has a null CLV and is surfaced only by coverage.
+  confirmation.confirmedLegOdds (the signal-CLV basis) is stamped in
+  matchConfirmationPair for every record scan B RE-SIGHTED — confirmed and
+  drifted single_sighting alike; a vanished single_sighting carries none.
 - /scans (ops/scanBrowser.ts) attributes a record to a scan by matching
   detection/sighting timestamps into that scan's SLOT (previous scan's
   timestamp, this scan's timestamp], scoped to the same region tab and a
