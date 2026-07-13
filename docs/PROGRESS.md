@@ -49,6 +49,30 @@ Known issues / accepted limitations:
 - Optimizer gates (Phase 14) still need ≥30 graded records + 14 days per group
   before /portfolios/optimize unlocks; grading data accrues only from live scans.
 
+- [x] Phase 17 — Safety Score (branch merged dff5a23). Pure deterministic
+      engine (engine/safety.ts, components a–f, hard rejects, 44 fixtures incl.
+      every spec-named case + byte-identical determinism), exposure/cooldown
+      DERIVED from records (no new mutable state), scoring persisted at the
+      confirmation transition on every confirmed record (gate-filtered
+      included), ONE passesSafetyGate in both consumers (alerts + Hub
+      purchases; paper/telemetry ungated), WhatsApp `Safety NN/100` line +
+      rounded ($5) primary stakes with profit recomputed at rounded stakes
+      (Phase 15 pins amended), GET /api/safety/cost vs a hand-computed fixture
+      week, score badges/breakdown + settings panel + Hub Cost of Safety +
+      rotation advisory in the UI. Scoring failure NEVER blocks confirmation
+      (warn + ungated). Nothing identity/VPN/multi-account related exists.
+- [x] Post-P17 hardening (f3a2695..bfed2cf) — first real-data run of the
+      confirmation pipeline exposed two Phase 16 bugs: (1) an under-covered
+      scan B (concurrent manual scan → provider rate limiting) terminally
+      muted every pending candidate, and the same attempted-vs-successful
+      sports confusion let the kill-pass falsely kill records of failed
+      sports; both fixed (coverage-aware judgment; persistence sees
+      successful-only sports). (2) Scans now serialize through one in-process
+      queue — concurrent scans can no longer race each other. One-off repair
+      un-muted the 11 records from the 23:20Z incident; 10 from an earlier
+      20:17Z incident left as-is (documented in HANDOFF; their events
+      commence within days). 652 server + 68 client tests green.
+
 Hub v2 (deferred from Phase 16 by spec — do not build unprompted):
 - Multi-profile overlay charts; density heatmap UI polish; profile
   archiving/cloning. Also noted: EquityChart's hi/$0 axis labels collide
@@ -56,11 +80,8 @@ Hub v2 (deferred from Phase 16 by spec — do not build unprompted):
   component geometry, cosmetic).
 
 Candidate next phases:
-- Phase 17 — Safety Score (spec saved VERBATIM at docs/prompts/phase-17.md,
-  Ryan-provided; gates alerts + Hub purchases on a deterministic 0–100
-  account-longevity score, sits AFTER confirmation in the pipeline).
 - Kelly + stochastic risk models (Phase 11, still unbuilt; real graded
   distributions now accruing).
 - Props probe (out of scope through Phase 16).
 
-Next task: Phase 17 Gate 0 (docs/prompts/phase-17.md) — after Ryan reviews Phase 16.
+Next task: none queued — Phase 17 shipped. Candidates: Phase 11 (Kelly, once ~2 weeks of graded data exist), Hub v2 polish, props probe.
