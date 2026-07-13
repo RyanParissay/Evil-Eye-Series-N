@@ -26,6 +26,38 @@
     dollars are labeled EXPECTED and middles show count-but-$0).
 - Tests: 644 server + 49 client, typecheck green, tree clean.
 
+## Post-P17 hardening (2026-07-12/13, live-data-confirmed bug + fix)
+- **Bug:** a confirmation scan B ran CONCURRENTLY with a manual scan
+  (2026-07-12 ~23:19–23:20Z, and an earlier ~20:17Z instance); The Odds API
+  rate-limited the overlapping requests, so B successfully fetched ~5 of 22
+  sports. matchConfirmationPair judged ALL pendings against B's post-scan
+  store → every candidate whose sport B never fetched was ruled absent →
+  TERMINAL single_sighting. Healthy active records were permanently muted
+  (stable fingerprints; no alert could ever fire). Bonus hazard found on the
+  way: runScan handed persistence its ATTEMPTED sport list, so the lifecycle
+  kill-pass could also kill/mute records of a merely-failed sport.
+- **Fix 1 (coverage-aware judgment):** matchConfirmationPair now requires
+  the set of sports scan B SUCCESSFULLY fetched (meta.sportsScanned minus
+  meta.sportsFailed; runConfirmScan in index.ts builds it). Uncovered
+  candidates are excluded — stay pending, B re-fires on a later tick, the
+  5×-interval lapse rule stays the honest terminal. Covered-but-absent is
+  single_sighting exactly as before. runScan's persistence scope
+  (recordScan/snapshot/scan-history) now carries successful sports only.
+- **Fix 2 (scan serialization):** runScan queues every invocation (manual
+  route, scheduler scan, scan B) through one in-module promise chain — no
+  two provider scans can overlap; a scan during a scan waits seconds, never
+  errors. CLAUDE.md gotcha added.
+- **Data repair (one-off, script deleted after running):** 11 records with
+  confirmation.status='single_sighting' AND status='active' AND scanBAt in
+  2026-07-12T23:15–23:25Z had the confirmation field deleted via the
+  OpportunityStore class (before=11 → after=0, 75 records total, verified
+  through the live :8787 API). NOTE: deleted-confirmation records behave as
+  pre-P16 legacy records (only NEW records get the pending stamp), so they
+  are honest-but-unalertable until their events age out — the 10
+  single_sighting records stamped ~20:17:36Z were OUTSIDE the sanctioned
+  repair window and were left untouched (same incident shape, decide
+  separately). Their events commence within days either way.
+
 ## Live operations (the part that spends money)
 - :8787 runs tsx watch with the REAL key; :5173 Vite. Untouched.
 - scheduler.enabled = FALSE (dormant); the safety gate only affects FUTURE
