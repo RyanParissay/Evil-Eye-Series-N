@@ -1,0 +1,1540 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+html,body{margin:0;padding:0;background:#000;color:#d6d6d6;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;}
+*{box-sizing:border-box;}
+a{color:#fff;text-decoration:underline;}
+a:hover{color:#F5D90A;}
+::selection{background:#F5D90A;color:#000;}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:#000;padding-bottom:80px;">
+<div style="max-width:860px;margin:0 auto;padding:24px 22px 0;">
+
+  <!-- ============ HEADER ============ -->
+  <header data-screen-label="Header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <svg width="30" height="18" viewBox="0 0 30 18" aria-hidden="true"><ellipse cx="15" cy="9" rx="13.5" ry="8" fill="none" stroke="#fff" stroke-width="1.6"></ellipse><circle cx="15" cy="9" r="4" fill="none" stroke="#fff" stroke-width="1.6"></circle><circle cx="15" cy="9" r="1.7" fill="#e0442c"></circle></svg>
+      <span style="font-size:16px;font-weight:500;letter-spacing:0.16em;color:#fff;">EVIL EYE <span style="color:#F5D90A;">V2</span></span>
+    </div>
+    <span style="{{ modeBadgeStyle }}">{{ modeLabel }}</span>
+  </header>
+
+  <nav style="display:flex;gap:0;margin-top:14px;border:2px solid #fff;width:max-content;max-width:100%;">
+    <sc-for list="{{ navTabs }}" as="tab" hint-placeholder-count="4">
+      <button onClick="{{ tab.onClick }}" style="{{ tab.style }}">{{ tab.label }}</button>
+    </sc-for>
+  </nav>
+
+  <div style="margin-top:12px;padding:8px 0;border-bottom:1px solid #8f8f8f;font-size:11px;letter-spacing:0.1em;color:#9a9a9a;display:flex;justify-content:flex-end;">
+    <span style="white-space:nowrap;">NEXT SCAN <span style="color:#fff;">JUL 13 · 10:47 PM</span></span>
+  </div>
+
+  <!-- ============ TRADES ============ -->
+  <sc-if value="{{ showTrades }}" hint-placeholder-val="{{ true }}">
+  <main data-screen-label="Trades">
+
+    <p style="margin:16px 0 8px;font-size:15px;font-weight:600;letter-spacing:0.14em;color:#fff;">VERIFIED LIVE ({{ liveCount }})</p>
+    <sc-for list="{{ live }}" as="t" hint-placeholder-count="2">
+      <div style="{{ t.cardStyle }}">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:14px;">
+          <span style="font-weight:600;"><span style="{{ t.tagStyle }}">{{ t.cat }}</span>{{ t.event }} · {{ t.sport }}</span>
+          <span style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+            <span style="color:#d6d6d6;font-size:13px;font-weight:500;letter-spacing:0.1em;white-space:nowrap;">{{ t.statusLabel }} <span style="{{ t.statusValueStyle }}">{{ t.statusValue }}</span></span>
+            <sc-for list="{{ t.chips }}" as="c" hint-placeholder-count="0">
+              <span style="{{ c.style }}">{{ c.label }}</span>
+            </sc-for>
+          </span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin-top:10px;font-size:13px;">
+          <sc-for list="{{ t.legs }}" as="leg" hint-placeholder-count="2">
+            <button style="white-space:nowrap;background:#161616;border:2px solid #cfcfcf;color:#fff;padding:9px 14px;font-size:14px;font-weight:500;font-family:inherit;font-variant-numeric:tabular-nums;cursor:pointer;text-align:left;" style-hover="border-color:#fff;color:#fff;background:#1e1e1e;">{{ leg.text }}<span style="{{ leg.stakeStyle }}">{{ leg.stakeLabel }}</span></button>
+          </sc-for>
+          <span style="color:#9a9a9a;font-size:12px;">{{ t.subnote }}</span>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center;">
+          <button onClick="{{ t.confirm }}" style="{{ t.confirmBtnStyle }}" style-hover="opacity:0.85;">{{ t.confirmLabel }}</button>
+          <button onClick="{{ t.toggleLimited }}" style="{{ t.limitedBtnStyle }}">TRADE LIMITED?</button>
+          <span style="margin-left:auto;"><span style="{{ t.metricStyle }}">{{ t.metric }}</span></span>
+        </div>
+        <sc-if value="{{ t.limitedOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="border:1px solid #ababab;background:#0d0d0d;margin-top:12px;padding:12px 14px;">
+            <p style="margin:0 0 8px;font-size:11px;letter-spacing:0.14em;color:#9a9a9a;">WHICH BOOK LIMITED YOU? — ONE AT A TIME; REOPEN TO REPORT ANOTHER</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <sc-for list="{{ t.bookOptions }}" as="b" hint-placeholder-count="2">
+                <button onClick="{{ b.onClick }}" style="{{ b.style }}">{{ b.label }}</button>
+              </sc-for>
+            </div>
+            <p style="margin:12px 0 6px;font-size:11px;letter-spacing:0.14em;color:#9a9a9a;">MAX BET THEY ALLOWED</p>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <input value="{{ limitedMax }}" onChange="{{ setLimitedMax }}" placeholder="$25" style="width:110px;background:#000;color:#fff;border:2px solid #ababab;padding:8px 10px;font-size:13px;font-weight:500;font-family:inherit;font-variant-numeric:tabular-nums;outline:none;" style-focus="border-color:#fff;"></input>
+              <button onClick="{{ t.sendLimited }}" style="{{ t.sendBtnStyle }}" style-hover="opacity:0.9;">{{ t.sendBtnLabel }}</button>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-for>
+
+    <p style="margin:18px 0 8px;font-size:15px;font-weight:500;letter-spacing:0.14em;color:#9a9a9a;">PENDING VERIFICATION ({{ pendingCount }})</p>
+    <sc-for list="{{ pending }}" as="t" hint-placeholder-count="2">
+      <div style="{{ t.cardStyle }}">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:14px;">
+          <span style="font-weight:600;color:#d6d6d6;"><span style="{{ t.tagStyle }}">{{ t.cat }}</span>{{ t.event }} · {{ t.sport }}</span>
+          <span style="color:#9a9a9a;font-size:13px;font-weight:500;letter-spacing:0.1em;white-space:nowrap;">{{ t.statusLabel }} <span style="color:#d6d6d6;font-weight:600;">{{ t.statusValue }}</span></span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin-top:8px;font-size:14px;color:#d6d6d6;">
+          <sc-for list="{{ t.legs }}" as="leg" hint-placeholder-count="2">
+            <button style="white-space:nowrap;background:#161616;border:2px solid #8f8f8f;color:#d6d6d6;padding:9px 14px;font-size:14px;font-weight:500;font-family:inherit;font-variant-numeric:tabular-nums;cursor:pointer;text-align:left;" style-hover="border-color:#fff;color:#fff;background:#1e1e1e;">{{ leg.text }}<span style="{{ leg.stakeStyle }}">{{ leg.stakeLabel }}</span></button>
+          </sc-for>
+          <span style="margin-left:auto;align-self:flex-end;"><span style="{{ t.metricStyle }}">{{ t.metric }}</span></span>
+        </div>
+      </div>
+    </sc-for>
+
+    <sc-if value="{{ viewAllOpen }}" hint-placeholder-val="{{ false }}">
+      <p style="margin:18px 0 8px;font-size:15px;font-weight:600;letter-spacing:0.14em;color:#fff;">ALL TRADES</p>
+      <div style="border:2px solid #f5ecb8;">
+        <sc-for list="{{ allTrades }}" as="t" hint-placeholder-count="6">
+          <div style="display:grid;grid-template-columns:0.6fr 1.7fr 2fr 0.9fr 1.1fr;gap:10px;padding:9px 14px;border-bottom:1px solid #4a4a4a;font-size:12px;align-items:center;">
+            <span style="color:#9a9a9a;letter-spacing:0.08em;">{{ t.cat }}</span>
+            <span style="color:#fff;">{{ t.event }}</span>
+            <span style="color:#9a9a9a;">{{ t.legs }}</span>
+            <span style="{{ t.metricStyle }}">{{ t.metric }}</span>
+            <span style="{{ t.statusStyle }}">{{ t.status }}</span>
+          </div>
+        </sc-for>
+        <div style="display:flex;gap:20px;padding:10px 14px;">
+          <sc-for list="{{ allTradesBtns }}" as="b" hint-placeholder-count="1">
+            <button onClick="{{ b.onClick }}" style="{{ b.style }}" style-hover="color:#fff;">{{ b.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin:18px 0 8px;">
+        <p style="margin:0;font-size:15px;font-weight:600;letter-spacing:0.14em;color:#fff;">HISTORY</p>
+        <button onClick="{{ toggleGraveyard }}" style="background:none;border:1px solid #cfcfcf;color:#9a9a9a;padding:3px 10px;font-size:11px;letter-spacing:0.1em;cursor:pointer;font-family:inherit;" style-hover="border-color:#fff;color:#fff;">{{ graveyardLabel }}</button>
+      </div>
+      <div style="border:2px solid #f5ecb8;">
+        <sc-for list="{{ history }}" as="t" hint-placeholder-count="5">
+          <div style="display:grid;grid-template-columns:2.4fr 1.5fr 1fr;gap:10px;padding:9px 14px;border-bottom:1px solid #4a4a4a;font-size:12px;align-items:center;">
+            <span style="color:#d6d6d6;">{{ t.left }}</span>
+            <span style="display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;">
+              <span style="{{ t.chip.style }}">{{ t.chip.label }}</span>
+              <span style="{{ t.result.style }}">{{ t.result.label }}</span>
+            </span>
+            <span style="color:#9a9a9a;text-align:right;letter-spacing:0.06em;white-space:nowrap;">{{ t.when }}</span>
+          </div>
+        </sc-for>
+        <div style="display:flex;gap:20px;padding:10px 14px;">
+          <sc-for list="{{ historyBtns }}" as="b" hint-placeholder-count="1">
+            <button onClick="{{ b.onClick }}" style="{{ b.style }}" style-hover="color:#fff;">{{ b.label }}</button>
+          </sc-for>
+        </div>
+        <sc-if value="{{ graveyardOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:10px 14px;">
+            <div style="font-size:11px;letter-spacing:0.14em;color:#5a5a5a;margin-bottom:8px;">GRAVEYARD — EVERY KILL IS LOGGED WITH ITS REASON</div>
+            <sc-for list="{{ killed }}" as="k" hint-placeholder-count="4">
+              <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:6px 0;border-top:1px solid #4a4a4a;font-size:12px;color:#9a9a9a;">
+                <span>{{ k.cat }} · {{ k.event }}</span>
+                <span style="letter-spacing:0.08em;color:#5a5a5a;">{{ k.reason }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+    <div style="margin-top:16px;">
+      <button onClick="{{ toggleViewAll }}" style="{{ viewAllBtnStyle }}" style-hover="background:#fff;">VIEW ALL TRADES</button>
+      <p style="margin:6px 0 0;text-align:center;font-size:11px;letter-spacing:0.08em;color:#5a5a5a;">EVERY VALUABLE TRADE THE SCANNER FOUND — ARB · MIDDLE · EV</p>
+    </div>
+
+  </main>
+  </sc-if>
+
+  <!-- ============ BRAIN ============ -->
+  <sc-if value="{{ showBrain }}" hint-placeholder-val="{{ false }}">
+  <main data-screen-label="Brain">
+
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-top:16px;">
+      <div style="font-size:13px;letter-spacing:0.16em;color:#fff;font-weight:500;">BRAIN</div>
+      <div style="display:flex;gap:14px;align-items:center;font-size:11px;letter-spacing:0.1em;color:#9a9a9a;">
+        <span>LAST FULL PASS 10:47 PM</span>
+        <span style="border:1px solid #ababab;padding:3px 10px;color:#d6d6d6;">KILL SWITCH · OFF</span>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-top:14px;">
+      <button onClick="{{ cycleAnchor }}" style="border:2px solid #fff;background:none;padding:10px;text-align:left;cursor:pointer;font-family:inherit;" style-hover="background:#161616;">
+        <div style="font-size:11px;letter-spacing:0.12em;color:#9a9a9a;">REFERENCE PRICER</div>
+        <div style="font-size:13px;color:#fff;margin-top:6px;font-weight:500;">{{ anchorName }}</div>
+        <div style="font-size:11px;color:#43d17a;margin-top:3px;">live</div>
+      </button>
+      <div style="border:1px solid #8f8f8f;padding:10px;">
+        <div style="font-size:11px;letter-spacing:0.12em;color:#9a9a9a;">CREDITS</div>
+        <div style="font-size:13px;color:#fff;margin-top:6px;">61,212 / 100,000</div>
+        <div style="font-size:11px;color:#43d17a;margin-top:3px;">19d runway</div>
+      </div>
+      <div style="border:1px solid #8f8f8f;padding:10px;">
+        <div style="font-size:11px;letter-spacing:0.12em;color:#9a9a9a;">DOUBLE VERIFICATION</div>
+        <div style="font-size:13px;color:#fff;margin-top:6px;">77% pass rate</div>
+        <div style="font-size:11px;color:#9a9a9a;margin-top:3px;">survivors keep 81% edge</div>
+      </div>
+      <div style="border:1px solid #8f8f8f;padding:10px;">
+        <div style="font-size:11px;letter-spacing:0.12em;color:#9a9a9a;">TODAY'S PICKS</div>
+        <div style="font-size:13px;color:#fff;margin-top:6px;">8 of 12 sent</div>
+        <div style="font-size:11px;color:#F5D90A;margin-top:3px;">4 held back</div>
+      </div>
+      <div style="border:1px solid #8f8f8f;padding:10px;">
+        <div style="font-size:11px;letter-spacing:0.12em;color:#9a9a9a;">CLOSING PRICE EDGE</div>
+        <div style="font-size:13px;color:#fff;margin-top:6px;">+1.1% avg</div>
+        <div style="font-size:11px;color:#43d17a;margin-top:3px;">62% beat the close</div>
+      </div>
+    </div>
+
+    <div style="border:1px solid #ababab;margin-top:10px;padding:13px 16px;">
+      <div style="font-size:11px;letter-spacing:0.14em;color:#9a9a9a;">WHY ONLY 8 TODAY</div>
+      <div style="font-size:13px;line-height:1.65;color:#d6d6d6;margin-top:8px;">214 candidates → 96 passed double verification → 8 sent. Held back: BetMGM heat budget spent · EV mix at its 29% cap · two candidates shared a game with a sent pick.</div>
+    </div>
+
+    <div style="border:2px solid #ababab;margin-top:16px;">
+      <div style="display:grid;grid-template-columns:1.5fr 1.1fr 1fr 0.5fr;gap:10px;padding:11px 16px;border-bottom:2px solid #ababab;font-size:11px;letter-spacing:0.14em;color:#9a9a9a;">
+        <span>SITE</span><span>ITS SPORT</span><span>HEALTH</span><span>HEAT</span>
+      </div>
+      <sc-for list="{{ sites }}" as="s" hint-placeholder-count="5">
+        <div onClick="{{ s.select }}" style="{{ s.rowStyle }}">
+          <span style="color:#fff;font-size:14px;">{{ s.displayName }}</span>
+          <span style="color:#9a9a9a;letter-spacing:0.08em;font-size:12px;">{{ s.sport }}</span>
+          <span style="{{ s.badge.style }}">{{ s.badge.label }}</span>
+          <span style="color:#d6d6d6;font-size:13px;">{{ s.heat }}</span>
+        </div>
+      </sc-for>
+      <button onClick="{{ toggleSites }}" style="display:block;width:100%;text-align:left;background:none;border:none;padding:11px 16px;font-size:12px;letter-spacing:0.14em;color:#5a5a5a;cursor:pointer;font-family:inherit;" style-hover="color:#fff;">{{ sitesToggleLabel }}</button>
+    </div>
+
+    <div style="border:2px solid #fff;margin-top:16px;padding:16px 18px;">
+      <div style="font-size:14px;letter-spacing:0.14em;">
+        <span style="color:#fff;font-weight:500;">{{ detailName }}</span>
+        <span style="color:#9a9a9a;"> {{ detailMeta }}</span>
+      </div>
+      <div style="margin-top:12px;font-size:13px;letter-spacing:0.08em;color:#9a9a9a;">
+        MY MAX BET HERE <span style="color:#fff;font-weight:500;">{{ detailMax }}</span>
+        <span style="color:#e0442c;font-weight:500;"> {{ detailWas }}</span>
+      </div>
+
+      <sc-if value="{{ detailShowChart }}" hint-placeholder-val="{{ true }}">
+        <p style="margin:16px 0 6px;font-size:11px;letter-spacing:0.14em;color:#9a9a9a;">SUSPICION OVER TIME — GUESS (LINE) VS WHAT ACTUALLY HAPPENED (YELLOW MARKS)</p>
+        <svg viewBox="0 0 800 180" style="width:100%;height:170px;display:block;">
+          <line x1="0" y1="20" x2="740" y2="20" stroke="#ababab" stroke-width="1" stroke-dasharray="4 4"></line>
+          <text x="798" y="24" text-anchor="end" fill="#9a9a9a" font-size="10" letter-spacing="1">STOP</text>
+          <line x1="0" y1="85" x2="720" y2="85" stroke="#ababab" stroke-width="1" stroke-dasharray="4 4"></line>
+          <text x="798" y="89" text-anchor="end" fill="#9a9a9a" font-size="10" letter-spacing="1">GO GENTLE</text>
+          <polyline points="10,138 120,135 220,131 320,133 420,129 500,126 560,100 620,96 655,56 750,63 790,59" fill="none" stroke="#fff" stroke-width="1.5"></polyline>
+          <rect x="555.5" y="95.5" width="9" height="9" fill="#F5D90A"></rect>
+          <text x="560" y="126" text-anchor="middle" fill="#F5D90A" font-size="10" letter-spacing="1">BET REJECTED</text>
+          <rect x="650.5" y="51.5" width="9" height="9" fill="#F5D90A"></rect>
+          <text x="655" y="42" text-anchor="middle" fill="#F5D90A" font-size="10" letter-spacing="1">STAKE CUT</text>
+        </svg>
+      </sc-if>
+
+      <div style="border:1px solid #ababab;margin-top:14px;padding:12px 16px;">
+        <p style="margin:0 0 8px;font-size:11px;letter-spacing:0.14em;color:#9a9a9a;">WHAT THE BRAIN DOES NOW</p>
+        <p style="margin:0;font-size:14px;line-height:1.6;color:#d6d6d6;">{{ detailBrainNow }}</p>
+      </div>
+
+      <div style="border:1px solid #ababab;margin-top:10px;padding:12px 16px;">
+        <p style="margin:0 0 8px;font-size:11px;letter-spacing:0.14em;color:#9a9a9a;">□ QUIT RULES — WRITTEN IN ADVANCE</p>
+        <p style="margin:0;font-size:14px;line-height:1.6;color:#d6d6d6;">{{ detailQuit }}</p>
+      </div>
+    </div>
+
+    <div style="border:1px solid #ababab;margin-top:16px;padding:13px 16px;">
+      <div style="font-size:11px;letter-spacing:0.14em;color:#9a9a9a;">STRATEGY PERFORMANCE</div>
+      <div style="display:grid;grid-template-columns:64px 56px 1fr;gap:10px;margin-top:10px;font-size:11px;letter-spacing:0.12em;color:#5a5a5a;">
+        <span></span><span>GRADE</span><span>NOTES</span>
+      </div>
+      <div style="display:grid;grid-template-columns:64px 56px 1fr;gap:10px;margin-top:8px;font-size:12px;align-items:center;row-gap:12px;">
+        <span style="color:#9a9a9a;letter-spacing:0.1em;">ARB</span>
+        <span style="color:#43d17a;font-size:15px;font-weight:500;">92</span>
+        <span style="color:#d6d6d6;">quoted margins hold when confirmed</span>
+        <span style="color:#9a9a9a;letter-spacing:0.1em;">EV</span>
+        <span style="color:#F5D90A;font-size:15px;font-weight:500;">37</span>
+        <span style="color:#d6d6d6;">flags run hot — +3.0% quoted lands at +1.1%</span>
+        <span style="color:#9a9a9a;letter-spacing:0.1em;">MIDDLE</span>
+        <span style="color:#43d17a;font-size:15px;font-weight:500;">81</span>
+        <span style="color:#d6d6d6;">legs beat the close +0.6% · <span style="color:#F5D90A;">on watch until 200 legs (88 logged)</span></span>
+      </div>
+    </div>
+
+    <div style="border:1px solid #ababab;margin-top:10px;padding:13px 16px;">
+      <div style="font-size:11px;letter-spacing:0.14em;color:#9a9a9a;">BRAIN JOURNAL</div>
+      <div style="font-size:12px;line-height:1.7;color:#d6d6d6;margin-top:10px;">
+        <sc-for list="{{ journal }}" as="j" hint-placeholder-count="4">
+          <div style="display:flex;gap:12px;padding:7px 0;border-bottom:1px solid #4a4a4a;">
+            <span style="color:#5a5a5a;min-width:108px;">{{ j.when }}</span>
+            <span>{{ j.text }}</span>
+          </div>
+        </sc-for>
+        <sc-if value="{{ journalOpen }}" hint-placeholder-val="{{ false }}">
+          <sc-for list="{{ journalMore }}" as="j" hint-placeholder-count="2">
+            <div style="display:flex;gap:12px;padding:7px 0;border-bottom:1px solid #4a4a4a;">
+              <span style="color:#5a5a5a;min-width:108px;">{{ j.when }}</span>
+              <span>{{ j.text }}</span>
+            </div>
+          </sc-for>
+        </sc-if>
+      </div>
+      <button onClick="{{ toggleJournal }}" style="display:block;width:100%;text-align:left;background:none;border:none;padding:10px 0 0;font-size:12px;letter-spacing:0.14em;color:#5a5a5a;cursor:pointer;font-family:inherit;" style-hover="color:#fff;">{{ journalToggleLabel }}</button>
+    </div>
+
+    <sc-if value="{{ brainSettingsOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="border:2px solid #FF7AC6;margin-top:16px;">
+        <div style="padding:8px 14px;border-bottom:1px solid #6e2a4e;font-size:11px;letter-spacing:0.14em;color:#FF7AC6;">INPUTS — WHAT THE BRAIN IS CONSUMING</div>
+        <sc-for list="{{ brainInputs }}" as="r" hint-placeholder-count="5">
+          <div style="display:grid;grid-template-columns:1.2fr 2fr 0.9fr;gap:10px;padding:10px 14px;border-bottom:1px solid #4a4a4a;font-size:12px;align-items:center;">
+            <span style="color:#fff;font-weight:500;letter-spacing:0.06em;">{{ r.src }}</span>
+            <span style="color:#9a9a9a;">{{ r.detail }}</span>
+            <span style="{{ r.statusStyle }}">{{ r.status }}</span>
+          </div>
+        </sc-for>
+        <div style="padding:8px 14px;border-bottom:1px solid #6e2a4e;font-size:11px;letter-spacing:0.14em;color:#FF7AC6;">MODEL CONTROLS</div>
+        <sc-for list="{{ brainControls }}" as="r" hint-placeholder-count="4">
+          <div style="display:flex;justify-content:space-between;gap:10px;padding:9px 14px;border-bottom:1px solid #4a4a4a;font-size:12px;">
+            <span style="color:#9a9a9a;letter-spacing:0.06em;">{{ r.k }}</span>
+            <span style="color:#fff;font-weight:500;">{{ r.v }}</span>
+          </div>
+        </sc-for>
+        <div style="display:flex;gap:10px;margin:12px 14px;flex-wrap:wrap;">
+          <button style="background:none;border:2px solid #FF7AC6;color:#FF7AC6;font-size:11px;letter-spacing:0.12em;padding:8px 16px;font-weight:500;cursor:pointer;font-family:inherit;" style-hover="background:#FF7AC6;color:#000;">+ ADD DATA SOURCE</button>
+          <button onClick="{{ toggleModelRoom }}" style="{{ modelRoomBtnStyle }}" style-hover="opacity:0.9;">{{ modelRoomLabel }}</button>
+        </div>
+
+        <sc-if value="{{ modelRoomOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="border-top:1px solid #6e2a4e;">
+            <div style="padding:10px 14px;font-size:13px;font-weight:600;letter-spacing:0.14em;color:#FF7AC6;">MODEL INTERNALS — THE BOILER ROOM <span style="color:#9a9a9a;font-weight:400;font-size:11px;">READ-ONLY MIRROR OF THE BACK END</span></div>
+
+            <div style="padding:0 14px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:11px;letter-spacing:0.1em;">
+              <span style="border:1px solid #FF7AC6;color:#FF7AC6;padding:3px 9px;">SCAN</span><span style="color:#5a5a5a;">→</span>
+              <span style="border:1px solid #FF7AC6;color:#FF7AC6;padding:3px 9px;">NORMALIZE</span><span style="color:#5a5a5a;">→</span>
+              <span style="border:1px solid #FF7AC6;color:#FF7AC6;padding:3px 9px;">DE-VIG</span><span style="color:#5a5a5a;">→</span>
+              <span style="border:1px solid #FF7AC6;color:#FF7AC6;padding:3px 9px;">EDGE MATH</span><span style="color:#5a5a5a;">→</span>
+              <span style="border:1px solid #FF7AC6;color:#FF7AC6;padding:3px 9px;">GATE BATTERY</span><span style="color:#5a5a5a;">→</span>
+              <span style="border:1px solid #FF7AC6;color:#FF7AC6;padding:3px 9px;">STAKING</span><span style="color:#5a5a5a;">→</span>
+              <span style="border:1px solid #FF7AC6;color:#FF7AC6;padding:3px 9px;">WHATSAPP</span>
+            </div>
+
+            <div style="margin:0 14px 12px;border:1px solid #4a4a4a;background:#0d0d0d;padding:12px 14px;">
+              <div style="font-size:11px;letter-spacing:0.14em;color:#9a9a9a;margin-bottom:8px;">THE MATH — STRATEGY CORE (strategy.py)</div>
+              <pre style="margin:0;font-family:'SF Mono',Menlo,Consolas,monospace;font-size:12px;line-height:1.7;color:#d6d6d6;white-space:pre-wrap;"># arbitrage — 2 or 3 legs
+inv_sum    = sum(1 / odds_i for each leg)
+arb_margin = 1 - inv_sum                  # &gt; 0.75% passes
+
+# fair odds — de-vig the reference pricer
+fair_prob  = (1/pin_a) / (1/pin_a + 1/pin_b)
+ev_edge    = fair_prob * book_odds - 1    # &gt; 2.0% passes
+
+# staking — kelly against TOTAL bankroll
+kelly_frac = 0.25
+stake      = bankroll * kelly_frac * ev_edge / (book_odds - 1)
+stake      = round_to(min(stake, 0.05 * bankroll), $5)
+
+# verification — 75s later, tolerance gate
+retention  = edge_recheck / edge_first
+promote if retention &gt;= 1 - tolerance   # default 5%</pre>
+            </div>
+
+            <div style="margin:0 14px 14px;border:1px solid #4a4a4a;background:#0d0d0d;padding:12px 14px;">
+              <div style="font-size:11px;letter-spacing:0.14em;color:#9a9a9a;margin-bottom:8px;">LIVE TRACE — LAST CANDIDATE THROUGH THE PIPE (#1044 ARSENAL VS CHELSEA)</div>
+              <div style="font-family:'SF Mono',Menlo,Consolas,monospace;font-size:12px;line-height:1.9;color:#d6d6d6;">
+                <div><span style="color:#5a5a5a;">IN :</span> betsson 3.10 · marathon 3.65 · pinnacle 3.30</div>
+                <div><span style="color:#5a5a5a;">DEVIG:</span> inv_sum = 0.3226 + 0.2740 + 0.3030 = 0.8996</div>
+                <div><span style="color:#5a5a5a;">EDGE:</span> arb_margin = 1 − 0.8996 = <span style="color:#a8e8be;">2.5%</span></div>
+                <div><span style="color:#5a5a5a;">GATES:</span> one_sport ✓ · heat ✓ · velocity ✓ · breadth ✓ · rounding ✓</div>
+                <div><span style="color:#5a5a5a;">STAKE:</span> $35 / $30 / $33 (rounded to $5, cap 5% of $10,000)</div>
+                <div><span style="color:#5a5a5a;">OUT:</span> verified 22:41:06 · sent via twilio · ttl 10:00</div>
+              </div>
+            </div>
+
+            <p style="margin:0;padding:0 14px 14px;font-size:11px;letter-spacing:0.08em;color:#5a5a5a;">THIS IS THE EXACT CODE PATH EVERY CANDIDATE WALKS. STRATEGY EDITS HAPPEN IN SETTINGS — NEVER BY HAND IN HERE.</p>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+    <div style="margin-top:16px;">
+      <button onClick="{{ toggleBrainSettings }}" style="{{ brainSettingsBtnStyle }}" style-hover="background:#fff;">ADVANCED BRAIN SETTINGS</button>
+      <p style="margin:6px 0 0;text-align:center;font-size:11px;letter-spacing:0.08em;color:#5a5a5a;">API INPUTS · DATA SOURCES · MODEL CONTROLS</p>
+    </div>
+
+  </main>
+  </sc-if>
+
+  <!-- ============ ANALYTICS ============ -->
+  <sc-if value="{{ showAnalytics }}" hint-placeholder-val="{{ false }}">
+  <main data-screen-label="Analytics">
+    <nav style="display:flex;gap:26px;margin-top:18px;flex-wrap:wrap;align-items:baseline;">
+      <span style="position:relative;display:flex;">
+        <span style="background:#fff;color:#000;font-size:13px;font-weight:600;letter-spacing:0.14em;padding:7px 14px;">PROFILE</span>
+        <button onClick="{{ toggleProfileMenu }}" style="background:none;border:2px solid #fff;border-left:none;color:#fff;font-size:13px;font-weight:600;letter-spacing:0.1em;padding:5px 12px;cursor:pointer;font-family:inherit;" style-hover="background:#161616;">{{ profileName }} ▾</button>
+        <sc-if value="{{ profileMenuOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;top:calc(100% + 4px);left:0;background:#000;border:2px solid #ababab;min-width:200px;z-index:10;">
+            <sc-for list="{{ profileMenu }}" as="p" hint-placeholder-count="1">
+              <button onClick="{{ p.onClick }}" style="{{ p.style }}">{{ p.label }}</button>
+            </sc-for>
+            <button onClick="{{ startAddProfile }}" style="display:block;width:100%;text-align:left;background:none;border:none;border-top:1px solid #4a4a4a;color:#fff;font-size:12px;letter-spacing:0.1em;padding:9px 12px;cursor:pointer;font-family:inherit;" style-hover="background:#161616;">+ ADD NEW PROFILE</button>
+          </div>
+        </sc-if>
+      </span>
+      <span style="margin-left:auto;border:2px solid #ababab;padding:6px 12px;font-size:14px;letter-spacing:0.1em;color:#9a9a9a;white-space:nowrap;">FUND START <span style="color:#fff;font-weight:600;">{{ fundStartAmt }}</span> · <span style="color:#fff;font-weight:600;">{{ fundStartDate }}</span></span>
+    </nav>
+
+    <sc-if value="{{ addingProfile }}" hint-placeholder-val="{{ false }}">
+      <div style="border:2px solid #ababab;margin-top:12px;padding:14px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;">
+        <span style="display:grid;gap:6px;">
+          <span style="font-size:11px;letter-spacing:0.14em;color:#9a9a9a;">NAME</span>
+          <input value="{{ newProfName }}" onChange="{{ setNewProfName }}" placeholder="Name" style="width:160px;background:#000;color:#fff;border:2px solid #8f8f8f;padding:8px 10px;font-size:13px;font-weight:500;font-family:inherit;outline:none;" style-focus="border-color:#fff;"></input>
+        </span>
+        <span style="display:grid;gap:6px;">
+          <span style="font-size:11px;letter-spacing:0.14em;color:#9a9a9a;">STARTING CASH</span>
+          <input value="{{ newProfAmt }}" onChange="{{ setNewProfAmt }}" placeholder="$5,000" style="width:120px;background:#000;color:#fff;border:2px solid #8f8f8f;padding:8px 10px;font-size:13px;font-weight:500;font-family:inherit;font-variant-numeric:tabular-nums;outline:none;" style-focus="border-color:#fff;"></input>
+        </span>
+        <button onClick="{{ createProfile }}" style="{{ createProfileStyle }}" style-hover="opacity:0.9;">CREATE PROFILE</button>
+        <span style="font-size:11px;letter-spacing:0.08em;color:#5a5a5a;">STARTS THE DAY YOU CREATE IT — JUL 14 2026</span>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showProfile }}" hint-placeholder-val="{{ true }}">
+      <nav style="display:flex;gap:0;margin-top:18px;border:2px solid #fff;width:max-content;">
+        <sc-for list="{{ rangeTabs }}" as="r" hint-placeholder-count="5">
+          <button onClick="{{ r.onClick }}" style="{{ r.style }}">{{ r.label }}</button>
+        </sc-for>
+      </nav>
+
+      <p style="margin:22px 0 8px;font-size:13px;letter-spacing:0.16em;color:#d6d6d6;">CONFIRMED — PROFIT ($)</p>
+      <div style="background:#d9d9d9;border:3px solid #5CA8FF;padding:14px 14px 10px;">
+        <svg viewBox="0 0 960 220" style="width:100%;height:210px;display:block;">
+          <line x1="60" y1="190" x2="940" y2="190" stroke="#999" stroke-width="1"></line>
+          <line x1="60" y1="160" x2="940" y2="160" stroke="#999" stroke-width="1"></line>
+          <line x1="60" y1="130" x2="940" y2="130" stroke="#999" stroke-width="1"></line>
+          <line x1="60" y1="100" x2="940" y2="100" stroke="#999" stroke-width="1"></line>
+          <line x1="60" y1="70" x2="940" y2="70" stroke="#999" stroke-width="1"></line>
+          <line x1="60" y1="40" x2="940" y2="40" stroke="#999" stroke-width="1"></line>
+          <line x1="60" y1="205" x2="940" y2="205" stroke="#111" stroke-width="2"></line>
+          <line x1="60" y1="175" x2="940" y2="175" stroke="#111" stroke-width="1.5"></line>
+          <line x1="60" y1="145" x2="940" y2="145" stroke="#111" stroke-width="1.5"></line>
+          <line x1="60" y1="115" x2="940" y2="115" stroke="#111" stroke-width="1.5"></line>
+          <line x1="60" y1="85" x2="940" y2="85" stroke="#111" stroke-width="1.5"></line>
+          <line x1="60" y1="55" x2="940" y2="55" stroke="#111" stroke-width="1.5"></line>
+          <line x1="60" y1="25" x2="940" y2="25" stroke="#111" stroke-width="1.5"></line>
+          <line x1="133" y1="25" x2="133" y2="205" stroke="#999" stroke-width="1"></line>
+          <line x1="280" y1="25" x2="280" y2="205" stroke="#999" stroke-width="1"></line>
+          <line x1="427" y1="25" x2="427" y2="205" stroke="#999" stroke-width="1"></line>
+          <line x1="574" y1="25" x2="574" y2="205" stroke="#999" stroke-width="1"></line>
+          <line x1="720" y1="25" x2="720" y2="205" stroke="#999" stroke-width="1"></line>
+          <line x1="867" y1="25" x2="867" y2="205" stroke="#999" stroke-width="1"></line>
+          <line x1="207" y1="25" x2="207" y2="205" stroke="#111" stroke-width="1.5"></line>
+          <line x1="354" y1="25" x2="354" y2="205" stroke="#111" stroke-width="1.5"></line>
+          <line x1="500" y1="25" x2="500" y2="205" stroke="#111" stroke-width="1.5"></line>
+          <line x1="647" y1="25" x2="647" y2="205" stroke="#111" stroke-width="1.5"></line>
+          <line x1="794" y1="25" x2="794" y2="205" stroke="#111" stroke-width="1.5"></line>
+          <text x="50" y="209" text-anchor="end" fill="#111" font-size="12" font-weight="700">$0</text>
+          <text x="50" y="179" text-anchor="end" fill="#111" font-size="12" font-weight="700">$100</text>
+          <text x="50" y="149" text-anchor="end" fill="#111" font-size="12" font-weight="700">$200</text>
+          <text x="50" y="119" text-anchor="end" fill="#111" font-size="12" font-weight="700">$300</text>
+          <text x="50" y="89" text-anchor="end" fill="#111" font-size="12" font-weight="700">$400</text>
+          <text x="50" y="59" text-anchor="end" fill="#111" font-size="12" font-weight="700">$500</text>
+          <text x="50" y="29" text-anchor="end" fill="#111" font-size="12" font-weight="700">$600</text>
+          <polyline points="60,205 128,197 196,201 263,188 331,178 399,183 466,166 534,170 602,153 669,142 737,149 805,126 872,109 940,74" fill="none" stroke="#5CA8FF" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"></polyline>
+          <circle cx="60" cy="205" r="4" fill="#5CA8FF"></circle>
+          <circle cx="128" cy="197" r="4" fill="#5CA8FF"></circle>
+          <circle cx="196" cy="201" r="4" fill="#5CA8FF"></circle>
+          <circle cx="263" cy="188" r="4" fill="#5CA8FF"></circle>
+          <circle cx="331" cy="178" r="4" fill="#5CA8FF"></circle>
+          <circle cx="399" cy="183" r="4" fill="#5CA8FF"></circle>
+          <circle cx="466" cy="166" r="4" fill="#5CA8FF"></circle>
+          <circle cx="534" cy="170" r="4" fill="#5CA8FF"></circle>
+          <circle cx="602" cy="153" r="4" fill="#5CA8FF"></circle>
+          <circle cx="669" cy="142" r="4" fill="#5CA8FF"></circle>
+          <circle cx="737" cy="149" r="4" fill="#5CA8FF"></circle>
+          <circle cx="805" cy="126" r="4" fill="#5CA8FF"></circle>
+          <circle cx="872" cy="109" r="4" fill="#5CA8FF"></circle>
+          <circle cx="940" cy="74" r="5.5" fill="#5CA8FF" stroke="#111" stroke-width="1.5"></circle>
+        </svg>
+        <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:#111;padding:4px 0 2px 50px;">
+          <span>JUN 13</span><span>JUN 18</span><span>JUN 23</span><span>JUN 28</span><span>JUL 5</span><span>JUL 13</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;margin-top:10px;font-size:14px;letter-spacing:0.12em;">
+        <span style="color:#9a9a9a;">RETURN (RANGE) <span style="color:#37c86f;font-weight:500;">+2.74%</span></span>
+        <span style="color:#9a9a9a;">ANNUALIZED <span style="color:#37c86f;font-weight:500;">+38.9%</span></span>
+        <span style="color:#9a9a9a;">PROFIT <span style="color:#fff;font-weight:500;">+$438</span></span>
+      </div>
+
+      <p style="margin:26px 0 8px;font-size:13px;letter-spacing:0.16em;color:#d6d6d6;">ALL (CONFIRMED + UNCONFIRMED) — IF EVERY PICK WAS FOLLOWED ($)</p>
+      <div style="background:#d9d9d9;border:3px solid #5CA8FF;padding:14px 14px 10px;">
+        <svg viewBox="0 0 960 220" style="width:100%;height:210px;display:block;">
+          <line x1="60" y1="70" x2="940" y2="70" stroke="#111" stroke-width="1.5"></line>
+          <line x1="60" y1="25" x2="940" y2="25" stroke="#111" stroke-width="1.5"></line>
+          <line x1="60" y1="183" x2="940" y2="183" stroke="#999" stroke-width="1"></line>
+          <line x1="60" y1="138" x2="940" y2="138" stroke="#999" stroke-width="1"></line>
+          <line x1="60" y1="93" x2="940" y2="93" stroke="#999" stroke-width="1"></line>
+          <line x1="60" y1="48" x2="940" y2="48" stroke="#999" stroke-width="1"></line>
+          <line x1="60" y1="160" x2="940" y2="160" stroke="#111" stroke-width="1.5"></line>
+          <line x1="60" y1="115" x2="940" y2="115" stroke="#111" stroke-width="1.5"></line>
+          <line x1="133" y1="25" x2="133" y2="205" stroke="#999" stroke-width="1"></line>
+          <line x1="280" y1="25" x2="280" y2="205" stroke="#999" stroke-width="1"></line>
+          <line x1="427" y1="25" x2="427" y2="205" stroke="#999" stroke-width="1"></line>
+          <line x1="574" y1="25" x2="574" y2="205" stroke="#999" stroke-width="1"></line>
+          <line x1="720" y1="25" x2="720" y2="205" stroke="#999" stroke-width="1"></line>
+          <line x1="867" y1="25" x2="867" y2="205" stroke="#999" stroke-width="1"></line>
+          <line x1="207" y1="25" x2="207" y2="205" stroke="#111" stroke-width="1.5"></line>
+          <line x1="354" y1="25" x2="354" y2="205" stroke="#111" stroke-width="1.5"></line>
+          <line x1="500" y1="25" x2="500" y2="205" stroke="#111" stroke-width="1.5"></line>
+          <line x1="647" y1="25" x2="647" y2="205" stroke="#111" stroke-width="1.5"></line>
+          <line x1="794" y1="25" x2="794" y2="205" stroke="#111" stroke-width="1.5"></line>
+          <line x1="60" y1="205" x2="940" y2="205" stroke="#111" stroke-width="2"></line>
+          <text x="50" y="209" text-anchor="end" fill="#111" font-size="12" font-weight="700">$0</text>
+          <text x="50" y="164" text-anchor="end" fill="#111" font-size="12" font-weight="700">$200</text>
+          <text x="50" y="119" text-anchor="end" fill="#111" font-size="12" font-weight="700">$400</text>
+          <text x="50" y="74" text-anchor="end" fill="#111" font-size="12" font-weight="700">$600</text>
+          <text x="50" y="29" text-anchor="end" fill="#111" font-size="12" font-weight="700">$800</text>
+          <polyline points="60,205 128,196 196,199 263,184 331,174 399,178 466,161 534,153 602,159 669,138 737,125 805,131 872,99 940,58" fill="none" stroke="#5CA8FF" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"></polyline>
+          <circle cx="60" cy="205" r="4" fill="#5CA8FF"></circle>
+          <circle cx="128" cy="196" r="4" fill="#5CA8FF"></circle>
+          <circle cx="196" cy="199" r="4" fill="#5CA8FF"></circle>
+          <circle cx="263" cy="184" r="4" fill="#5CA8FF"></circle>
+          <circle cx="331" cy="174" r="4" fill="#5CA8FF"></circle>
+          <circle cx="399" cy="178" r="4" fill="#5CA8FF"></circle>
+          <circle cx="466" cy="161" r="4" fill="#5CA8FF"></circle>
+          <circle cx="534" cy="153" r="4" fill="#5CA8FF"></circle>
+          <circle cx="602" cy="159" r="4" fill="#5CA8FF"></circle>
+          <circle cx="669" cy="138" r="4" fill="#5CA8FF"></circle>
+          <circle cx="737" cy="125" r="4" fill="#5CA8FF"></circle>
+          <circle cx="805" cy="131" r="4" fill="#5CA8FF"></circle>
+          <circle cx="872" cy="99" r="4" fill="#5CA8FF"></circle>
+          <circle cx="940" cy="58" r="5.5" fill="#5CA8FF" stroke="#111" stroke-width="1.5"></circle>
+        </svg>
+        <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:#111;padding:4px 0 2px 50px;">
+          <span>JUN 13</span><span>JUN 18</span><span>JUN 23</span><span>JUN 28</span><span>JUL 5</span><span>JUL 13</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;margin-top:10px;font-size:14px;letter-spacing:0.12em;">
+        <span style="color:#9a9a9a;">RETURN (RANGE) <span style="color:#37c86f;font-weight:500;">+4.08%</span></span>
+        <span style="color:#9a9a9a;">ANNUALIZED <span style="color:#37c86f;font-weight:500;">+62.6%</span></span>
+        <span style="color:#9a9a9a;">PROFIT <span style="color:#fff;font-weight:500;">+$652</span></span>
+      </div>
+
+      <p style="margin:18px 0 0;font-size:11px;letter-spacing:0.1em;line-height:1.7;color:#5a5a5a;">RETURNS MEASURED AGAINST TOTAL BANKROLL ($10,000). ANNUALIZED = RANGE RETURN EXTRAPOLATED TO 365 DAYS.</p>
+
+      <div style="border:2px solid #8f8f8f;margin-top:22px;font-size:12px;">
+        <div style="display:grid;grid-template-columns:0.8fr repeat(7,0.7fr) 1fr 0.8fr;gap:6px;padding:9px 14px;border-bottom:1px solid #8f8f8f;font-size:10px;letter-spacing:0.12em;color:#5a5a5a;">
+          <span>MONTH</span><span>CAND</span><span>VERIF</span><span>SENT</span><span>CONF</span><span>UNCONF</span><span>EXP</span><span>KILLED</span><span>FOLLOW-THRU</span><span>P/L</span>
+        </div>
+        <sc-for list="{{ monthly }}" as="m" hint-placeholder-count="3">
+          <div style="display:grid;grid-template-columns:0.8fr repeat(7,0.7fr) 1fr 0.8fr;gap:6px;padding:9px 14px;border-bottom:1px solid #8f8f8f;">
+            <span style="color:#fff;font-weight:500;letter-spacing:0.08em;">{{ m.month }}</span>
+            <span>{{ m.cand }}</span><span>{{ m.verif }}</span><span>{{ m.sent }}</span><span>{{ m.conf }}</span>
+            <span>{{ m.unconf }}</span><span>{{ m.expired }}</span><span>{{ m.killed }}</span>
+            <span>{{ m.follow }}</span><span style="color:#fff;font-weight:500;">{{ m.pl }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="border:2px solid #ababab;padding:14px;margin-top:8px;">
+        <div style="font-size:11px;letter-spacing:0.14em;color:#9a9a9a;margin-bottom:12px;">TIME TO ACT — SENT → CONFIRMED</div>
+        <div style="display:grid;gap:8px;">
+          <sc-for list="{{ funnel }}" as="f" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <span style="font-size:11px;letter-spacing:0.1em;min-width:190px;color:#9a9a9a;">{{ f.label }}</span>
+              <div style="flex:1;height:14px;border:1px solid #8f8f8f;">
+                <div style="{{ f.barStyle }}"></div>
+              </div>
+              <span style="font-size:12px;font-weight:500;color:#fff;min-width:44px;text-align:right;">{{ f.value }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11px;letter-spacing:0.08em;color:#5a5a5a;margin-top:12px;">% OF VERIFIED PICKS STILL ALIVE AT CONFIRMATION — THE REFERENDUM ON THE NOTIFICATION ARCHITECTURE</div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ advancedOpen }}" hint-placeholder-val="{{ false }}">
+      <p style="margin:16px 0 0;font-size:15px;font-weight:600;letter-spacing:0.14em;color:#5CA8FF;">OPEN BETS</p>
+      <div style="border:2px solid #8f8f8f;margin-top:8px;font-size:12px;">
+        <sc-for list="{{ openBets }}" as="b" hint-placeholder-count="3">
+          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid #8f8f8f;">
+            <span style="color:#d6d6d6;">{{ b.left }}</span>
+            <span style="color:#9a9a9a;letter-spacing:0.08em;">{{ b.status }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ advancedOpen }}" hint-placeholder-val="{{ false }}">
+      <p style="margin:18px 0 0;font-size:15px;font-weight:600;letter-spacing:0.14em;color:#5CA8FF;">LEADERBOARDS</p>
+      <div style="display:flex;align-items:baseline;gap:12px;margin-top:8px;">
+        <span style="font-size:11px;letter-spacing:0.14em;color:#9a9a9a;">TOP BOOKS BY CONFIRMED COUNT · SINCE</span>
+        <span style="border:1px solid #9a9a9a;color:#d6d6d6;padding:2px 8px;font-size:11px;letter-spacing:0.1em;">MAY 01 2026 ▾</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px;">
+        <sc-for list="{{ leaderboards }}" as="lb" hint-placeholder-count="4">
+          <div style="border:2px solid #ababab;">
+            <div style="padding:8px 14px;border-bottom:1px solid #8f8f8f;font-size:11px;letter-spacing:0.14em;color:#fff;font-weight:500;">{{ lb.title }}</div>
+            <sc-for list="{{ lb.rows }}" as="r" hint-placeholder-count="3">
+              <div style="display:flex;gap:10px;padding:8px 14px;border-bottom:1px solid #8f8f8f;font-size:12px;">
+                <span style="color:#d6d6d6;flex:1;">{{ r.book }}</span>
+                <span style="color:#fff;">{{ r.count }}</span>
+                <span style="color:#9a9a9a;min-width:40px;text-align:right;">{{ r.pct }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ advancedOpen }}" hint-placeholder-val="{{ false }}">
+      <p style="margin:18px 0 0;font-size:15px;font-weight:600;letter-spacing:0.14em;color:#5CA8FF;">COST OF SAFETY</p>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px;">
+        <div style="border:2px solid #ababab;padding:12px 14px;">
+          <div style="font-size:10px;letter-spacing:0.14em;color:#9a9a9a;margin-bottom:6px;">ROUNDING COST</div>
+          <div style="font-size:20px;font-weight:500;color:#fff;margin-bottom:4px;">−$18.40</div>
+          <div style="font-size:11px;color:#5a5a5a;letter-spacing:0.04em;">Σ (UNROUNDED − ROUNDED WORST-CASE) OVER 41 CONFIRMED PAIRS</div>
+        </div>
+        <div style="border:2px solid #ababab;padding:12px 14px;">
+          <div style="font-size:10px;letter-spacing:0.14em;color:#9a9a9a;margin-bottom:6px;">MARGIN RETENTION — INITIAL → RECHECK → FINAL</div>
+          <div style="font-size:20px;font-weight:500;color:#fff;margin-bottom:4px;">81% MEDIAN</div>
+          <div style="font-size:11px;color:#5a5a5a;letter-spacing:0.04em;">PROMOTION THRESHOLD 80% · 23% OF CANDIDATES DIE AT RECHECK</div>
+        </div>
+        <div style="border:2px solid #ababab;padding:12px 14px;grid-column:span 2;">
+          <div style="font-size:10px;letter-spacing:0.14em;color:#9a9a9a;margin-bottom:12px;">GATE COST — ESTIMATED EV OF KILLED CANDIDATES, PER BATTERY RULE</div>
+          <div style="display:grid;gap:8px;">
+            <sc-for list="{{ gateCosts }}" as="g" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:12px;">
+                <span style="font-size:11px;letter-spacing:0.08em;color:#d6d6d6;min-width:200px;">{{ g.rule }}</span>
+                <div style="flex:1;height:14px;border:1px solid #8f8f8f;">
+                  <div style="{{ g.barStyle }}"></div>
+                </div>
+                <span style="font-size:12px;font-weight:500;color:#fff;min-width:56px;text-align:right;">{{ g.cost }}</span>
+                <span style="font-size:11px;color:#5a5a5a;min-width:150px;">{{ g.note }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="border:2px solid #ababab;padding:12px 14px;grid-column:span 2;">
+          <div style="font-size:10px;letter-spacing:0.14em;color:#9a9a9a;margin-bottom:6px;">CLV VS PINNACLE CLOSE</div>
+          <div style="font-size:20px;font-weight:500;color:#fff;margin-bottom:4px;">+1.1% MEAN · 62% POSITIVE</div>
+          <div style="font-size:11px;color:#5a5a5a;letter-spacing:0.04em;">FROM LAST CACHED PRE-START SWEEP · VS OWN BOOK: +0.4% MEAN</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ advancedOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="border:2px solid #5CA8FF;margin-top:16px;">
+        <div style="padding:10px 14px;border-bottom:1px solid #2a3a52;font-size:13px;font-weight:600;letter-spacing:0.14em;color:#5CA8FF;">LIMITS REPORTED — SENT TO MODEL</div>
+        <sc-for list="{{ limitsRows }}" as="l" hint-placeholder-count="2">
+          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:9px 14px;border-bottom:1px solid #8f8f8f;font-size:12px;">
+            <span style="color:#d6d6d6;">{{ l.left }}</span>
+            <span style="color:#5CA8FF;letter-spacing:0.08em;font-weight:500;">{{ l.right }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="border:2px solid #5CA8FF;margin-top:8px;">
+        <div style="padding:10px 14px;border-bottom:1px solid #2a3a52;font-size:13px;font-weight:600;letter-spacing:0.14em;color:#5CA8FF;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">
+          <span>OPPORTUNITY LEADERBOARDS — SINCE JUL 11</span>
+          <span style="display:flex;border:1px solid #5CA8FF;">
+            <sc-for list="{{ advSortTabs }}" as="s" hint-placeholder-count="2">
+              <button onClick="{{ s.onClick }}" style="{{ s.style }}">{{ s.label }}</button>
+            </sc-for>
+          </span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);">
+          <sc-for list="{{ advLb }}" as="lb" hint-placeholder-count="3">
+            <div style="border-right:1px solid #2a3a52;padding-bottom:6px;">
+              <div style="padding:10px 14px 4px;font-size:11px;letter-spacing:0.12em;color:#9a9a9a;">{{ lb.title }}</div>
+              <div style="display:grid;grid-template-columns:1.3fr 0.6fr 0.9fr;gap:8px;padding:6px 14px;border-bottom:1px solid #4a4a4a;font-size:10px;letter-spacing:0.12em;color:#5a5a5a;">
+                <span>BOOK</span><span style="text-align:right;">COUNT</span><span style="text-align:right;">{{ lb.metric }}</span>
+              </div>
+              <sc-for list="{{ lb.rows }}" as="r" hint-placeholder-count="5">
+                <div style="display:grid;grid-template-columns:1.3fr 0.6fr 0.9fr;gap:8px;padding:7px 14px;border-bottom:1px solid #4a4a4a;font-size:12px;">
+                  <span style="color:#fff;">{{ r.book }}</span>
+                  <span style="color:#d6d6d6;text-align:right;">{{ r.count }}</span>
+                  <span style="color:#5CA8FF;text-align:right;font-weight:500;">{{ r.avg }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+        <button style="display:block;width:100%;text-align:left;background:none;border:none;padding:10px 14px;font-size:12px;letter-spacing:0.14em;color:#5a5a5a;cursor:pointer;font-family:inherit;" style-hover="color:#fff;">SEE ALL →</button>
+      </div>
+    </sc-if>
+    <div style="margin-top:16px;">
+      <button onClick="{{ toggleAdvanced }}" style="{{ advancedBtnStyle }}" style-hover="background:#fff;">ADVANCED ANALYTICS</button>
+      <p style="margin:6px 0 0;text-align:center;font-size:11px;letter-spacing:0.08em;color:#5a5a5a;">BOOKS THAT LIMITED YOU — LOGGED AND SENT TO THE MODEL</p>
+    </div>
+
+    <sc-if value="{{ paperMode }}" hint-placeholder-val="{{ true }}">
+      <p style="margin:26px auto 0;max-width:560px;text-align:center;font-size:12px;letter-spacing:0.12em;line-height:1.7;color:#9a9a9a;">
+        EVERY FIGURE ON THIS PAGE IS SIMULATED PAPER MONEY — A SHADOW POSITION, NOT A LIVE PROMISE.
+      </p>
+    </sc-if>
+  </main>
+  </sc-if>
+
+  <!-- ============ SETTINGS ============ -->
+  <sc-if value="{{ showSettings }}" hint-placeholder-val="{{ false }}">
+  <main data-screen-label="Settings">
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:16px;">
+
+      <div style="border:2px solid #ababab;">
+        <div style="padding:8px 14px;border-bottom:1px solid #8f8f8f;font-size:11px;letter-spacing:0.14em;color:#fff;font-weight:500;">STRATEGY MIX — LOCKED TO 100</div>
+        <div style="padding:14px;display:grid;gap:14px;">
+          <sc-for list="{{ mix }}" as="m" hint-placeholder-count="3">
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;letter-spacing:0.1em;color:#9a9a9a;margin-bottom:6px;">
+                <span>{{ m.label }}</span><span style="color:#fff;font-weight:500;">{{ m.pct }}</span>
+              </div>
+              <div style="height:12px;border:1px solid #ababab;position:relative;">
+                <div style="{{ m.barStyle }}"></div>
+                <div style="{{ m.knobStyle }}"></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="border:2px solid #ababab;">
+        <div style="padding:8px 14px;border-bottom:1px solid #8f8f8f;font-size:11px;letter-spacing:0.14em;color:#fff;font-weight:500;">SCAN RULES · CREDIT FORECASTER</div>
+        <div style="padding:6px 14px;">
+          <sc-for list="{{ scanRows }}" as="r" hint-placeholder-count="6">
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #8f8f8f;font-size:12px;">
+              <span style="color:#9a9a9a;letter-spacing:0.06em;">{{ r.k }}</span>
+              <span style="{{ r.style }}">{{ r.v }}</span>
+            </div>
+          </sc-for>
+          <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;font-size:12px;align-items:center;">
+            <span style="color:#9a9a9a;letter-spacing:0.06em;">REMOVE STALE TRADES AFTER</span>
+            <span style="display:inline-flex;gap:6px;align-items:center;">
+              <span style="color:#fff;font-weight:500;">{{ staleRemoveLabel }}</span>
+              <button onClick="{{ decStale }}" style="background:none;border:1px solid #8f8f8f;color:#d6d6d6;width:22px;height:22px;font-size:12px;cursor:pointer;font-family:inherit;padding:0;" style-hover="border-color:#fff;color:#fff;">−</button>
+              <button onClick="{{ incStale }}" style="background:none;border:1px solid #8f8f8f;color:#d6d6d6;width:22px;height:22px;font-size:12px;cursor:pointer;font-family:inherit;padding:0;" style-hover="border-color:#fff;color:#fff;">+</button>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div style="border:2px solid #ababab;">
+        <div style="padding:8px 14px;border-bottom:1px solid #8f8f8f;font-size:11px;letter-spacing:0.14em;color:#fff;font-weight:500;">RISK &amp; BANKROLL</div>
+        <div style="padding:6px 14px;">
+          <sc-for list="{{ riskRows }}" as="r" hint-placeholder-count="5">
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #8f8f8f;font-size:12px;">
+              <span style="color:#9a9a9a;letter-spacing:0.06em;">{{ r.k }}</span>
+              <span style="color:#fff;font-weight:500;">{{ r.v }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="border:2px solid #ababab;">
+        <div style="padding:8px 14px;border-bottom:1px solid #8f8f8f;font-size:11px;letter-spacing:0.14em;color:#fff;font-weight:500;">BRAIN</div>
+        <div style="padding:6px 14px 14px;">
+          <sc-for list="{{ brainRows }}" as="r" hint-placeholder-count="5">
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #8f8f8f;font-size:12px;">
+              <span style="color:#9a9a9a;letter-spacing:0.06em;">{{ r.k }}</span>
+              <span style="color:#fff;font-weight:500;">{{ r.v }}</span>
+            </div>
+          </sc-for>
+          <button style="margin-top:12px;width:100%;background:none;border:2px solid #fff;color:#fff;padding:8px;font-size:11px;letter-spacing:0.12em;font-weight:500;cursor:pointer;font-family:inherit;" style-hover="background:#fff;color:#000;">UPDATE UNDERSTANDING</button>
+        </div>
+      </div>
+
+      <div style="border:2px solid #ababab;">
+        <div style="padding:8px 14px;border-bottom:1px solid #8f8f8f;font-size:11px;letter-spacing:0.14em;color:#fff;font-weight:500;">WHATSAPP</div>
+        <div style="padding:6px 14px 14px;">
+          <div style="padding:7px 0;border-bottom:1px solid #8f8f8f;">
+            <div style="font-size:12px;color:#9a9a9a;letter-spacing:0.06em;margin-bottom:6px;">YOUR NUMBER</div>
+            <input type="tel" value="{{ waNumber }}" onChange="{{ setWaNumber }}" placeholder="+1 604 555 0000" style="width:100%;background:#000;color:#fff;border:2px solid #ababab;padding:8px 10px;font-size:13px;font-weight:500;letter-spacing:0.06em;font-family:inherit;font-variant-numeric:tabular-nums;outline:none;" style-focus="border-color:#F5D90A;"></input>
+          </div>
+          <sc-for list="{{ waRows }}" as="r" hint-placeholder-count="4">
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #8f8f8f;font-size:12px;">
+              <span style="color:#9a9a9a;letter-spacing:0.06em;">{{ r.k }}</span>
+              <span style="color:#fff;font-weight:500;">{{ r.v }}</span>
+            </div>
+          </sc-for>
+          <button style="margin-top:12px;width:100%;background:none;border:2px solid #fff;color:#fff;padding:8px;font-size:11px;letter-spacing:0.12em;font-weight:500;cursor:pointer;font-family:inherit;" style-hover="background:#fff;color:#000;">SEND TEST MESSAGE</button>
+        </div>
+      </div>
+
+      <div style="border:2px solid #ababab;">
+        <div style="padding:8px 14px;border-bottom:1px solid #8f8f8f;font-size:11px;letter-spacing:0.14em;color:#fff;font-weight:500;">DATA</div>
+        <div style="padding:6px 14px 14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #8f8f8f;font-size:12px;">
+            <span style="color:#9a9a9a;letter-spacing:0.06em;">MODE</span>
+            <span style="border:2px solid #F5D90A;color:#F5D90A;font-size:11px;letter-spacing:0.14em;padding:2px 8px;">SIMULATED</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #8f8f8f;font-size:12px;">
+            <span style="color:#9a9a9a;letter-spacing:0.06em;">BACKUPS</span>
+            <span style="color:#fff;font-weight:500;">14 NIGHTLY · LAST 03:00</span>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px;">
+            <button style="flex:1;background:none;border:2px solid #fff;color:#fff;padding:8px;font-size:11px;letter-spacing:0.12em;font-weight:500;cursor:pointer;font-family:inherit;" style-hover="background:#fff;color:#000;">EXPORT CSV</button>
+            <button style="flex:1;background:none;border:2px solid #fff;color:#fff;padding:8px;font-size:11px;letter-spacing:0.12em;font-weight:500;cursor:pointer;font-family:inherit;" style-hover="background:#fff;color:#000;">EXPORT JSON</button>
+          </div>
+          <p style="margin:8px 0 0;font-size:11px;letter-spacing:0.08em;color:#5a5a5a;">EXPORT, NEVER DELETE. TRADES AND EVENTS ARE KEPT FOREVER.</p>
+        </div>
+      </div>
+
+    </div>
+
+    <button onClick="{{ toggleAdvSettings }}" style="display:block;width:100%;text-align:left;background:none;border:none;padding:16px 0 0;font-size:12px;letter-spacing:0.14em;color:#5a5a5a;cursor:pointer;font-family:inherit;" style-hover="color:#fff;">{{ advSettingsLabel }}</button>
+
+    <sc-if value="{{ advSettingsOpen }}" hint-placeholder-val="{{ false }}">
+      <p style="margin:10px 0 8px;font-size:12px;color:#9a9a9a;">Changes here are written to the brain journal.</p>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+
+        <div style="border:2px solid #ababab;grid-column:span 2;">
+          <div style="padding:8px 14px;border-bottom:1px solid #8f8f8f;font-size:11px;letter-spacing:0.14em;color:#fff;font-weight:500;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+            <span>INPUTS</span>
+            <span style="display:flex;gap:8px;align-items:center;color:#43d17a;"><span style="display:inline-block;width:8px;height:8px;background:#43d17a;border-radius:50%;"></span>5 / 5 INPUTS LIVE</span>
+          </div>
+          <div style="padding:10px 14px;border-bottom:1px solid #4a4a4a;">
+            <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;font-size:12px;">
+              <span style="color:#fff;font-weight:500;letter-spacing:0.06em;">ODDS FEED · THE ODDS API</span>
+              <span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                <span style="color:#9a9a9a;">••••••••8F2C</span>
+                <button style="background:none;border:1px solid #8f8f8f;color:#d6d6d6;font-size:10px;letter-spacing:0.1em;padding:3px 8px;cursor:pointer;font-family:inherit;" style-hover="border-color:#fff;color:#fff;">EDIT</button>
+                <span style="color:#9a9a9a;letter-spacing:0.08em;">PLAN 100K / MO</span>
+                <span style="border:1px solid #43d17a;color:#43d17a;font-size:11px;letter-spacing:0.1em;padding:2px 8px;">LIVE</span>
+                <span style="color:#9a9a9a;letter-spacing:0.08em;">LAST TICK 41 S AGO</span>
+              </span>
+            </div>
+          </div>
+          <div style="padding:10px 14px;border-bottom:1px solid #4a4a4a;">
+            <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;font-size:12px;">
+              <span style="color:#fff;font-weight:500;letter-spacing:0.06em;">RESULTS FEED</span>
+              <span style="color:#fff;font-weight:500;letter-spacing:0.08em;">SAME KEY · ON</span>
+            </div>
+            <p style="margin:6px 0 0;font-size:12px;color:#9a9a9a;">Settles every receipt after games end · ~40 credits/day, already in the forecast</p>
+          </div>
+          <div style="padding:10px 14px;border-bottom:1px solid #4a4a4a;">
+            <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;font-size:12px;">
+              <span style="color:#fff;font-weight:500;letter-spacing:0.06em;">YOUR REPORTS — CONFIRM TAPS + LIMITED? + WHATSAPP REPLIES</span>
+              <span style="border:1px solid #43d17a;color:#43d17a;font-size:11px;letter-spacing:0.1em;padding:2px 8px;">LINKED</span>
+            </div>
+            <p style="margin:6px 0 0;font-size:12px;color:#9a9a9a;">Channel configured in the WHATSAPP panel. This is the brain's only source of truth about limits.</p>
+          </div>
+          <div style="padding:10px 14px;border-bottom:1px solid #4a4a4a;">
+            <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;font-size:12px;">
+              <span style="color:#fff;font-weight:500;letter-spacing:0.06em;">REFERENCE TABLES — MARGIN TABLES v2026.07 · DEEP LINKS 16/16 BOOKS</span>
+              <button style="background:none;border:1px solid #8f8f8f;color:#d6d6d6;font-size:10px;letter-spacing:0.1em;padding:3px 8px;cursor:pointer;font-family:inherit;" style-hover="border-color:#fff;color:#fff;">CHECK FOR UPDATES</button>
+            </div>
+            <p style="margin:6px 0 0;font-size:12px;color:#9a9a9a;">Ships with the app; updates rarely.</p>
+          </div>
+          <div style="padding:10px 14px;border-bottom:1px solid #4a4a4a;">
+            <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;font-size:12px;">
+              <span style="color:#fff;font-weight:500;letter-spacing:0.06em;">BRAIN MEMORY</span>
+              <span style="color:#fff;font-weight:500;letter-spacing:0.08em;">4,182 RECEIPTS · 47 JOURNAL ENTRIES · GROWING</span>
+            </div>
+            <p style="margin:6px 0 0;font-size:12px;color:#9a9a9a;">Backups live in the DATA panel.</p>
+          </div>
+          <p style="margin:0;padding:10px 14px;font-size:12px;color:#9a9a9a;">Inputs in, picks out. The brain never reads news, injuries, or stats — prices only.</p>
+        </div>
+
+        <div style="border:2px solid #ababab;">
+          <div style="padding:8px 14px;border-bottom:1px solid #8f8f8f;font-size:11px;letter-spacing:0.14em;color:#fff;font-weight:500;">MY BOOKS</div>
+          <div style="padding:6px 14px 12px;">
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;align-items:center;">
+              <span style="color:#fff;font-weight:500;">Pinnacle</span>
+              <span style="color:#9a9a9a;letter-spacing:0.08em;">ANY</span>
+              <span style="border:1px solid #fff;color:#fff;font-size:10px;letter-spacing:0.08em;padding:2px 8px;white-space:nowrap;">SHARP — ALWAYS ON</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;align-items:center;">
+              <span style="color:#fff;font-weight:500;">Coolbet</span>
+              <span style="color:#fff;letter-spacing:0.08em;">HOCKEY ▾</span>
+              <span style="border:1px solid #43d17a;color:#43d17a;font-size:10px;letter-spacing:0.1em;padding:2px 10px;">ON</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;align-items:center;">
+              <span style="color:#fff;font-weight:500;">DraftKings</span>
+              <span style="color:#fff;letter-spacing:0.08em;">BASEBALL ▾</span>
+              <span style="border:1px solid #43d17a;color:#43d17a;font-size:10px;letter-spacing:0.1em;padding:2px 10px;">ON</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;align-items:center;">
+              <span style="color:#fff;font-weight:500;">BetMGM</span>
+              <span style="color:#fff;letter-spacing:0.08em;">FOOTBALL ▾</span>
+              <span style="border:1px solid #43d17a;color:#43d17a;font-size:10px;letter-spacing:0.1em;padding:2px 10px;">ON</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;align-items:center;">
+              <span style="color:#fff;font-weight:500;">1xBet</span>
+              <span style="color:#fff;letter-spacing:0.08em;">MMA ▾</span>
+              <span style="border:1px solid #43d17a;color:#43d17a;font-size:10px;letter-spacing:0.1em;padding:2px 10px;">ON</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;align-items:center;">
+              <span style="color:#9a9a9a;font-weight:500;">Bet365</span>
+              <span style="color:#9a9a9a;letter-spacing:0.08em;">SOCCER ▾</span>
+              <span style="border:1px solid #8f8f8f;color:#9a9a9a;font-size:10px;letter-spacing:0.1em;padding:2px 10px;">OFF</span>
+            </div>
+            <button style="display:block;width:100%;text-align:left;background:none;border:none;padding:10px 0 0;font-size:12px;letter-spacing:0.14em;color:#5a5a5a;cursor:pointer;font-family:inherit;" style-hover="color:#fff;">+ ADD BOOK</button>
+          </div>
+        </div>
+
+        <div style="border:2px solid #ababab;">
+          <div style="padding:8px 14px;border-bottom:1px solid #8f8f8f;font-size:11px;letter-spacing:0.14em;color:#fff;font-weight:500;">SPORTS &amp; LEAGUES</div>
+          <div style="padding:12px 14px;">
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;font-size:12px;letter-spacing:0.08em;">
+              <span style="color:#fff;">✓ NHL</span>
+              <span style="color:#fff;">✓ NBA</span>
+              <span style="color:#fff;">✓ MLB</span>
+              <span style="color:#fff;">✓ NFL</span>
+              <span style="color:#fff;">✓ CFL</span>
+              <span style="color:#fff;">✓ EPL</span>
+              <span style="color:#fff;">✓ ATP / WTA</span>
+              <span style="color:#fff;">✓ UFC</span>
+              <span style="color:#5a5a5a;">✗ NCAA</span>
+              <span style="color:#5a5a5a;">✗ LA LIGA</span>
+            </div>
+            <p style="margin:12px 0 0;font-size:12px;color:#9a9a9a;">More leagues = more credits. The forecaster updates live.</p>
+          </div>
+        </div>
+
+        <div style="border:2px solid #ababab;">
+          <div style="padding:8px 14px;border-bottom:1px solid #8f8f8f;font-size:11px;letter-spacing:0.14em;color:#fff;font-weight:500;">EDGE THRESHOLDS &amp; FRESHNESS</div>
+          <div style="padding:6px 14px 12px;">
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;align-items:center;">
+              <span style="color:#9a9a9a;letter-spacing:0.06em;">MIN ARB MARGIN</span>
+              <span style="display:inline-flex;gap:6px;align-items:center;"><span style="color:#fff;font-weight:500;">0.75%</span><button style="background:none;border:1px solid #8f8f8f;color:#d6d6d6;width:22px;height:22px;font-size:12px;cursor:pointer;font-family:inherit;padding:0;" style-hover="border-color:#fff;color:#fff;">−</button><button style="background:none;border:1px solid #8f8f8f;color:#d6d6d6;width:22px;height:22px;font-size:12px;cursor:pointer;font-family:inherit;padding:0;" style-hover="border-color:#fff;color:#fff;">+</button></span>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;align-items:center;">
+              <span style="color:#9a9a9a;letter-spacing:0.06em;">MIN EV EDGE</span>
+              <span style="display:inline-flex;gap:6px;align-items:center;"><span style="color:#fff;font-weight:500;">2.0%</span><button style="background:none;border:1px solid #8f8f8f;color:#d6d6d6;width:22px;height:22px;font-size:12px;cursor:pointer;font-family:inherit;padding:0;" style-hover="border-color:#fff;color:#fff;">−</button><button style="background:none;border:1px solid #8f8f8f;color:#d6d6d6;width:22px;height:22px;font-size:12px;cursor:pointer;font-family:inherit;padding:0;" style-hover="border-color:#fff;color:#fff;">+</button></span>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;align-items:center;">
+              <span style="color:#9a9a9a;letter-spacing:0.06em;">MIN MIDDLE QUALITY</span>
+              <span style="display:inline-flex;gap:6px;align-items:center;"><span style="color:#fff;font-weight:500;">1.5× BREAKEVEN HIT RATE</span><button style="background:none;border:1px solid #8f8f8f;color:#d6d6d6;width:22px;height:22px;font-size:12px;cursor:pointer;font-family:inherit;padding:0;" style-hover="border-color:#fff;color:#fff;">−</button><button style="background:none;border:1px solid #8f8f8f;color:#d6d6d6;width:22px;height:22px;font-size:12px;cursor:pointer;font-family:inherit;padding:0;" style-hover="border-color:#fff;color:#fff;">+</button></span>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;align-items:center;">
+              <span style="color:#9a9a9a;letter-spacing:0.06em;">FRESH WINDOW</span>
+              <span style="display:inline-flex;gap:6px;align-items:center;"><span style="color:#fff;font-weight:500;">120 S</span><button style="background:none;border:1px solid #8f8f8f;color:#d6d6d6;width:22px;height:22px;font-size:12px;cursor:pointer;font-family:inherit;padding:0;" style-hover="border-color:#fff;color:#fff;">−</button><button style="background:none;border:1px solid #8f8f8f;color:#d6d6d6;width:22px;height:22px;font-size:12px;cursor:pointer;font-family:inherit;padding:0;" style-hover="border-color:#fff;color:#fff;">+</button></span>
+            </div>
+            <p style="margin:10px 0 0;font-size:12px;color:#9a9a9a;">Verified cards count down from this before turning STALE.</p>
+          </div>
+        </div>
+
+        <div style="border:2px solid #ababab;">
+          <div style="padding:8px 14px;border-bottom:1px solid #8f8f8f;font-size:11px;letter-spacing:0.14em;color:#fff;font-weight:500;">REFERENCE PRICER FALLBACK</div>
+          <div style="padding:12px 14px;">
+            <div style="font-size:11px;letter-spacing:0.12em;color:#9a9a9a;">IF THE ANCHOR GOES DOWN</div>
+            <div style="display:grid;gap:8px;margin-top:10px;font-size:12px;">
+              <span style="color:#fff;">● FALL BACK TO CONSENSUS (DEFAULT)</span>
+              <span style="color:#9a9a9a;">○ PAUSE EV + MIDDLES, ARBS CONTINUE</span>
+              <span style="color:#9a9a9a;">○ PAUSE EVERYTHING</span>
+            </div>
+            <p style="margin:12px 0 0;font-size:12px;color:#9a9a9a;">The anchor itself is switched on the Brain tab. Switching starts a new measurement series — it never mixes rulers.</p>
+          </div>
+        </div>
+
+        <div style="border:2px solid #ababab;">
+          <div style="padding:8px 14px;border-bottom:1px solid #8f8f8f;font-size:11px;letter-spacing:0.14em;color:#fff;font-weight:500;">ACCOUNT SAFETY RULES <span style="color:#9a9a9a;font-weight:400;">□ EDITABLE WHILE GREEN</span></div>
+          <div style="padding:6px 14px 12px;">
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;">
+              <span style="color:#9a9a9a;letter-spacing:0.06em;">SHARP VELOCITY CAP</span>
+              <span style="color:#fff;font-weight:500;">3 / DAY / BOOK</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;">
+              <span style="color:#9a9a9a;letter-spacing:0.06em;">MARKET BREADTH CAP</span>
+              <span style="color:#fff;font-weight:500;">2 / MARKET / BOOK / WEEK</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;">
+              <span style="color:#9a9a9a;letter-spacing:0.06em;">ONE-SPORT RULE</span>
+              <span style="color:#fff;font-weight:500;">ON</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;">
+              <span style="color:#9a9a9a;letter-spacing:0.06em;">GO GENTLE AT</span>
+              <span style="color:#F5D90A;font-weight:500;">HEAT 30</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;">
+              <span style="color:#9a9a9a;letter-spacing:0.06em;">STOP AT</span>
+              <span style="color:#e0442c;font-weight:500;">HEAT 60</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;">
+              <span style="color:#9a9a9a;letter-spacing:0.06em;">DEFAULT QUIT RULE</span>
+              <span style="color:#fff;font-weight:500;text-align:right;">"RETIRE ACCOUNT AFTER 2 STAKE CUTS IN 14 DAYS"</span>
+            </div>
+            <p style="margin:10px 0 0;font-size:12px;color:#9a9a9a;">Locked while any book is amber or red — you set these when calm.</p>
+          </div>
+        </div>
+
+        <div style="border:2px solid #ababab;grid-column:span 2;">
+          <div style="padding:8px 14px;border-bottom:1px solid #8f8f8f;font-size:11px;letter-spacing:0.14em;color:#fff;font-weight:500;">STRATEGY KILL RULES + JOURNAL <span style="color:#9a9a9a;font-weight:400;">□ EDITABLE WHILE PASSING</span></div>
+          <div style="padding:6px 14px 12px;">
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;">
+              <span style="color:#9a9a9a;letter-spacing:0.06em;">ARB DIES IF</span>
+              <span style="color:#fff;font-weight:500;">CONFIRMED MARGIN &lt; 60% OF QUOTED OVER 50 PAIRS</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;">
+              <span style="color:#9a9a9a;letter-spacing:0.06em;">EV DIES IF</span>
+              <span style="color:#fff;font-weight:500;">CLOSING PRICE EDGE ≤ 0 AFTER 300 PICKS</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #4a4a4a;font-size:12px;">
+              <span style="color:#9a9a9a;letter-spacing:0.06em;">MIDDLE DIES IF</span>
+              <span style="color:#fff;font-weight:500;">LEG CLOSING EDGE ≤ 0 AFTER 200 LEGS</span>
+            </div>
+            <p style="margin:10px 0 0;font-size:12px;color:#9a9a9a;">A strategy on watch locks its own rule.</p>
+            <div style="border-top:1px solid #8f8f8f;margin-top:12px;">
+              <div style="display:flex;justify-content:space-between;gap:10px;padding:10px 0 0;font-size:12px;align-items:center;">
+                <span style="color:#9a9a9a;letter-spacing:0.06em;">JOURNAL MINIMUM</span>
+                <span style="display:inline-flex;gap:6px;align-items:center;"><span style="color:#fff;font-weight:500;">1 / DAY</span><button style="background:none;border:1px solid #8f8f8f;color:#d6d6d6;width:22px;height:22px;font-size:12px;cursor:pointer;font-family:inherit;padding:0;" style-hover="border-color:#fff;color:#fff;">−</button><button style="background:none;border:1px solid #8f8f8f;color:#d6d6d6;width:22px;height:22px;font-size:12px;cursor:pointer;font-family:inherit;padding:0;" style-hover="border-color:#fff;color:#fff;">+</button></span>
+              </div>
+              <p style="margin:6px 0 0;font-size:12px;color:#9a9a9a;">The brain always writes at least this many entries and as many more as it wants.</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </sc-if>
+  </main>
+  </sc-if>
+
+</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;liveMode&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Mode&quot; },
+  &quot;startTab&quot;: { &quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;TRADES&quot;, &quot;options&quot;: [&quot;TRADES&quot;, &quot;BRAIN&quot;, &quot;ANALYTICS&quot;, &quot;SETTINGS&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Navigation&quot; }
+}">
+class Component extends DCLogic {
+  state = { tab: null, aTab: 'PROFILE', range: '30D', graveyardOpen: false, allSites: false, selectedSite: 'BetMGM', waNumber: '+1 604 555 8112',
+    limitedOpenId: null, limitedBooks: {}, limitedMax: '', advancedOpen: false, confirmed: {}, pendRemain: [42, 68], liveRemain: [86, 104], staleUp: 161, staleRemoveMin: 10, sendArmed: false,
+    profiles: [{ name:'Ryan', amt:'$10,000', date:'MAY 01 2026' }], curProfile: 0, profileMenuOpen: false, addingProfile: false, newProfName: '', newProfAmt: '', modelRoomOpen: false,
+    anchorIdx: 0, journalOpen: false, brainSettingsOpen: false, advSettingsOpen: false, advLbSort: 'COUNT', viewAllOpen: false, allTradesView: 5, historyView: 5,
+    limitsLog: [
+      { left:'JUL 12 · Bet365 · EPL — Arsenal vs Chelsea', right:'MAX $25' },
+      { left:'JUL 08 · FanDuel · NBA — Nuggets @ Suns', right:'MAX $120' }
+    ] };
+
+  componentDidMount() {
+    this._pendT = setInterval(() => this.setState(s => ({
+      pendRemain: s.pendRemain.map(v => v > 0 ? v - 1 : 75),
+      liveRemain: s.liveRemain.map(v => v > 0 ? v - 1 : 0),
+      staleUp: s.staleUp + 1
+    })), 1000);
+  }
+
+  componentWillUnmount() { clearInterval(this._pendT); }
+
+  ctaStyle(color, open) {
+    return { display:'block', width:'100%', background: open ? '#6a6a6a' : color, color:'#000', border:'none', textAlign:'center', fontSize:'12px', letterSpacing:'0.14em', fontWeight:500, padding:'11px 16px', cursor:'pointer', fontFamily:'inherit' };
+  }
+
+  renderVals() {
+    const live = this.props.liveMode ?? false;
+    const tab = this.state.tab ?? (this.props.startTab ?? 'TRADES');
+    const aTab = this.state.aTab;
+
+    const chip = (label, active, onClick, first) => ({
+      label, onClick,
+      style: {
+        background: active ? '#fff' : 'none',
+        color: active ? '#000' : '#9a9a9a',
+        border: 'none',
+        borderLeft: first ? 'none' : '2px solid #fff',
+        padding: '8px 18px',
+        fontSize: '12px', fontWeight: 500, letterSpacing: '0.14em',
+        cursor: 'pointer', fontFamily: 'inherit'
+      }
+    });
+
+    const navTabs = ['TRADES','BRAIN','ANALYTICS','SETTINGS'].map((n, i) =>
+      chip(n, tab === n, () => this.setState({ tab: n }), i === 0));
+
+    const analyticsTabs = ['PROFILE'].map((n) => ({
+      label: n,
+      onClick: () => this.setState({ aTab: n }),
+      style: {
+        background:'none', border:'none', padding:'0 0 6px',
+        borderBottom: aTab === n ? '3px solid #F5D90A' : '3px solid transparent',
+        color: aTab === n ? '#fff' : '#9a9a9a',
+        fontSize:'13px', fontWeight:500, letterSpacing:'0.14em',
+        cursor:'pointer', fontFamily:'inherit'
+      }
+    }));
+
+    const rangeTabs = ['1D','5D','30D','1Y','MAX'].map((n, i) =>
+      Object.assign(chip(n, this.state.range === n, () => this.setState({ range: n }), i === 0), {}));
+
+    const card = (opts) => Object.assign({
+      border: '2px solid #ababab', padding: '12px 14px', fontVariantNumeric: 'tabular-nums'
+    }, opts || {});
+    const tagGrey = { border:'1px solid #9a9a9a', color:'#9a9a9a', fontSize:'11px', letterSpacing:'0.1em', padding:'2px 6px', marginRight:'8px' };
+    const tagWhite = { border:'1px solid #fff', color:'#fff', fontSize:'11px', letterSpacing:'0.1em', padding:'2px 6px', marginRight:'8px' };
+
+    const legStake = { display:'inline-block', borderLeft:'1px solid #cfcfcf', marginLeft:'14px', paddingLeft:'14px', color:'#fff', fontWeight:700 };
+    const legArrow = { marginLeft:'10px', color:'#9a9a9a' };
+    const marginBox = { color:'#a8e8be', border:'2px solid #a8e8be', padding:'6px 14px', fontSize:'11px', fontWeight:500, letterSpacing:'0.12em', whiteSpace:'nowrap' };
+    const edgeBox = { color:'#f2e08a', border:'2px solid #f2e08a', padding:'6px 14px', fontSize:'11px', fontWeight:500, letterSpacing:'0.12em', whiteSpace:'nowrap' };
+
+    const fmtSec = (v) => Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0');
+    const pending = [
+      { cat:'ARB', tagStyle:tagGrey, event:'Canucks @ Oilers', sport:'NHL',
+        statusLabel:'CHECKING AGAIN IN', statusValue: fmtSec(this.state.pendRemain[0]),
+        legs:[{text:'Coolbet — Canucks ML @ 2.10', stakeLabel:'↗', stakeStyle:legArrow},
+              {text:'Pinnacle — Oilers ML @ 2.06', stakeLabel:'↗', stakeStyle:legArrow}],
+        metric:'MARGIN: 2.4%', metricStyle: marginBox, cardStyle: card({ opacity:0.82 }) },
+      { cat:'EV', tagStyle:tagGrey, event:'Nuggets @ Suns', sport:'NBA',
+        statusLabel:'CHECKING AGAIN IN', statusValue: fmtSec(this.state.pendRemain[1]),
+        legs:[{text:'FanDuel — Nuggets −3.5 @ 1.98', stakeLabel:'↗', stakeStyle:legArrow}],
+        metric:'EDGE: +3.1%', metricStyle: edgeBox, cardStyle: card({ borderTop:'none', opacity:0.82 }) }
+    ];
+
+    const liveTrades = [
+      { cat:'ARB', tagStyle:tagWhite, event:'Arsenal vs Chelsea', sport:'SOCCER',
+        statusLabel:'FRESH', statusValue: fmtSec(this.state.liveRemain[0]), statusValueStyle:{ color:'#fff', fontWeight:600 }, chips:[],
+        legs:[{text:'Betsson — Arsenal @ 3.10', stakeLabel:'BET $35 ↗', stakeStyle:legStake},
+              {text:'Marathon Bet — Draw @ 3.65', stakeLabel:'BET $30 ↗', stakeStyle:legStake},
+              {text:'Pinnacle — Chelsea @ 3.30', stakeLabel:'BET $33 ↗', stakeStyle:legStake}],
+        metric:'MARGIN: 2.5%', metricStyle: marginBox, subnote:'', cardStyle: card() },
+      { cat:'EV', tagStyle:tagWhite, event:'Ruud vs Shelton', sport:'TENNIS',
+        statusLabel:'FRESH', statusValue: fmtSec(this.state.liveRemain[1]), statusValueStyle:{ color:'#fff', fontWeight:600 }, chips:[],
+        legs:[{text:'888sport — Ruud ML @ 2.15', stakeLabel:'BET $20 ↗', stakeStyle:legStake}],
+        metric:'EDGE: +2.8%', metricStyle: edgeBox, subnote:'', cardStyle: card({ borderTop:'none', padding:'18px 14px' }) },
+      { cat:'MIDDLE', tagStyle:tagWhite, event:'Lions @ Stampeders', sport:'CFL',
+        statusLabel:'STALE', statusValue: fmtSec(this.state.staleUp), statusValueStyle:{ color:'#F5D90A', fontWeight:600 },
+        chips:[ { label:'REFRESH?', style:{ background:'rgba(255,255,255,0.75)', border:'none', color:'#000', fontSize:'11px', fontWeight:500, letterSpacing:'0.12em', padding:'4px 10px', cursor:'pointer' } } ],
+        legs:[{text:'Betway — Lions +4.5 @ 1.95', stakeLabel:'BET $50 ↗', stakeStyle:legStake},
+              {text:'Pinnacle — Stampeders −2.5 @ 1.98', stakeLabel:'BET $50 ↗', stakeStyle:legStake}],
+        metric:'EDGE: +4.6%', metricStyle: edgeBox, subnote:'',
+        cardStyle: card({ borderTop:'none' }) }
+    ];
+
+    const selBooks = this.state.limitedBooks;
+    liveTrades.forEach((t, i) => {
+      const open = this.state.limitedOpenId === i;
+      const confState = this.state.confirmed[i] || 0;
+      t.confirm = () => this.setState(s => { const c = Object.assign({}, s.confirmed); c[i] = ((c[i] || 0) + 1) % 3; return { confirmed: c }; });
+      t.confirmLabel = confState === 1 ? 'CONFIRMED ✓' : confState === 2 ? 'UNCONFIRM?' : 'CONFIRM';
+      t.confirmBtnStyle = { background: confState === 1 ? '#43d17a' : confState === 2 ? '#F5D90A' : '#fff', color:'#000', border:'none', fontSize:'11px', letterSpacing:'0.12em', padding:'8px 16px', fontWeight:500, cursor:'pointer', fontFamily:'inherit' };
+      t.limitedOpen = open;
+      t.toggleLimited = () => this.setState({ limitedOpenId: open ? null : i, limitedBooks: {}, limitedMax: '', sendArmed: false });
+      t.limitedBtnStyle = { background: open ? '#fff' : 'none', color: open ? '#000' : '#fff', border:'2px solid #fff', fontSize:'11px', letterSpacing:'0.12em', padding:'6px 14px', cursor:'pointer', fontFamily:'inherit' };
+      t.bookOptions = t.legs.map(l => {
+        const name = l.text.split(' — ')[0];
+        const on = !!selBooks[name];
+        return {
+          label: name,
+          onClick: () => this.setState(s => {
+            const nb = {};
+            if (!s.limitedBooks[name]) nb[name] = true;
+            return { limitedBooks: nb };
+          }),
+          style: { background: on ? '#fff' : '#161616', color: on ? '#000' : '#d6d6d6', border: on ? '2px solid #fff' : '2px solid #cfcfcf', fontSize:'12px', padding:'6px 12px', cursor:'pointer', fontFamily:'inherit' }
+        };
+      });
+      const selCount = Object.keys(this.state.limitedBooks).filter(k => this.state.limitedBooks[k]).length;
+      const hasAmt = /\d/.test(this.state.limitedMax);
+      const sendReady = open && selCount > 0 && hasAmt;
+      const sendArmed = sendReady && this.state.sendArmed;
+      t.sendBtnLabel = sendArmed ? 'CONFIRM? ✓' : '✓ SEND TO MODEL';
+      t.sendBtnStyle = {
+        background: !sendReady ? '#5a5a5a' : sendArmed ? '#F5D90A' : '#fff',
+        color: !sendReady ? '#1e1e1e' : '#000',
+        border:'none', fontSize:'11px', letterSpacing:'0.12em', padding:'9px 16px', fontWeight:500,
+        cursor: sendReady ? 'pointer' : 'default', fontFamily:'inherit'
+      };
+      t.sendLimited = () => {
+        if (!sendReady) return;
+        if (!sendArmed) { this.setState({ sendArmed: true }); return; }
+        const books = Object.keys(this.state.limitedBooks).filter(k => this.state.limitedBooks[k]);
+        const entry = { left:'JUL 14 · ' + books.join(', ') + ' · ' + t.sport + ' — ' + t.event, right:'MAX ' + this.state.limitedMax };
+        this.setState(s => ({ limitsLog: [entry].concat(s.limitsLog), limitedOpenId: null, limitedBooks: {}, limitedMax: '', sendArmed: false }));
+      };
+    });
+
+    const green = '#37c86f', red = '#e0442c', grey = '#9a9a9a';
+    const outChip = (color) => ({ color, border:'1px solid ' + color, padding:'2px 8px', letterSpacing:'0.1em', fontSize:'11px', width:'fit-content', whiteSpace:'nowrap' });
+
+    const listControls = (key, total) => {
+      const v = this.state[key];
+      const bs = { background:'none', border:'none', padding:'0', fontSize:'12px', letterSpacing:'0.14em', color:'#5a5a5a', cursor:'pointer', fontFamily:'inherit' };
+      const set = (n) => () => { const o = {}; o[key] = n; this.setState(o); };
+      if (v === 5) return [{ label:'VIEW MORE →', onClick:set(15), style:bs }];
+      const out = [{ label:'VIEW LESS', onClick:set(5), style:bs }];
+      if (v === 15 && total > 15) out.push({ label:'VIEW ALL (' + total + ')', onClick:set(9999), style:bs });
+      return out;
+    };
+    const listSlice = (arr, key) => arr.slice(0, this.state[key] === 9999 ? arr.length : this.state[key]);
+    const historyFull = [
+      { left:'ARB · Bruins @ Maple Leafs · $50/$50', chip:{label:'CONFIRMED', style:outChip(green)}, result:{label:'WON +$2.20', style:{color:green}}, when:'JUL 14 · 2:12 PM' },
+      { left:'MIDDLE · Yankees @ Red Sox · $50/$50', chip:{label:'CONFIRMED', style:outChip(green)}, result:{label:'WON +$47.50', style:{color:green}}, when:'JUL 14 · 11:05 AM' },
+      { left:'EV · DraftKings · Mariners ML @ 2.05 · $20', chip:{label:'CONFIRMED', style:outChip(red)}, result:{label:'LOST −$20.00', style:{color:red}}, when:'JUL 13 · 9:48 PM' },
+      { left:'ARB · UFC main event · $50/$50', chip:{label:'UNCONFIRMED', style:outChip(grey)}, result:{label:'NO REPLY', style:{color:'#5a5a5a'}}, when:'JUL 13 · 7:31 PM' },
+      { left:'ARB · Betsson / Marathon · LAFC @ Sounders · $50/$50', chip:{label:'EXPIRED', style:outChip('#5a5a5a')}, result:{label:'—', style:{color:'#5a5a5a'}}, when:'JUL 12 · 6:20 PM' },
+      { left:'MIDDLE · Nuggets @ Suns · $50/$50', chip:{label:'CONFIRMED', style:outChip(green)}, result:{label:'WON +$12.00', style:{color:green}}, when:'JUL 12 · 4:15 PM' },
+      { left:'ARB · Coolbet / Pinnacle · Canucks @ Flames · $50/$50', chip:{label:'CONFIRMED', style:outChip(green)}, result:{label:'WON +$1.90', style:{color:green}}, when:'JUL 12 · 1:44 PM' },
+      { left:'EV · FanDuel · Celtics −2.5 @ 1.96 · $15', chip:{label:'CONFIRMED', style:outChip(red)}, result:{label:'LOST −$15.00', style:{color:red}}, when:'JUL 11 · 8:02 PM' },
+      { left:'ARB · DraftKings / Pinnacle · Astros @ Rangers O/U 9 · $50/$50', chip:{label:'CONFIRMED', style:outChip(green)}, result:{label:'WON +$2.60', style:{color:green}}, when:'JUL 11 · 5:38 PM' },
+      { left:'MIDDLE · Betway / Pinnacle · Elks @ Roughriders · $50/$50', chip:{label:'UNCONFIRMED', style:outChip(grey)}, result:{label:'NO REPLY', style:{color:'#5a5a5a'}}, when:'JUL 11 · 2:10 PM' },
+      { left:'EV · 888sport · Gauff vs Swiatek ML @ 2.15 · $15', chip:{label:'CONFIRMED', style:outChip(green)}, result:{label:'WON +$17.25', style:{color:green}}, when:'JUL 10 · 6:55 PM' },
+      { left:'ARB · Betsson / Pinnacle · Inter vs Milan · $50/$50', chip:{label:'EXPIRED', style:outChip('#5a5a5a')}, result:{label:'—', style:{color:'#5a5a5a'}}, when:'JUL 10 · 3:22 PM' },
+      { left:'EV · LeoVegas · UFC prelim ML @ 2.20 · $15', chip:{label:'CONFIRMED', style:outChip(red)}, result:{label:'LOST −$15.00', style:{color:red}}, when:'JUL 10 · 11:40 AM' },
+      { left:'ARB · Nordic Bet / Pinnacle · Jets @ Wild · $50/$50', chip:{label:'CONFIRMED', style:outChip(green)}, result:{label:'WON +$2.10', style:{color:green}}, when:'JUL 09 · 9:12 PM' },
+      { left:'MIDDLE · Caesars / Pinnacle · Dodgers @ Padres · $50/$50', chip:{label:'CONFIRMED', style:outChip(green)}, result:{label:'WON +$38.00', style:{color:green}}, when:'JUL 09 · 6:48 PM' },
+      { left:'EV · BetRivers · Pacers ML @ 2.35 · $10', chip:{label:'UNCONFIRMED', style:outChip(grey)}, result:{label:'NO REPLY', style:{color:'#5a5a5a'}}, when:'JUL 09 · 1:05 PM' },
+      { left:'ARB · Bet Victor / Pinnacle · Zverev vs Rune · $50/$50', chip:{label:'CONFIRMED', style:outChip(green)}, result:{label:'WON +$1.75', style:{color:green}}, when:'JUL 08 · 7:29 PM' },
+      { left:'EV · Marathon Bet · Sounders ML @ 2.60 · $10', chip:{label:'CONFIRMED', style:outChip(red)}, result:{label:'LOST −$10.00', style:{color:red}}, when:'JUL 08 · 4:11 PM' }
+    ];
+    const history = listSlice(historyFull, 'historyView');
+
+    const killed = [
+      { cat:'ARB', event:'UFC 319 — Pereira vs Ankalaev', reason:'ONE_SPORT_RULE (1XBET × NBA LEG)' },
+      { cat:'ARB', event:'Canadiens @ Senators', reason:'ROUNDING_DESTROYS_MARGIN' },
+      { cat:'EV', event:'Sky @ Fever', reason:'FAILED_VERIFICATION (58% RETENTION)' },
+      { cat:'ARB', event:'Arsenal vs Chelsea', reason:'QUOTE_STALE (14 MIN)' },
+      { cat:'EV', event:'ATP Washington — QF', reason:'HEAT_GATE (FANDUEL AMBER)' },
+      { cat:'ARB', event:'LA Galaxy vs Austin', reason:'FAILED_VERIFICATION (61% RETENTION)' },
+      { cat:'MIDDLE', event:'Blue Bombers @ Argonauts', reason:'MARKET_BREADTH_CAP' }
+    ];
+
+    // ---------- BRAIN ----------
+    const level = (heat) => heat >= 60 ? '5/5' : heat >= 45 ? '4/5' : heat >= 30 ? '3/5' : heat >= 15 ? '2/5' : '1/5';
+    const calmQuit = '"Retire this account after 2 stake cuts in 14 days." Editable now — the account is calm.';
+    const lockedQuit = '"Retire this account after 2 stake cuts in 14 days." Locked while the account struggles — you decided this when calm.';
+    const greenNow = 'Full speed. Stakes at 100%, up to 3 sharp bets a day. Nothing to fix — keep withdrawals boring and regular.';
+
+    const siteData = [
+      { name:'Pinnacle', sport:'ANY', kind:'sharp', heat:'—',
+        meta:'· TAKES EVERY SPORT · THE HEDGE LEG', max:'NO LIMIT', was:'',
+        now:'Safe by design. Sharp books don\u2019t limit winners — this is where the hedge leg goes, and it never accumulates heat.',
+        quit:'None needed. This account is meant to live forever.', chart:false },
+      { name:'Coolbet', sport:'HOCKEY', kind:'green', heat:12, max:'$500', was:'', now:greenNow, quit:calmQuit, chart:true },
+      { name:'Nordic Bet', sport:'HOCKEY', kind:'green', heat:4, max:'$500', was:'', now:greenNow, quit:calmQuit, chart:true },
+      { name:'FanDuel', sport:'BASKETBALL', kind:'amber', heat:38, max:'$120', was:'WAS $400',
+        now:'Half as many risky bets here, stakes shrunk 40%, until heat cools below 30. Also watching: my closing price edge at this book is high — that\u2019s what they grade me on.',
+        quit:lockedQuit, chart:true },
+      { name:'BetRivers', sport:'BASKETBALL', kind:'green', heat:9, max:'$500', was:'', now:greenNow, quit:calmQuit, chart:true },
+      { name:'DraftKings', sport:'BASEBALL', kind:'green', heat:18, max:'$400', was:'', now:greenNow, quit:calmQuit, chart:true },
+      { name:'Caesars', sport:'BASEBALL', kind:'green', heat:6, max:'$500', was:'', now:greenNow, quit:calmQuit, chart:true },
+      { name:'BetMGM', sport:'FOOTBALL', kind:'amber', heat:41, max:'$250', was:'WAS $500',
+        now:'Half as many risky bets here, stakes shrunk 40%, until heat cools below 30. Also watching: my closing price edge at this book is high — that\u2019s what they grade me on.',
+        quit:lockedQuit, chart:true },
+      { name:'Betway', sport:'FOOTBALL', kind:'green', heat:15, max:'$350', was:'', now:greenNow, quit:calmQuit, chart:true },
+      { name:'Bet365', sport:'SOCCER', kind:'red', heat:64, max:'$25', was:'WAS $500',
+        now:'Nothing sharp goes here anymore. Promo reminders only. Withdraw the balance in two or three plain chunks, then let it rest.',
+        quit:lockedQuit, chart:true },
+      { name:'Betsson', sport:'SOCCER', kind:'green', heat:11, max:'$500', was:'', now:greenNow, quit:calmQuit, chart:true },
+      { name:'Marathon Bet', sport:'SOCCER', kind:'green', heat:2, max:'$500', was:'', now:greenNow, quit:calmQuit, chart:true },
+      { name:'888sport', sport:'TENNIS', kind:'green', heat:7, max:'$500', was:'', now:greenNow, quit:calmQuit, chart:true },
+      { name:'Bet Victor', sport:'TENNIS', kind:'green', heat:0, max:'$500', was:'', now:greenNow, quit:calmQuit, chart:true },
+      { name:'LeoVegas', sport:'MMA', kind:'green', heat:18, max:'$300', was:'', now:greenNow, quit:calmQuit, chart:true },
+      { name:'1xBet', sport:'MMA', kind:'red', heat:68, max:'$150', was:'WAS $500',
+        now:'Nothing sharp goes here anymore. Promo reminders only. Withdraw the balance in two or three plain chunks, then let it rest.',
+        quit:lockedQuit, chart:true }
+    ];
+
+    const healthBadge = (kind) => {
+      if (kind === 'sharp') return { label:'SHARP — SAFE', style: Object.assign(outChip('#fff'), { border:'2px solid #fff' }) };
+      if (kind === 'green') return { label:'GREEN', style: Object.assign(outChip(green), { border:'2px solid ' + green }) };
+      if (kind === 'amber') return { label:'AMBER', style: Object.assign(outChip('#F5D90A'), { border:'2px solid #F5D90A' }) };
+      return { label:'RED', style: Object.assign(outChip(red), { border:'2px solid ' + red }) };
+    };
+
+    const shortList = ['Pinnacle','Coolbet','DraftKings','BetMGM','1xBet'];
+    const visible = this.state.allSites ? siteData : siteData.filter(s => shortList.includes(s.name));
+    const sel = siteData.find(s => s.name === this.state.selectedSite) || siteData[7];
+
+    const sites = visible.map(s => ({
+      displayName: s.name + (s.name === sel.name ? ' \u25C2' : ''),
+      sport: s.sport,
+      heat: String(s.heat),
+      badge: healthBadge(s.kind),
+      select: () => this.setState({ selectedSite: s.name }),
+      rowStyle: {
+        display:'grid', gridTemplateColumns:'1.5fr 1.1fr 1fr 0.5fr', gap:'10px',
+        padding:'12px 16px', alignItems:'center', cursor:'pointer',
+        borderBottom:'1px solid #8f8f8f',
+        borderLeft: s.name === sel.name ? '3px solid #fff' : '3px solid transparent',
+        background: s.name === sel.name ? '#161616' : 'none'
+      }
+    }));
+
+    // ---------- ANALYTICS ----------
+    const bar = (pct, color) => ({ width: pct + '%', height:'100%', background: color || '#fff' });
+
+    const monthly = [
+      { month:'JUL', cand:'214', verif:'96', sent:'88', conf:'61', unconf:'6', expired:'7', killed:'118', follow:'69%', pl:'+$188' },
+      { month:'JUN', cand:'402', verif:'171', sent:'160', conf:'118', unconf:'9', expired:'11', killed:'231', follow:'74%', pl:'+$171' },
+      { month:'MAY', cand:'318', verif:'129', sent:'117', conf:'79', unconf:'11', expired:'8', killed:'189', follow:'68%', pl:'+$53' }
+    ];
+
+    const funnel = [
+      { label:'CONFIRMED < 2 MIN', value:'31%', barStyle: bar(31) },
+      { label:'CONFIRMED 2–5 MIN', value:'46%', barStyle: bar(46) },
+      { label:'CONFIRMED 5–10 MIN', value:'14%', barStyle: bar(14) },
+      { label:'EXPIRED / DEAD AT CONFIRM', value:'9%', barStyle: bar(9, '#5a5a5a') }
+    ];
+
+    const openBets = [
+      { left:'ARB · Blue Jays @ Mariners · DraftKings O8.5 @ 2.04 / Pinnacle U8.5 @ 2.02 · $100', status:'STARTS 7:10 PM' },
+      { left:'EV · 888sport · Ruud vs Shelton · Ruud ML @ 2.15 · $15', status:'STARTS 4:00 PM' },
+      { left:'MIDDLE · Lions @ Stampeders · Betway / Pinnacle · $100', status:'LIVE — Q2' }
+    ];
+
+    const leaderboards = [
+      { title:'ARB', rows:[ {book:'Coolbet', count:'34', pct:'28%'}, {book:'DraftKings', count:'27', pct:'22%'}, {book:'Betsson', count:'19', pct:'16%'} ] },
+      { title:'EV', rows:[ {book:'FanDuel', count:'22', pct:'31%'}, {book:'888sport', count:'15', pct:'21%'}, {book:'LeoVegas', count:'12', pct:'17%'} ] },
+      { title:'MIDDLES', rows:[ {book:'Betway', count:'11', pct:'34%'}, {book:'Caesars', count:'8', pct:'25%'}, {book:'BetRivers', count:'5', pct:'16%'} ] },
+      { title:'ALL CATEGORIES', rows:[ {book:'Coolbet', count:'52', pct:'24%'}, {book:'DraftKings', count:'41', pct:'19%'}, {book:'FanDuel', count:'33', pct:'15%'} ] }
+    ];
+
+    const gateCosts = [
+      { rule:'ONE_SPORT_RULE', cost:'−$212', note:'87% OF LINE ITEM IS 1XBET', barStyle: bar(100, '#F5D90A') },
+      { rule:'HEAT_GATE', cost:'−$64', note:'FANDUEL AMBER SINCE JUL 02', barStyle: bar(30) },
+      { rule:'SHARP_VELOCITY_CAP', cost:'−$38', note:'3/DAY PER BOOK', barStyle: bar(18) },
+      { rule:'MARKET_BREADTH_CAP', cost:'−$22', note:'2 / MARKET / BOOK / WEEK', barStyle: bar(10) }
+    ];
+
+    // ---------- SETTINGS ----------
+    const mixBar = (pct) => ({ position:'absolute', left:0, top:0, width: pct + '%', height:'100%', background:'#fff' });
+    const mixKnob = (pct) => ({ position:'absolute', left:'calc(' + pct + '% - 6px)', top:'-4px', width:'12px', height:'18px', background:'#000', border:'2px solid #fff' });
+    const mix = [
+      { label:'ARB', pct:'47', barStyle:mixBar(47), knobStyle:mixKnob(47) },
+      { label:'MIDDLE', pct:'24', barStyle:mixBar(24), knobStyle:mixKnob(24) },
+      { label:'EV', pct:'29', barStyle:mixBar(29), knobStyle:mixKnob(29) }
+    ];
+
+    const bold = { color:'#fff', fontWeight:500 };
+    const yellowVal = { fontWeight:500, color:'#F5D90A' };
+    const scanRows = [
+      { k:'SCAN WINDOW', v:'08:00 – 24:00 PT', style:bold },
+      { k:'QUIET HOURS', v:'00:00 – 08:00 · NO SENDS, NO SCANS', style:bold },
+      { k:'CADENCE', v:'BASE 20 MIN · 5–8 MIN < 2H TO START', style:bold },
+      { k:'VERIFY GAP', v:'75 S', style:bold },
+      { k:'PROJECTED CREDITS / DAY', v:'2,306 OF 2,475', style:bold },
+      { k:'MONTH-END PROJECTION', v:'91,400 / 100,000', style:yellowVal },
+      { k:'REMAINING (LIVE HEADER)', v:'61,212 · 19 DAYS RUNWAY', style:bold }
+    ];
+
+    const riskRows = [
+      { k:'FLAT PAIR STAKE', v:'$100 CAD' },
+      { k:'KELLY FRACTION / CAP', v:'0.25 / 5% OF TOTAL' },
+      { k:'TOTAL BANKROLL', v:'$10,000 CAD' },
+      { k:'LINE MOVE TOLERANCE', v:'5% · 0–100%' },
+      { k:'MIN STAKE / ROUND TO', v:'$10 / $5' },
+      { k:'TRADES PER DAY CAP', v:'12' }
+    ];
+
+    const brainRows = [
+      { k:'HEAT WEIGHTS', v:'DEFAULT · EDITABLE WHILE GREEN' },
+      { k:'CONSOLIDATION PASS', v:'EVERY 6 H · HAIKU' },
+      { k:'LLM BUDGET', v:'$0.84 / $3.00 THIS MONTH' },
+      { k:'KILL SWITCH', v:'OFF' },
+      { k:'LAST DIGEST', v:'TODAY 12:00 · 16 BOOKS' }
+    ];
+
+    const waRows = [
+      { k:'TRANSPORT', v:'TWILIO · INBOUND POLL 45 S' },
+      { k:'REPLY CODES', v:'1 SECURED · 3 LIMITED' },
+      { k:'DETAIL LEVEL', v:'COMPACT' },
+      { k:'QUIET HOURS', v:'00:00 – 08:00' }
+    ];
+
+    return {
+      navTabs, analyticsTabs, rangeTabs,
+      showTrades: tab === 'TRADES',
+      showBrain: tab === 'BRAIN',
+      showAnalytics: tab === 'ANALYTICS',
+      showSettings: tab === 'SETTINGS',
+      showProfile: aTab === 'PROFILE',
+      showOpenBets: aTab === 'OPEN BETS',
+      showLeaderboards: aTab === 'LEADERBOARDS',
+      showCost: aTab === 'COST OF SAFETY',
+      modeLabel: live ? 'LIVE' : 'SIMULATED',
+      modeBadgeStyle: live
+        ? { border:'2px solid #fff', color:'#fff', fontSize:'12px', letterSpacing:'0.16em', padding:'6px 14px', fontWeight:500 }
+        : { border:'2px solid #F5D90A', color:'#F5D90A', fontSize:'12px', letterSpacing:'0.16em', padding:'6px 14px', fontWeight:500 },
+      paperMode: !live && tab === 'ANALYTICS',
+      pending, pendingCount: pending.length,
+      live: liveTrades, liveCount: liveTrades.length,
+      history, killed,
+      graveyardOpen: this.state.graveyardOpen,
+      graveyardLabel: (this.state.graveyardOpen ? '▾' : '▸') + ' ' + killed.length + ' KILLED TODAY',
+      toggleGraveyard: () => this.setState(s => ({ graveyardOpen: !s.graveyardOpen })),
+      profileName: (this.state.profiles[this.state.curProfile] || this.state.profiles[0]).name.toUpperCase(),
+      fundStartAmt: (this.state.profiles[this.state.curProfile] || this.state.profiles[0]).amt,
+      fundStartDate: (this.state.profiles[this.state.curProfile] || this.state.profiles[0]).date,
+      profileMenuOpen: this.state.profileMenuOpen,
+      toggleProfileMenu: () => this.setState(s => ({ profileMenuOpen: !s.profileMenuOpen })),
+      profileMenu: this.state.profiles.map((p, idx) => ({
+        label: (idx === this.state.curProfile ? '● ' : '') + p.name.toUpperCase(),
+        onClick: () => this.setState({ curProfile: idx, profileMenuOpen: false }),
+        style: { display:'block', width:'100%', textAlign:'left', background:'none', border:'none', color: idx === this.state.curProfile ? '#fff' : '#9a9a9a', fontSize:'12px', letterSpacing:'0.1em', padding:'9px 12px', cursor:'pointer', fontFamily:'inherit' }
+      })),
+      startAddProfile: () => this.setState({ addingProfile: true, profileMenuOpen: false }),
+      addingProfile: this.state.addingProfile,
+      newProfName: this.state.newProfName,
+      setNewProfName: (e) => this.setState({ newProfName: e.target.value }),
+      newProfAmt: this.state.newProfAmt,
+      setNewProfAmt: (e) => this.setState({ newProfAmt: e.target.value }),
+      createProfileStyle: (() => {
+        const ready = this.state.newProfName.trim().length > 0 && /\d/.test(this.state.newProfAmt);
+        return { background: ready ? '#fff' : '#5a5a5a', color: ready ? '#000' : '#1e1e1e', border:'none', fontSize:'11px', letterSpacing:'0.12em', padding:'10px 16px', fontWeight:500, cursor: ready ? 'pointer' : 'default', fontFamily:'inherit' };
+      })(),
+      createProfile: () => {
+        const name = this.state.newProfName.trim();
+        const digits = (this.state.newProfAmt.match(/\d/g) || []).join('');
+        if (!name || !digits) return;
+        const amt = '$' + parseInt(digits, 10).toLocaleString('en-US');
+        this.setState(s => ({
+          profiles: s.profiles.concat([{ name, amt, date:'JUL 14 2026' }]),
+          curProfile: s.profiles.length,
+          addingProfile: false, newProfName: '', newProfAmt: ''
+        }));
+      },
+      staleRemoveLabel: this.state.staleRemoveMin + ' MIN',
+      decStale: () => this.setState(s => ({ staleRemoveMin: Math.max(1, s.staleRemoveMin - 1) })),
+      incStale: () => this.setState(s => ({ staleRemoveMin: s.staleRemoveMin + 1 })),
+      advSettingsOpen: this.state.advSettingsOpen,
+      advSettingsLabel: this.state.advSettingsOpen ? 'ADVANCED SETTINGS — COLLAPSE' : 'ADVANCED SETTINGS →',
+      toggleAdvSettings: () => this.setState(s => ({ advSettingsOpen: !s.advSettingsOpen })),
+      modelRoomOpen: this.state.modelRoomOpen,
+      modelRoomLabel: this.state.modelRoomOpen ? 'CLOSE MODEL ←' : 'EDIT MODEL →',
+      toggleModelRoom: () => this.setState(s => ({ modelRoomOpen: !s.modelRoomOpen })),
+      modelRoomBtnStyle: {
+        background: this.state.modelRoomOpen ? '#FF7AC6' : 'none',
+        color: this.state.modelRoomOpen ? '#000' : '#FF7AC6',
+        border:'2px solid #FF7AC6', fontSize:'11px', letterSpacing:'0.12em',
+        padding:'8px 16px', fontWeight:500, cursor:'pointer', fontFamily:'inherit'
+      },
+      brainSettingsOpen: this.state.brainSettingsOpen,
+      toggleBrainSettings: () => this.setState(s => ({ brainSettingsOpen: !s.brainSettingsOpen })),
+      brainInputs: (() => {
+        const st = (label, color) => ({ color, fontSize:'11px', letterSpacing:'0.1em', textAlign:'right' });
+        return [
+          { src:'THE ODDS API', detail:'Odds feed · 16 books · poll 20 min (5–8 min near start)', status:'LIVE', statusStyle: st('LIVE','#43d17a') },
+          { src:'PINNACLE FEED', detail:'Reference pricer — de-vig anchor for fair odds', status:'LIVE', statusStyle: st('LIVE','#43d17a') },
+          { src:'WHATSAPP REPLIES', detail:'Confirms + limit reports via Twilio', status:'POLL 45S', statusStyle: st('POLL','#9a9a9a') },
+          { src:'SETTLED RESULTS', detail:'Final scores for grading + P/L', status:'LIVE', statusStyle: st('LIVE','#43d17a') },
+          { src:'LIMITS LOG', detail:'Your reported max bets (Advanced Analytics)', status:'2 THIS MONTH', statusStyle: st('2','#F5D90A') },
+          { src:'LLM — HAIKU', detail:'Consolidation pass · strategy text + heat review', status:'$0.84 / $3.00', statusStyle: st('$','#9a9a9a') }
+        ];
+      })(),
+      brainControls: [
+        { k:'HEAT WEIGHTS (RAW)', v:'LIMIT +23 · REJECT +9 · CUT +14 · WITHDRAWAL −2' },
+        { k:'SUSPICION DECAY HALF-LIFE', v:'21 DAYS' },
+        { k:'CONSOLIDATION CADENCE', v:'EVERY 6 H' },
+        { k:'JOURNAL RETENTION', v:'FOREVER — NEVER DELETED' }
+      ],
+      anchorName: ['PINNACLE ▾','CIRCA ▾','CONSENSUS ▾'][this.state.anchorIdx],
+      cycleAnchor: () => this.setState(s => ({ anchorIdx: (s.anchorIdx + 1) % 3 })),
+      journal: [
+        { when:'JUL 13 · 12:00 PM', text:'Daily check: 12 books green, grades steady, credits on pace — no changes' },
+        { when:'JUL 12 · 9:14 PM', text:'Bet365 limit report (WhatsApp) → heat 41→64, max bet $500→$25, quit rule armed' },
+        { when:'JUL 10 · 3:02 AM', text:'EV flags at LeoVegas ran 0.8% hot for 3 weeks → grade cut to 31' },
+        { when:'JUL 08 · 12:00 PM', text:'Consolidation pass: FanDuel amber → sharp bets there halved' }
+      ],
+      journalMore: [
+        { when:'JUL 05 · 6:40 PM', text:'Soccer 3-way arbs enabled after 20 clean confirms on 2-way' },
+        { when:'JUL 02 · 12:00 PM', text:'FanDuel marked amber — closing price edge there drawing attention' }
+      ],
+      journalOpen: this.state.journalOpen,
+      journalToggleLabel: this.state.journalOpen ? 'SHOWING ALL — COLLAPSE' : 'SHOW ALL 47 ENTRIES →',
+      toggleJournal: () => this.setState(s => ({ journalOpen: !s.journalOpen })),
+      sites,
+      sitesToggleLabel: this.state.allSites ? '− SHOW FEWER SITES' : '+ ' + (siteData.length - shortList.length) + ' MORE SITES',
+      toggleSites: () => this.setState(s => ({ allSites: !s.allSites })),
+      detailName: sel.name.toUpperCase(),
+      detailMeta: sel.kind === 'sharp' ? sel.meta : '· ' + sel.sport + ' ONLY · SUSPICION LEVEL ' + level(sel.heat),
+      detailMax: sel.max,
+      detailWas: sel.was ? '▼ ' + sel.was : '',
+      detailShowChart: sel.chart,
+      detailBrainNow: sel.now,
+      detailQuit: sel.quit,
+      monthly, funnel, openBets, leaderboards, gateCosts,
+      mix, scanRows, riskRows, brainRows, waRows,
+      waNumber: this.state.waNumber,
+      setWaNumber: (e) => this.setState({ waNumber: e.target.value }),
+      limitedMax: this.state.limitedMax,
+      setLimitedMax: (e) => this.setState({ limitedMax: e.target.value }),
+      viewAllOpen: this.state.viewAllOpen,
+      toggleViewAll: () => this.setState(s => ({ viewAllOpen: !s.viewAllOpen })),
+      viewAllBtnStyle: this.ctaStyle('#F5D90A', this.state.viewAllOpen),
+      advancedBtnStyle: this.ctaStyle('#5CA8FF', this.state.advancedOpen),
+      brainSettingsBtnStyle: this.ctaStyle('#FF7AC6', this.state.brainSettingsOpen),
+      allTrades: (() => {
+        const g = { color:'#a8e8be' }, y = { color:'#f2e08a' };
+        const stat = (label, color) => ({ label, style:{ color, letterSpacing:'0.08em', textAlign:'right' } });
+        return [
+          { cat:'ARB', event:'Arsenal vs Chelsea · SOCCER', legs:'Betsson 3.10 / Marathon 3.65 / Pinnacle 3.30', metric:'MARGIN 2.5%', metricStyle:g, s:stat('VERIFIED LIVE','#fff') },
+          { cat:'MIDDLE', event:'Lions @ Stampeders · CFL', legs:'Betway 1.95 / Pinnacle 1.98', metric:'EDGE +4.6%', metricStyle:y, s:stat('VERIFIED LIVE','#fff') },
+          { cat:'ARB', event:'Canucks @ Oilers · NHL', legs:'Coolbet 2.10 / Pinnacle 2.06', metric:'MARGIN 2.4%', metricStyle:g, s:stat('PENDING','#9a9a9a') },
+          { cat:'EV', event:'Nuggets @ Suns · NBA', legs:'FanDuel −3.5 @ 1.98', metric:'EDGE +3.1%', metricStyle:y, s:stat('PENDING','#9a9a9a') },
+          { cat:'ARB', event:'Bruins @ Maple Leafs · NHL', legs:'Coolbet 2.08 / Pinnacle 2.04', metric:'MARGIN 2.2%', metricStyle:g, s:stat('CONFIRMED +$2.20','#43d17a') },
+          { cat:'MIDDLE', event:'Yankees @ Red Sox · MLB', legs:'Caesars +1.5 / Pinnacle −0.5', metric:'EDGE +5.0%', metricStyle:y, s:stat('CONFIRMED +$47.50','#43d17a') },
+          { cat:'EV', event:'Mariners ML · MLB', legs:'DraftKings 2.05', metric:'EDGE +2.6%', metricStyle:y, s:stat('CONFIRMED −$20.00','#e0442c') },
+          { cat:'ARB', event:'UFC 319 co-main · MMA', legs:'LeoVegas 1.92 / Pinnacle 2.14', metric:'MARGIN 1.9%', metricStyle:g, s:stat('UNCONFIRMED','#9a9a9a') },
+          { cat:'ARB', event:'LA Galaxy vs Austin · MLS', legs:'Betsson 2.90 / Marathon 3.40 / Pinnacle 3.05', metric:'MARGIN 1.4%', metricStyle:g, s:stat('KILLED — VERIFICATION','#e0442c') },
+          { cat:'EV', event:'ATP Washington QF · TENNIS', legs:'888sport 2.15', metric:'EDGE +2.1%', metricStyle:y, s:stat('KILLED — HEAT GATE','#e0442c') },
+          { cat:'MIDDLE', event:'Blue Bombers @ Argonauts · CFL', legs:'Betway +6.5 / Pinnacle −3.5', metric:'EDGE +3.8%', metricStyle:y, s:stat('EXPIRED','#5a5a5a') },
+          { cat:'EV', event:'Canadiens ML · NHL', legs:'Nordic Bet 2.30', metric:'EDGE +2.4%', metricStyle:y, s:stat('CONFIRMED +$8.40','#43d17a') },
+          { cat:'ARB', event:'Sky @ Fever · WNBA', legs:'BetRivers 1.98 / Pinnacle 2.10', metric:'MARGIN 1.7%', metricStyle:g, s:stat('KILLED — ROUNDING','#e0442c') },
+          { cat:'MIDDLE', event:'Chiefs @ Bills · NFL', legs:'BetMGM +3.5 / Pinnacle −1.5', metric:'EDGE +4.2%', metricStyle:y, s:stat('PENDING','#9a9a9a') },
+          { cat:'EV', event:'Ruud vs Shelton · TENNIS', legs:'888sport 2.15', metric:'EDGE +2.8%', metricStyle:y, s:stat('CONFIRMED +$17.25','#43d17a') },
+          { cat:'ARB', event:'Whitecaps vs Timbers · MLS', legs:'Betsson 2.75 / Marathon 3.10 / Pinnacle 3.20', metric:'MARGIN 2.0%', metricStyle:g, s:stat('EXPIRED','#5a5a5a') },
+          { cat:'EV', event:'Alcaraz vs Sinner · TENNIS', legs:'Bet Victor 2.40', metric:'EDGE +3.5%', metricStyle:y, s:stat('KILLED — QUOTE STALE','#e0442c') },
+          { cat:'MIDDLE', event:'Raptors @ Celtics · NBA', legs:'FanDuel +7.5 / Pinnacle −4.5', metric:'EDGE +3.9%', metricStyle:y, s:stat('UNCONFIRMED','#9a9a9a') }
+        ].map(r => ({ cat:r.cat, event:r.event, legs:r.legs, metric:r.metric, metricStyle:r.metricStyle, status:r.s.label, statusStyle:r.s.style })).slice(0, this.state.allTradesView === 9999 ? 99 : this.state.allTradesView);
+      })(),
+      allTradesBtns: listControls('allTradesView', 18),
+      historyBtns: listControls('historyView', historyFull.length),
+      advSortTabs: ['COUNT', 'MARGIN / EDGE'].map((n, i) => ({
+        label: n,
+        onClick: () => this.setState({ advLbSort: n }),
+        style: {
+          background: this.state.advLbSort === n ? '#5CA8FF' : 'none',
+          color: this.state.advLbSort === n ? '#000' : '#5CA8FF',
+          border: 'none', borderLeft: i === 0 ? 'none' : '1px solid #5CA8FF',
+          padding: '4px 10px', fontSize: '10px', fontWeight: 500, letterSpacing: '0.12em',
+          cursor: 'pointer', fontFamily: 'inherit'
+        }
+      })),
+      advLb: (() => {
+        const bySort = (rows) => rows.slice().sort((a, b) =>
+          this.state.advLbSort === 'COUNT' ? b.count - a.count : parseFloat(b.avg) - parseFloat(a.avg));
+        return [
+          { title:'ARB', metric:'AVG MARGIN', rows: bySort([
+            { book:'1xBet', count:139, avg:'2.9%' },
+            { book:'Coolbet', count:103, avg:'2.4%' },
+            { book:'Pinnacle', count:80, avg:'2.1%' },
+            { book:'Nordic Bet', count:21, avg:'1.8%' },
+            { book:'Betsson', count:20, avg:'1.6%' }
+          ]) },
+          { title:'EV', metric:'AVG EDGE', rows: bySort([
+            { book:'Coolbet', count:1037, avg:'3.4%' },
+            { book:'1xBet', count:209, avg:'3.1%' },
+            { book:'Betsson', count:257, avg:'2.8%' },
+            { book:'Nordic Bet', count:257, avg:'2.6%' },
+            { book:'888sport', count:134, avg:'2.2%' }
+          ]) },
+          { title:'MIDDLES', metric:'AVG EDGE', rows: bySort([
+            { book:'1xBet', count:155, avg:'4.4%' },
+            { book:'Coolbet', count:338, avg:'4.1%' },
+            { book:'DraftKings', count:214, avg:'3.6%' },
+            { book:'FanDuel', count:185, avg:'3.2%' },
+            { book:'Pinnacle', count:120, avg:'2.9%' }
+          ]) }
+        ];
+      })(),
+      advancedOpen: this.state.advancedOpen,
+      toggleAdvanced: () => this.setState(s => ({ advancedOpen: !s.advancedOpen })),
+      limitsRows: this.state.limitsLog
+    };
+  }
+}
+</script>
+</body>
+</html>
