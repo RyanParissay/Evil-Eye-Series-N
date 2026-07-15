@@ -2,6 +2,7 @@
 // Fetch helpers NEVER throw: any network/HTTP failure → null (queries) or false (posts).
 import { formatScanTime } from './format';
 import type { BrainView } from './brain';
+import type { SettingsView } from './settings';
 
 export type Strategy = 'ARB' | 'MIDDLE' | 'EV';
 export type TradeStatus =
@@ -134,3 +135,43 @@ export async function fetchBrain(): Promise<BrainView | null> {
 export const postBrainPass = (): Promise<boolean> => postAction('/api/brain/pass');
 export const setBrainAnchor = (idx: number): Promise<boolean> =>
   postAction('/api/brain/anchor', { idx });
+
+// ---- settings (Plan 5) ----------------------------------------------------------
+
+export async function fetchSettingsView(): Promise<SettingsView | null> {
+  try {
+    const res = await fetch('/api/settings/view');
+    if (!res.ok) return null;
+    return (await res.json()) as SettingsView;
+  } catch {
+    return null;
+  }
+}
+
+export async function patchSettings(patch: Record<string, number | string>): Promise<boolean> {
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function patchBook(name: string, body: { enabled?: 0 | 1; sport?: string }): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/books/${name}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export const sendWaTest = (): Promise<boolean> => postAction('/api/whatsapp/test');
