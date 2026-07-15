@@ -5,6 +5,7 @@ import { RiskBankrollPanel } from '../components/RiskBankrollPanel';
 import { BrainPanel } from '../components/BrainPanel';
 import { WhatsappPanel } from '../components/WhatsappPanel';
 import { DataPanel } from '../components/DataPanel';
+import { AdvancedSettings } from '../components/AdvancedSettings';
 
 export function SettingsScreen() {
   const { view, refresh } = useSettingsView();
@@ -26,6 +27,7 @@ export function SettingsScreen() {
         <WhatsappPanel s={view.settings} refresh={refresh} />
         <DataPanel backups={view.backups} mode={view.mode} />
       </div>
+      <AdvancedSettings view={view} now={Date.now()} refresh={refresh} />
     </main>
   );
 }
