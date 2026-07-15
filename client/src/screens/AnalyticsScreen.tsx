@@ -5,6 +5,8 @@ import { bankrollFootnote, fundStartText, type ProfileView, type RangeKey } from
 import { ProfileBar } from '../components/ProfileBar';
 import { RangeChips } from '../components/RangeChips';
 import { ProfitChart } from '../components/ProfitChart';
+import { MonthlyTable } from '../components/MonthlyTable';
+import { TimeToActFunnel } from '../components/TimeToActFunnel';
 
 export function AnalyticsScreen() {
   const [profiles, setProfiles] = useState<ProfileView[]>([]);
@@ -53,6 +55,8 @@ export function AnalyticsScreen() {
         data={view.all}
       />
       <p className="bankroll-note">{bankrollFootnote(view.bankrollCents)}</p>
+      <MonthlyTable rows={view.monthly} />
+      <TimeToActFunnel funnel={view.funnel} />
     </main>
   );
 }
