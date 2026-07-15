@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useBrain } from '../hooks/useBrain';
 import { killSwitchLabel, passTimeLabel } from '../lib/brain';
+import { AdvancedBrainSettings } from '../components/AdvancedBrainSettings';
 import { BrainJournal } from '../components/BrainJournal';
 import { EngineStrip } from '../components/EngineStrip';
 import { RationalePanel } from '../components/RationalePanel';
@@ -13,6 +14,7 @@ export function BrainScreen() {
   const [selectedSite, setSelectedSite] = useState('betmgm');
   const [allSites, setAllSites] = useState(false);
   const [journalOpen, setJournalOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   if (!brain) {
     return (
@@ -47,6 +49,11 @@ export function BrainScreen() {
         journal={brain.journal}
         open={journalOpen}
         onToggle={() => setJournalOpen((v) => !v)}
+      />
+      <AdvancedBrainSettings
+        brain={brain}
+        open={settingsOpen}
+        onToggle={() => setSettingsOpen((v) => !v)}
       />
     </main>
   );
