@@ -15,11 +15,14 @@ function capCents(s: Settings): number {
 }
 
 /**
- * Fractional Kelly vs TOTAL bankroll: f* = (p·o − 1)/(o − 1), clamped ≥ 0,
- * × kellyFraction, capped at kellyCapPct% of bankroll, then rounded.
+ * Fractional Kelly vs TOTAL bankroll: f* = (p·o − 1)/(o − 1); if f* ≤ 0 there
+ * is no stake (returns 0 — the minStakeCents floor applies to stakes, not to
+ * "no stake"). Otherwise × kellyFraction, capped at kellyCapPct% of bankroll,
+ * then rounded.
  */
 export function kellyStakeCents(fairProb: number, odds: number, s: Settings): number {
-  const fStar = Math.max(0, (fairProb * odds - 1) / (odds - 1));
+  const fStar = (fairProb * odds - 1) / (odds - 1);
+  if (fStar <= 0) return 0;
   const raw = fStar * s.kellyFraction * s.bankrollCents;
   return roundStake(Math.min(raw, capCents(s)), s);
 }

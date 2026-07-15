@@ -11,6 +11,7 @@ test('kelly: f* = (p·o − 1)/(o − 1), quarter, capped 5% of total, rounded',
   expect(kellyStakeCents(0.55, 2.0, S)).toBe(25_000);
   // huge edge hits the 5% cap → $500
   expect(kellyStakeCents(0.9, 3.0, S)).toBe(50_000);
+  expect(kellyStakeCents(0.4, 2.0, S)).toBe(0); // negative edge → no stake, not $10
 });
 test('arb split: equal payout, margin survives rounding on a fat arb', () => {
   const { stakes, roundedMargin } = arbStakesCents([2.1, 2.1], S);
