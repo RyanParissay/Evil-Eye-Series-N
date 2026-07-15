@@ -448,3 +448,18 @@ test('ARB/EV edgePct is untouched by the MIDDLE display change (still mirrors ma
     if (t.category !== 'MIDDLE') expect(t.edgePct).toBe(t.marginPct);
   }
 });
+
+test('PATCH settings: brain keys accept their special ranges', async () => {
+  const h = makeApp();
+  const ok = await request(h.app).patch('/api/settings')
+    .send({ heatWeightWithdrawal: -4, anchorIdx: 2, brainKillSwitch: 1 });
+  expect(ok.status).toBe(200);
+  expect(ok.body.settings.heatWeightWithdrawal).toBe(-4);
+  expect(ok.body.settings.anchorIdx).toBe(2);
+  const badAnchor = await request(h.app).patch('/api/settings').send({ anchorIdx: 3 });
+  expect(badAnchor.status).toBe(400);
+  const badWithdrawal = await request(h.app).patch('/api/settings').send({ heatWeightWithdrawal: 1 });
+  expect(badWithdrawal.status).toBe(400);
+  const badSwitch = await request(h.app).patch('/api/settings').send({ brainKillSwitch: 2 });
+  expect(badSwitch.status).toBe(400);
+});

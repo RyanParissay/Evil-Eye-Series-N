@@ -88,6 +88,20 @@ export function Repos(db: Db) {
     profileCreate: db.prepare('INSERT INTO profiles (name, starting_cash_cents, created_date) VALUES (?, ?, ?)'),
     limitsAdd: db.prepare('INSERT INTO limits_reports (trade_id, book, max_allowed_cents, sent_at) VALUES (?, ?, ?, ?)'),
     limitsAll: db.prepare('SELECT * FROM limits_reports ORDER BY sent_at ASC, id ASC'),
+    bookUpdate: db.prepare(
+      'UPDATE books SET heat = @heat, health = @health, max_belief_cents = @maxBeliefCents WHERE name = @name'),
+    tradeCountToday: db.prepare('SELECT COUNT(*) AS n FROM trades WHERE day_key = ?'),
+    tradeHeldBackToday: db.prepare(`SELECT COUNT(*) AS n FROM trades
+      WHERE day_key = ? AND status = 'EXPIRED' AND verified_at IS NULL AND margin_recheck IS NOT NULL`),
+    tradeKilledTodayByReason: db.prepare(`SELECT kill_reason AS reason, COUNT(*) AS n FROM trades
+      WHERE day_key = ? AND status = 'KILLED' GROUP BY kill_reason`),
+    tradeRecheckRows: db.prepare(`SELECT margin_initial AS mi, margin_recheck AS mr, status
+      FROM trades WHERE margin_recheck IS NOT NULL ORDER BY created_at ASC, id ASC`),
+    tradeSentVolumeByBook: db.prepare(`SELECT verified_at AS va, market FROM trades t
+      WHERE t.verified_at IS NOT NULL AND t.status IN ('CONFIRMED', 'SETTLED')
+        AND EXISTS (SELECT 1 FROM json_each(t.legs) WHERE json_extract(json_each.value, '$.book') = @book)
+      ORDER BY verified_at ASC, id ASC`),
+    eventsByKind: db.prepare('SELECT * FROM events_log WHERE kind = ? ORDER BY ts ASC, id ASC'),
   };
 
   const bindTrade = (t: Trade) => ({
@@ -127,6 +141,31 @@ export function Repos(db: Db) {
     countByBookMarketSince(book: string, market: string, sinceMs: number): number {
       return (st.tradeCountByBookMarketSince.get({ book, market, sinceMs }) as { n: number }).n;
     },
+    /** Every trade stamped with this Vancouver day (all statuses) — the rationale's "candidates". */
+    countToday(dayKey: string): number {
+      return (st.tradeCountToday.get(dayKey) as { n: number }).n;
+    },
+    /** Passed the recheck but never promoted (daily cap / zero stake): EXPIRED + recheck set + verified_at null. */
+    heldBackToday(dayKey: string): number {
+      return (st.tradeHeldBackToday.get(dayKey) as { n: number }).n;
+    },
+    killedTodayByReason(dayKey: string): Partial<Record<NonNullable<Trade['killReason']>, number>> {
+      const out: Partial<Record<NonNullable<Trade['killReason']>, number>> = {};
+      for (const row of st.tradeKilledTodayByReason.all(dayKey) as { reason: NonNullable<Trade['killReason']>; n: number }[]) {
+        out[row.reason] = row.n;
+      }
+      return out;
+    },
+    /** Every trade that completed the 75s recheck — the DOUBLE VERIFICATION tile's population. */
+    recheckRows(): { marginInitial: number; marginRecheck: number; status: TradeStatus }[] {
+      return (st.tradeRecheckRows.all() as { mi: number; mr: number; status: TradeStatus }[])
+        .map((r) => ({ marginInitial: r.mi, marginRecheck: r.mr, status: r.status }));
+    },
+    /** Confirmed-or-settled sent trades with a leg at `book` — the heat model's volume/breadth input. */
+    sentVolumeByBook(book: string): { verifiedAt: number; market: string | null }[] {
+      return (st.tradeSentVolumeByBook.all({ book }) as { va: number; market: string | null }[])
+        .map((r) => ({ verifiedAt: r.va, market: r.market }));
+    },
   };
 
   const settings = {
@@ -154,6 +193,10 @@ export function Repos(db: Db) {
       const row = st.bookByName.get(n) as BookRow | undefined;
       return row ? rowToBook(row) : null;
     },
+    /** The brain pass is the ONLY writer of these three columns. */
+    update(name: string, heat: number, health: BookHealth, maxBeliefCents: number | null): void {
+      st.bookUpdate.run({ name, heat, health, maxBeliefCents });
+    },
   };
 
   const journal = {
@@ -164,6 +207,9 @@ export function Repos(db: Db) {
   const eventsLog = {
     add(ts: number, kind: string, payloadJson: string): void { st.eventAdd.run(ts, kind, payloadJson); },
     all(): EventLogEntry[] { return st.eventsAll.all() as EventLogEntry[]; },
+    byKind(kind: string): EventLogEntry[] {
+      return st.eventsByKind.all(kind) as EventLogEntry[];
+    },
   };
 
   const credits = {

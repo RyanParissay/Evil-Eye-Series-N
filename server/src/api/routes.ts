@@ -127,15 +127,24 @@ const newestFirst = (a: Trade, b: Trade): number => b.createdAt - a.createdAt;
 
 const SETTINGS_KEYS = new Set(Object.keys(DEFAULT_SETTINGS));
 const HOUR_KEYS = new Set(['quietStartHour', 'quietEndHour']);
+/** Keys allowed to be ≤ 0 or bounded enums (brain knobs). */
+const RANGE_RULES: Record<string, { min: number; max: number; integer: boolean }> = {
+  heatWeightWithdrawal: { min: -100, max: 0, integer: false },
+  anchorIdx: { min: 0, max: 2, integer: true },
+  brainKillSwitch: { min: 0, max: 1, integer: true },
+};
 
-/** API-edge settings validation: tolerancePct ∈ [0,100], hours 0-23, every other stepper strictly positive. */
 function settingsPatch(body: unknown): { patch: Partial<Settings> } | { error: string } {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return { error: 'body must be a JSON object' };
   const patch: Record<string, number> = {};
   for (const [k, v] of Object.entries(body)) {
     if (!SETTINGS_KEYS.has(k)) return { error: `unknown setting: ${k}` };
     if (typeof v !== 'number' || !Number.isFinite(v)) return { error: `${k} must be a finite number` };
-    if (k === 'tolerancePct') {
+    const range = RANGE_RULES[k];
+    if (range) {
+      if (v < range.min || v > range.max) return { error: `${k} must be between ${range.min} and ${range.max}` };
+      if (range.integer && !Number.isInteger(v)) return { error: `${k} must be an integer` };
+    } else if (k === 'tolerancePct') {
       if (v < 0 || v > 100) return { error: 'tolerancePct must be between 0 and 100' };
     } else if (HOUR_KEYS.has(k)) {
       if (!Number.isInteger(v) || v < 0 || v > 23) return { error: `${k} must be an integer hour between 0 and 23` };
