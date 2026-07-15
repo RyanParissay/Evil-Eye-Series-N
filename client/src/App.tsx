@@ -7,6 +7,7 @@ import { useTick } from './hooks/useTick';
 import { deriveStatusLine } from './lib/api';
 import { BrainScreen } from './screens/BrainScreen';
 import { PlaceholderScreen } from './screens/PlaceholderScreen';
+import { SettingsScreen } from './screens/SettingsScreen';
 import { TradesScreen } from './screens/TradesScreen';
 
 export function App() {
@@ -23,7 +24,7 @@ export function App() {
       {tab === 'TRADES' && <TradesScreen state={state} now={now} refresh={refresh} />}
       {tab === 'BRAIN' && <BrainScreen />}
       {tab === 'ANALYTICS' && <PlaceholderScreen label="ANALYTICS" planNumber={4} />}
-      {tab === 'SETTINGS' && <PlaceholderScreen label="SETTINGS" planNumber={5} />}
+      {tab === 'SETTINGS' && <SettingsScreen />}
     </div>
   );
 }
