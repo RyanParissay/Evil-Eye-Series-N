@@ -212,3 +212,6 @@ export async function patchBook(name: string, body: { enabled?: 0 | 1; sport?: s
 }
 
 export const sendWaTest = (): Promise<boolean> => postAction('/api/whatsapp/test');
+// ---- demo data (feat-demo-seed) ----------------------------------------------
+
+export const seedDemo = (): Promise<boolean> => postAction('/api/demo/seed');

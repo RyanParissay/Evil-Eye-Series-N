@@ -10,6 +10,7 @@ import {
   ConflictError, NotFoundError, confirmTrade, reportLimited, settleTrade, unconfirmTrade,
 } from '../pipeline/actions.js';
 import { defaultPlanDeps, startScheduler, type SchedulerHandle, type Timer } from '../scheduler/runner.js';
+import { seedDemo } from '../demo/seed.js';
 import { ANCHOR_LABELS, buildBrainView } from '../brain/report.js';
 import { lastPass, runBrainPass, displayName } from '../brain/pass.js';
 import { buildSettingsView, tradesCsv } from '../settings/report.js';
@@ -449,6 +450,13 @@ export function createApp(o: AppOptions): App {
       limitsReports: repos.limitsReports.all(),
       bankrollSnapshots: repos.profiles.all().flatMap((p) => repos.snapshots.byProfile(p.id)),
     });
+  });
+
+  // --- DEMO SEED (feat-demo-seed) — additive, simulation-only backfill ---
+  app.post('/api/demo/seed', (_req, res) => {
+    const result = seedDemo(deps, clock());
+    if (result.gated) return fail(res, 409, 'conflict', 'demo data seed is unavailable in live mode');
+    res.json(result);
   });
 
   app.use((_req, res) => fail(res, 404, 'not_found', 'no such route'));
