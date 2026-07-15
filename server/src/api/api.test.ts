@@ -630,3 +630,131 @@ test('the analytics payload is deterministic between polls and forbidden-word-fr
   expect(b).toEqual(a); // shadow settlement never drifts between reads
   expect(/append-only|ghost|picker|grader|gatekeeper|CLV/i.test(JSON.stringify(a))).toBe(false);
 });
+
+test('PATCH settings: strings validate, the mix trio is all-or-nothing and sums to 100', async () => {
+  const h = makeApp();
+  const okStr = await request(h.app).patch('/api/settings')
+    .send({ whatsappNumber: '+1 604 555 8112', disabledSports: 'soccer' });
+  expect(okStr.status).toBe(200);
+  expect(okStr.body.settings.whatsappNumber).toBe('+1 604 555 8112');
+  expect((await request(h.app).patch('/api/settings').send({ whatsappNumber: 'hello' })).status).toBe(400);
+  expect((await request(h.app).patch('/api/settings').send({ whatsappNumber: '' })).status).toBe(200); // clearing is legal
+  expect((await request(h.app).patch('/api/settings').send({ disabledSports: 'SOCCER!' })).status).toBe(400);
+
+  expect((await request(h.app).patch('/api/settings').send({ mixArbPct: 50 })).status).toBe(400); // trio only
+  expect((await request(h.app).patch('/api/settings')
+    .send({ mixArbPct: 50, mixMiddlePct: 30, mixEvPct: 30 })).status).toBe(400); // 110 ≠ 100
+  const okMix = await request(h.app).patch('/api/settings')
+    .send({ mixArbPct: 100, mixMiddlePct: 0, mixEvPct: 0 });
+  expect(okMix.status).toBe(200);
+  expect(okMix.body.settings.mixArbPct).toBe(100);
+
+  expect((await request(h.app).patch('/api/settings').send({ anchorFallback: 3 })).status).toBe(400);
+  expect((await request(h.app).patch('/api/settings').send({ journalMinPerDay: 5 })).status).toBe(400);
+  expect((await request(h.app).patch('/api/settings').send({ oneSportRule: 0 })).status).toBe(200);
+});
+
+test('PATCH settings: safety keys are calm-locked; advanced keys journal their changes', async () => {
+  const h = makeApp();
+  const ok = await request(h.app).patch('/api/settings').send({ goGentleHeat: 25 });
+  expect(ok.status).toBe(200); // every book green — editable
+  let texts = h.repos.journal.all().map((j) => j.text);
+  expect(texts).toContain('Settings changed: goGentleHeat 30 → 25');
+
+  h.repos.books.update('bet365', 41, 'yellow', null); // one book struggles (Plan 3 writer)
+  const locked = await request(h.app).patch('/api/settings').send({ stopHeat: 70 });
+  expect(locked.status).toBe(409);
+  const alsoLocked = await request(h.app).patch('/api/settings').send({ oneSportRule: 0 });
+  expect(alsoLocked.status).toBe(409);
+  const nonSafety = await request(h.app).patch('/api/settings').send({ minEvEdgePct: 2.5 });
+  expect(nonSafety.status).toBe(200); // only SAFETY keys lock
+  texts = h.repos.journal.all().map((j) => j.text);
+  expect(texts).toContain('Settings changed: minEvEdgePct 2 → 2.5');
+
+  const mainPanel = await request(h.app).patch('/api/settings').send({ staleRemoveMin: 12 });
+  expect(mainPanel.status).toBe(200);
+  expect(h.repos.journal.all().some((j) => j.text.includes('staleRemoveMin'))).toBe(false); // not advanced — no journal
+});
+
+// ---- settings view read model + routes (Task 4) -------------------------------
+
+test('GET /api/settings/view: one payload, live derivations, sim-honest fields', async () => {
+  const h = makeApp();
+  await promoteSome(h); // burn credits, write scan events, make some rows
+  const res = await request(h.app).get('/api/settings/view');
+  expect(res.status).toBe(200);
+  const v = res.body;
+  expect(v.mode).toBe('SIMULATED');
+  expect(v.settings.mixArbPct).toBe(47);
+  expect(v.forecaster.planMonthly).toBe(100_000);
+  expect(v.forecaster.usedThisMonth).toBeGreaterThan(0);
+  expect(v.forecaster.dailyAllowance).toBe(3_333); // floor(100_000 / 30)
+  expect(v.forecaster.remaining).toBe(100_000 - v.forecaster.usedThisMonth);
+  expect(v.brain.llmSpentCents).toBe(0); // honest zero until Plan 6 spends
+  expect(v.brain.llmCapCents).toBe(300);
+  expect(v.brain.weightsCustom).toBe(false);
+  expect(v.books).toHaveLength(16);
+  expect(v.books[0]).toMatchObject({ name: 'pinnacle', sharpExempt: true, enabled: true });
+  expect(v.sports.map((x: { sport: string }) => x.sport))
+    .toEqual(['baseball', 'basketball', 'hockey', 'soccer', 'tennis']);
+  expect(v.safetyLocked).toBe(false);
+  expect(v.memory.receipts).toBeGreaterThan(0);
+  expect(v.lastTickAt).not.toBeNull();
+  expect(v.backups).toEqual({ lastAt: null, keep: 14 });
+
+  await request(h.app).patch('/api/settings').send({ heatWeightLimit: 30 });
+  const custom = (await request(h.app).get('/api/settings/view')).body;
+  expect(custom.brain.weightsCustom).toBe(true);
+  h.repos.books.update('bet365', 41, 'yellow', null);
+  expect((await request(h.app).get('/api/settings/view')).body.safetyLocked).toBe(true);
+});
+
+test('PATCH /api/books/:name: toggles + sport changes journal; sharp books refuse', async () => {
+  const h = makeApp();
+  const off = await request(h.app).patch('/api/books/bet365').send({ enabled: 0 });
+  expect(off.status).toBe(200);
+  expect(off.body.book).toMatchObject({ name: 'bet365', enabled: false });
+  const sport = await request(h.app).patch('/api/books/bet365').send({ sport: 'tennis' });
+  expect(sport.status).toBe(200);
+  expect(sport.body.book.sport).toBe('tennis');
+  const texts = h.repos.journal.all().map((j) => j.text);
+  expect(texts).toContain('Books: Bet365 turned OFF'); // displayName casing per design-inventory §5.7 (plan test had the raw slug)
+  expect(texts).toContain('Books: Bet365 sport basketball → tennis');
+
+  expect((await request(h.app).patch('/api/books/pinnacle').send({ enabled: 0 })).status).toBe(409);
+  expect((await request(h.app).patch('/api/books/nobody').send({ enabled: 0 })).status).toBe(404);
+  expect((await request(h.app).patch('/api/books/bet365').send({ sport: 'cricket' })).status).toBe(400);
+  expect((await request(h.app).patch('/api/books/bet365').send({})).status).toBe(400);
+});
+
+test('POST /api/whatsapp/test: writes the event, sends NOTHING anywhere', async () => {
+  const h = makeApp();
+  const res = await request(h.app).post('/api/whatsapp/test');
+  expect(res.status).toBe(200);
+  expect(res.body).toEqual({ ok: true, simulated: true });
+  const rows = h.repos.eventsLog.all().filter((e) => e.kind === 'wa_test');
+  expect(rows).toHaveLength(1);
+  expect(JSON.parse(rows[0]!.payload)).toEqual({ to: null, simulated: true }); // no number set yet
+});
+
+test('exports: complete deterministic dumps, no mutation', async () => {
+  const h = makeApp();
+  await promoteSome(h);
+  const csv = await request(h.app).get('/api/export/trades.csv');
+  expect(csv.status).toBe(200);
+  expect(csv.headers['content-type']).toContain('text/csv');
+  expect(csv.headers['content-disposition']).toContain('evil-eye-trades.csv');
+  const lines = csv.text.split('\n');
+  expect(lines[0]!.startsWith('id,')).toBe(true);
+  expect(lines[0]!).toContain('day_key');
+  expect(lines.length - 1).toBe(h.repos.trades.exportRows().length); // header + one line per trade
+
+  const json = await request(h.app).get('/api/export/all.json');
+  expect(json.status).toBe(200);
+  expect(json.headers['content-disposition']).toContain('evil-eye-export.json');
+  for (const table of ['settings', 'profiles', 'books', 'trades', 'journal', 'eventsLog', 'creditsUsage', 'limitsReports', 'bankrollSnapshots']) {
+    expect(json.body).toHaveProperty(table);
+  }
+  const again = await request(h.app).get('/api/export/all.json');
+  expect(again.body).toEqual(json.body); // read-only — nothing moved
+});

@@ -1,0 +1,81 @@
+/* client/src/styles/settings.css — SETTINGS screen. Every value from
+   design-inventory §5 unless marked "not pinned by inventory". */
+
+/* ---------- panel grid (§5 intro) ---------- */
+.settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
+.panel { border: 2px solid var(--grey-panel); }
+.panel.span2 { grid-column: span 2; }
+.panel.locked { opacity: 0.6; }
+.panel-head { padding: 8px 14px; border-bottom: 1px solid var(--grey-divider); font-size: 11px; letter-spacing: 0.14em; color: #fff; font-weight: 500; }
+.panel-head-note { color: var(--muted-label); font-weight: 400; margin-left: 8px; }
+.panel-body { padding: 6px 14px 14px; }
+.kv { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--grey-divider); font-size: 12px; }
+.kv:last-child { border-bottom: none; }
+.kv-key { color: var(--muted-label); letter-spacing: 0.06em; }
+.kv-value { color: #fff; font-weight: 500; text-align: right; }
+.kv-value.yellow { color: var(--yellow); }
+.kv-value.red { color: var(--red); }
+
+/* ---------- STRATEGY MIX (§5.1) ---------- */
+.mix-row { margin-top: 14px; }
+.mix-label { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: 0.1em; color: var(--muted-label); }
+.mix-pct { color: #fff; font-weight: 500; }
+.mix-slider { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 12px; border: 1px solid var(--grey-panel); background: #000; margin-top: 6px; cursor: pointer; }
+.mix-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 12px; height: 18px; background: #000; border: 2px solid #fff; }
+.mix-slider::-moz-range-thumb { width: 12px; height: 18px; background: #000; border: 2px solid #fff; border-radius: 0; }
+
+/* ---------- steppers (§5.2 anatomy) ---------- */
+.stepper { display: flex; align-items: center; gap: 6px; }
+.stepper-value { color: #fff; font-weight: 500; }
+.step-btn { width: 22px; height: 22px; background: none; border: 1px solid var(--grey-divider); color: var(--body-text); font-size: 12px; font-family: inherit; cursor: pointer; padding: 0; }
+.step-btn:hover { color: #fff; border-color: #fff; }
+
+/* ---------- BRAIN / WHATSAPP / DATA panel controls ---------- */
+.toggle-chip { background: none; border: 2px solid #fff; color: #fff; font-size: 11px; letter-spacing: 0.12em; padding: 2px 10px; font-family: inherit; cursor: pointer; }
+.toggle-chip.on { border-color: var(--yellow); color: var(--yellow); }
+.panel-btn { display: block; width: 100%; background: none; border: 2px solid #fff; color: #fff; font-size: 11px; letter-spacing: 0.12em; font-weight: 500; padding: 8px; margin-top: 12px; font-family: inherit; cursor: pointer; }
+.panel-btn:hover { background: #fff; color: #000; }
+.wa-input { width: 100%; background: #000; color: #fff; border: 2px solid var(--grey-panel); padding: 8px 10px; font-size: 13px; font-weight: 500; letter-spacing: 0.06em; font-variant-numeric: tabular-nums; font-family: inherit; margin: 6px 0 10px; }
+.wa-input:focus { border-color: var(--yellow); outline: none; } /* §5.5 — the unique yellow focus */
+.badge-sim { border: 2px solid var(--yellow); color: var(--yellow); font-size: 11px; letter-spacing: 0.14em; padding: 2px 8px; }
+.btn-pair { display: flex; gap: 8px; margin-top: 12px; }
+.btn-half { flex: 1; display: block; background: none; border: 2px solid #fff; color: #fff; text-align: center; font-size: 11px; letter-spacing: 0.12em; font-weight: 500; padding: 8px; text-decoration: none; font-family: inherit; cursor: pointer; }
+.btn-half:hover { background: #fff; color: #000; }
+.data-note { font-size: 11px; letter-spacing: 0.08em; color: var(--faint); margin-top: 10px; }
+
+/* ---------- ADVANCED SETTINGS (§5.7) ---------- */
+.adv-toggle { display: block; width: 100%; text-align: left; background: none; border: none; padding: 16px 0 0; font-size: 12px; letter-spacing: 0.14em; color: var(--faint); font-family: inherit; cursor: pointer; }
+.adv-toggle:hover { color: #fff; }
+.adv-intro { font-size: 12px; color: var(--muted-label); margin: 8px 0; }
+.adv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.input-row2 { padding: 10px 14px; border-bottom: 1px solid var(--grey-subtle-row); font-size: 12px; }
+.input-row2:last-child { border-bottom: none; }
+.input-title { color: #fff; font-weight: 500; letter-spacing: 0.06em; }
+.input-helper { color: var(--muted-label); margin-top: 4px; }
+.input-right { display: flex; gap: 10px; align-items: center; justify-content: flex-end; flex-wrap: wrap; margin-top: 6px; font-size: 11px; letter-spacing: 0.08em; color: var(--muted-label); }
+.masked { color: var(--muted-label); }
+.mini-btn { background: none; border: 1px solid var(--grey-divider); color: var(--body-text); font-size: 10px; letter-spacing: 0.1em; padding: 3px 8px; font-family: inherit; }
+.chip-live { border: 1px solid currentColor; font-size: 11px; letter-spacing: 0.1em; padding: 2px 8px; }
+.chip-live.sim { color: var(--yellow); }
+.chip-live.green { color: var(--green); }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; } /* the design's ONLY rounded element */
+.dot.yellow { background: var(--yellow); }
+.dot.green { background: var(--green); }
+.adv-footer { font-size: 12px; color: var(--muted-label); padding: 10px 14px; }
+.book-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--grey-subtle-row); font-size: 12px; }
+.book-row.off { color: var(--muted-label); }
+.book-name { color: #fff; font-weight: 500; }
+.book-row.off .book-name { color: var(--muted-label); }
+.book-sport { letter-spacing: 0.08em; color: #fff; background: #000; border: none; font-size: 12px; font-family: inherit; cursor: pointer; }
+.chip-state { border: 1px solid currentColor; font-size: 10px; letter-spacing: 0.1em; padding: 2px 10px; background: none; font-family: inherit; cursor: pointer; }
+.chip-state.sharp { color: #fff; letter-spacing: 0.08em; padding: 2px 8px; white-space: nowrap; cursor: default; }
+.chip-state.green { color: var(--green); }
+.chip-state.muted { color: var(--muted-label); border-color: var(--grey-divider); }
+.add-book { background: none; border: none; font-size: 12px; letter-spacing: 0.14em; color: var(--faint); padding: 8px 0 0; font-family: inherit; }
+.sports-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 0; }
+.sport-cell { background: none; border: none; text-align: left; font-size: 12px; letter-spacing: 0.08em; color: #fff; font-family: inherit; cursor: pointer; padding: 0; }
+.sport-cell.off { color: var(--faint); }
+.radio-item { display: block; background: none; border: none; text-align: left; font-size: 12px; color: var(--muted-label); font-family: inherit; cursor: pointer; padding: 4px 0; }
+.radio-item.active { color: #fff; }
+.helper-note { font-size: 12px; color: var(--muted-label); padding: 8px 0 0; }
+.journal-sub { border-top: 1px solid var(--grey-divider); margin-top: 10px; padding-top: 6px; }

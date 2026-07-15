@@ -7,7 +7,7 @@ const NOW = 1_800_000_000_000; // epoch ms (schema convention: timestamps are IN
 const FRESH = NOW - 10_000; // 10s old — well inside freshWindowSecs (120s)
 
 function mkBook(name: string, sport: string, sharpExempt: 0 | 1, heat: number): Book {
-  return { name, sport, sharpExempt, heat, health: 'green', maxBeliefCents: null };
+  return { name, sport, sharpExempt, heat, health: 'green', maxBeliefCents: null, enabled: 1 };
 }
 
 /** bet365: basketball, heat 0 · pinnacle: ANY, sharp-exempt, heat 99 · fanduel: basketball, heat 70 */
@@ -164,4 +164,25 @@ test('gate order: first failure wins — hot book AND stale quote kills on HEAT_
 
 test('clean candidate passes', () => {
   expect(runKillBattery(mkCand(), mkCtx())).toEqual({ verdict: 'pass' });
+});
+
+test('oneSportRule 0 skips the sport check but never the unknown-book kill', () => {
+  const s0 = { ...DEFAULT_SETTINGS, oneSportRule: 0 };
+  const books = new Map<string, Book>([
+    ['bet365', { name: 'bet365', sport: 'soccer', sharpExempt: 0, heat: 0, health: 'green', maxBeliefCents: null, enabled: 1 }],
+  ]);
+  const ctx: GateContext = {
+    now: 1_000, books, s: s0,
+    sentTodayByBook: () => 0, sentThisWeekByBookMarket: () => 0,
+  };
+  const c: Candidate = {
+    category: 'EV', sport: 'basketball', event: 'A vs B', market: 'moneyline',
+    legs: [{ book: 'bet365', selection: 'home', odds: 2.5, fetchedAt: 1_000 }],
+    edge: 0.03, fairProbs: [0.42], eventStartsAt: 9_999,
+  };
+  expect(runKillBattery(c, ctx)).toEqual({ verdict: 'pass' }); // wrong sport, rule off → pass
+  expect(runKillBattery(c, { ...ctx, s: DEFAULT_SETTINGS }))
+    .toEqual({ verdict: 'kill', reason: 'ONE_SPORT_RULE' });   // rule on → kill
+  const unknown = { ...c, legs: [{ book: 'nobody', selection: 'home', odds: 2.5, fetchedAt: 1_000 }] };
+  expect(runKillBattery(unknown, ctx)).toEqual({ verdict: 'kill', reason: 'ONE_SPORT_RULE' }); // unconditional
 });

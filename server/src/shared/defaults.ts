@@ -11,6 +11,12 @@ export const DEFAULT_SETTINGS = {
   heatWeightLimit: 23, heatWeightReject: 9, heatWeightCut: 14, heatWeightWithdrawal: -2,
   heatHalfLifeDays: 21, brainCadenceHours: 6, brainKillSwitch: 0, anchorIdx: 0,
   creditPlanMonthly: 100_000,
+  // Settings screen (Plan 5). The mix trio is LOCKED TO 100 — validated as a
+  // trio at the API edge and enforced per-category at promotion (engine/mix.ts).
+  mixArbPct: 47, mixMiddlePct: 24, mixEvPct: 29,
+  anchorFallback: 0, oneSportRule: 1, journalMinPerDay: 1,
+  // String settings — the store is k/v JSON; validation lives in settingsPatch.
+  whatsappNumber: '', disabledSports: '',
 };
 
 export type Settings = typeof DEFAULT_SETTINGS;

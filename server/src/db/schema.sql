@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS books (
   sharp_exempt     INTEGER NOT NULL DEFAULT 0,
   heat             INTEGER NOT NULL DEFAULT 0,
   health           TEXT NOT NULL DEFAULT 'green',
-  max_belief_cents INTEGER
+  max_belief_cents INTEGER,
+  enabled          INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS trades (

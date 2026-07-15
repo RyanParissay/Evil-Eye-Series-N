@@ -11,6 +11,7 @@ import { planNext, type PlanState } from './plan.js';
 import { dayKey, isQuietHours, nextQuietEnd } from './vancouverTime.js';
 import { brainPassIfDue } from '../brain/pass.js';
 import { captureCloses } from '../brain/closes.js';
+import { ensureJournalMinimum } from '../brain/journalMin.js';
 
 export interface Timer {
   setTimeout(fn: () => void, ms: number): unknown;
@@ -83,6 +84,7 @@ export function startScheduler(deps: PipeDeps, planDeps: PlanDeps, timer: Timer,
     const settlement = runSimSettlement(deps, now);
     captureCloses(deps, now);   // pre-start closes from the freshest snapshot (verify refetch)
     brainPassIfDue(deps, now);  // 6h consolidation cadence rides this tick — the one-timer invariant holds
+    ensureJournalMinimum(deps, now); // JOURNAL MINIMUM knob rides the same tick — no timers
     writeDailySnapshot(now);
     lastScanAt = now;
     return { scan, verify, settlement };

@@ -9,7 +9,9 @@ import type { Settings } from '../shared/defaults.js';
 import type { PipeDeps } from './scan.js';
 import { arbMargin, devigFairProbs, evEdge, middleMetrics } from '../engine/odds.js';
 import { arbStakesCents, kellyStakeCents } from '../engine/stakes.js';
+import { mixAllowance, mixPct } from '../engine/mix.js';
 import { passesToleranceGate } from '../engine/tolerance.js';
+import { eligibleQuotes } from './eligibility.js';
 import { dayKey } from '../scheduler/vancouverTime.js';
 
 const PINNACLE = 'pinnacle';
@@ -44,7 +46,9 @@ export function runVerifyDue(deps: PipeDeps, now: number): { promoted: number; k
   // ONE refetch per run, shared by every due trade (and cached for the UI).
   const quotes = deps.provider.fetchQuotes(now);
   deps.lastQuotes = quotes;
-  const lookup = buildLookup(quotes);
+  // Plan 5: legs must still be ELIGIBLE (book on, sport on) — a disabled leg reads
+  // as no-quote and the trade dies QUOTE_STALE. The benchmark keeps the FULL snapshot.
+  const lookup = buildLookup(eligibleQuotes(quotes, repos.books.all(), s));
   const day = dayKey(now);
 
   for (const t of due) {
@@ -104,6 +108,16 @@ export function runVerifyDue(deps: PipeDeps, now: number): { promoted: number; k
       t.status = 'EXPIRED';
       repos.trades.update(t);
       repos.journal.add(now, `${t.category} ${t.event} passed verification but was held back — daily pick cap of ${s.dailyPickCap} already reached.`);
+      expired += 1;
+      continue;
+    }
+
+    // STRATEGY MIX — LOCKED TO 100 (Plan 5): the category's share of the daily cap.
+    // Same SENT semantics as the cap; the clause feeds the brain's rationale panel.
+    if (repos.trades.sentTodayByCategory(day, t.category) >= mixAllowance(t.category, s)) {
+      t.status = 'EXPIRED';
+      repos.trades.update(t);
+      repos.journal.add(now, `${t.category} ${t.event} passed verification but was held back — ${t.category} mix at its ${mixPct(t.category, s)}% cap.`);
       expired += 1;
       continue;
     }

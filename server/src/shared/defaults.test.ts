@@ -19,3 +19,12 @@ test('brain defaults match the MODEL CONTROLS copy', () => {
     creditPlanMonthly: 100_000,
   });
 });
+
+test('settings-screen defaults (Plan 5)', () => {
+  expect(DEFAULT_SETTINGS).toMatchObject({
+    mixArbPct: 47, mixMiddlePct: 24, mixEvPct: 29,
+    anchorFallback: 0, oneSportRule: 1, journalMinPerDay: 1,
+    whatsappNumber: '', disabledSports: '',
+  });
+  expect(DEFAULT_SETTINGS.mixArbPct + DEFAULT_SETTINGS.mixMiddlePct + DEFAULT_SETTINGS.mixEvPct).toBe(100);
+});

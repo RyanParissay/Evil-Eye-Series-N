@@ -38,12 +38,13 @@ export function openDb(path: string): Db {
   return db;
 }
 
-/** Idempotent column migrations for databases created before Plan 4 (data kept forever —
- *  never recreate, never drop). CREATE TABLE IF NOT EXISTS ignores new columns on old dbs,
- *  so each addition needs its own guarded ALTER. */
+/** Idempotent column migrations for databases created before these plans (data kept
+ *  forever — never recreate, never drop). Each new column needs its own guarded ALTER. */
 function migrate(db: Db): void {
   const cols = (db.prepare('PRAGMA table_info(trades)').all() as { name: string }[]).map((c) => c.name);
   if (!cols.includes('confirmed_at')) db.exec('ALTER TABLE trades ADD COLUMN confirmed_at INTEGER');
+  const bookCols = (db.prepare('PRAGMA table_info(books)').all() as { name: string }[]).map((c) => c.name);
+  if (!bookCols.includes('enabled')) db.exec('ALTER TABLE books ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1');
 }
 
 function count(db: Db, table: 'settings' | 'profiles' | 'books'): number {
