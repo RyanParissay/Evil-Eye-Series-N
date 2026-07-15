@@ -8,6 +8,7 @@ import type { Settings } from '../shared/defaults.js';
 import type { Repos } from '../db/db.js';
 import { runKillBattery, type Candidate, type GateContext } from '../engine/gates.js';
 import { detectCandidates } from './candidates.js';
+import { eligibleQuotes } from './eligibility.js';
 import { dayKey } from '../scheduler/vancouverTime.js';
 
 const WEEK_MS = 7 * 24 * 3_600_000; // MARKET_BREADTH_CAP window: rolling 7 days
@@ -32,10 +33,11 @@ export function runScan(deps: PipeDeps, now: number): { created: number; killed:
   repos.credits.add(now, 1); // one provider snapshot = one credit
 
   const day = dayKey(now);
+  const allBooks = repos.books.all();
   const ctx: GateContext = {
     now,
     s,
-    books: new Map(repos.books.all().map((b) => [b.name, b])),
+    books: new Map(allBooks.map((b) => [b.name, b])),
     // SENT semantics both ways: only verified/sent picks count against the caps.
     sentTodayByBook: (book) => repos.trades.countByBookToday(book, day),
     sentThisWeekByBookMarket: (book, market) => repos.trades.countByBookMarketSince(book, market, now - WEEK_MS),
@@ -44,7 +46,9 @@ export function runScan(deps: PipeDeps, now: number): { created: number; killed:
 
   let created = 0;
   let killed = 0;
-  detectCandidates(quotes, s).forEach((c, i) => {
+  // Plan 5: disabled books/sports never become candidates; the full snapshot
+  // stays cached (deps.lastQuotes) for the UI and the pinnacle benchmark.
+  detectCandidates(eligibleQuotes(quotes, allBooks, s), s).forEach((c, i) => {
     const t = tradeFromCandidate(c, profileId, now, s, deps.rng, i);
     const verdict = runKillBattery(c, ctx);
     if (verdict.verdict === 'kill') {
