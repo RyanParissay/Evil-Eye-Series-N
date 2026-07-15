@@ -221,7 +221,7 @@ test('middleMetrics: cost, both-win payout, ratio, free flag', () => {
 - [ ] **Step 4: Run** — Expected: PASS
 - [ ] **Step 5: Commit** — `feat: engine odds math (devig, arb margin, ev edge, middle metrics)`
 
-**Note (locked interpretation):** "middle 1.5×" qualifies a costed middle when `ratio ≥ settings.middleRatio`; free middles always qualify. This is deliberately permissive — the kill battery and double verification do the real filtering. The formula lives ONLY here; if the design inventory later contradicts it, one function changes.
+**Note (locked interpretation):** "middle 1.5×" qualifies a costed middle when `ratio ≥ settings.middleRatio`; free middles always qualify. This is deliberately permissive — the kill battery and double verification do the real filtering. The formula lives ONLY here. Design-inventory finding (2026-07-14): the mockup contains NO middle formula (demo numbers hardcoded); its settings copy is "MIN MIDDLE QUALITY: 1.5× BREAKEVEN HIT RATE", where breakeven hit rate = costFrac / bothWinPayoutFrac — so `ratio ≥ 1.5` is equivalent to "breakeven ≤ 1/1.5". The interpretation stands.
 
 ---
 
