@@ -59,7 +59,7 @@ async function promoteSome(h: ReturnType<typeof makeApp>) {
   h.advance(76_000);
   h.scheduler.tick();
   const state = await request(h.app).get('/api/state').expect(200);
-  return state.body.trades.verified as Array<{ id: string; status: string }>;
+  return state.body.trades.verified as Array<{ id: string; status: string; legs: { book: string }[] }>;
 }
 
 test('clock guards: NOW is active hours, QUIET_NOW is quiet hours', () => {
@@ -540,4 +540,93 @@ test('forbidden words never appear in the brain payload', async () => {
   h.scheduler.scanNow(NOW);
   const res = await request(h.app).get('/api/brain');
   expect(/append-only|ghost|picker|grader|gatekeeper|CLV/i.test(JSON.stringify(res.body))).toBe(false);
+});
+
+test('GET /api/profiles lists the seeded profile; POST validates, creates, 409s duplicates', async () => {
+  const h = makeApp();
+  const list = await request(h.app).get('/api/profiles');
+  expect(list.status).toBe(200);
+  expect(list.body.profiles[0]).toMatchObject({ id: 1, name: 'RYAN', startingCashCents: 1_000_000 });
+
+  const bad = await request(h.app).post('/api/profiles').send({ name: '', startingCashCents: 500_000 });
+  expect(bad.status).toBe(400);
+  const badCash = await request(h.app).post('/api/profiles').send({ name: 'LEA', startingCashCents: 0 });
+  expect(badCash.status).toBe(400);
+
+  const ok = await request(h.app).post('/api/profiles').send({ name: 'LEA', startingCashCents: 500_000 });
+  expect(ok.status).toBe(200);
+  expect(ok.body.profile).toMatchObject({ id: 2, name: 'LEA', startingCashCents: 500_000, createdDate: '2026-07-13' });
+
+  const dup = await request(h.app).post('/api/profiles').send({ name: 'LEA', startingCashCents: 100 });
+  expect(dup.status).toBe(409);
+});
+
+test('GET /api/analytics: defaults, structure, honest empty charts', async () => {
+  const h = makeApp();
+  const res = await request(h.app).get('/api/analytics');
+  expect(res.status).toBe(200);
+  const v = res.body;
+  expect(v.simulated).toBe(true);
+  expect(v.range).toBe('30D');
+  expect(v.today).toBe('2026-07-13');
+  expect(v.profile.name).toBe('RYAN');
+  expect(v.bankrollCents).toBe(1_000_000);
+  expect(v.confirmed.points.length).toBeGreaterThan(0);
+  expect(v.confirmed.points.every((p: { profitCents: number }) => p.profitCents === 0)).toBe(true);
+  expect(v.confirmed.stats).toEqual({ profitCents: 0, returnPct: 0, annualizedPct: 0 });
+  expect(v.all.points[v.all.points.length - 1]).toMatchObject({ day: '2026-07-13' });
+  expect(v.funnel).toEqual({ under2: 0, from2to5: 0, from5to10: 0, over10: 0, dead: 0, total: 0 });
+  expect(v.advanced.openBets).toEqual([]);
+  expect(v.advanced.costOfSafety.rounding).toBeNull();
+  expect(v.advanced.costOfSafety.closingEdge).toBeNull();
+
+  const badRange = await request(h.app).get('/api/analytics?range=7D');
+  expect(badRange.status).toBe(400);
+  const badProfile = await request(h.app).get('/api/analytics?profileId=99');
+  expect(badProfile.status).toBe(404);
+});
+
+test('analytics reflects the driven pipeline: confirm → monthly/funnel/leaderboards move', async () => {
+  const h = makeApp();
+  const verified = await promoteSome(h);
+  expect(verified.length).toBeGreaterThan(0);
+  await request(h.app).post(`/api/trades/${verified[0]!.id}/confirm`).expect(200);
+
+  const v = (await request(h.app).get('/api/analytics?range=MAX')).body;
+  const jul = v.monthly.find((m: { month: string }) => m.month === '2026-07');
+  expect(jul.cand).toBeGreaterThan(0);
+  expect(jul.sent).toBeGreaterThanOrEqual(1);
+  expect(jul.conf).toBe(1);
+  expect(jul.followThruPct).toBe(Math.round((100 * jul.conf) / jul.sent));
+  expect(v.funnel.under2).toBe(1); // confirmed 76s after promotion? — no: confirm at +76s of verify; still < 2 min
+  expect(v.funnel.total).toBe(1);
+  expect(v.advanced.openBets.length).toBe(1);
+  expect(v.advanced.openBets[0].stakeCents).toBeGreaterThan(0);
+  const all = v.advanced.leaderboards.boards.find((b: { title: string }) => b.title === 'ALL CATEGORIES');
+  expect(all.rows.length).toBeGreaterThan(0);
+  expect(v.advanced.costOfSafety.retention.thresholdPct).toBe(95); // 100 − default tolerance 5
+});
+
+test('a limited report surfaces in the analytics limits log with display names', async () => {
+  const h = makeApp();
+  const verified = await promoteSome(h);
+  const target = verified
+    .flatMap((t: { id: string; legs: { book: string }[] }) => t.legs.map((l) => ({ id: t.id, book: l.book })))
+    .find((x: { book: string }) => x.book !== 'pinnacle')!;
+  await request(h.app).post(`/api/trades/${target.id}/limited`)
+    .send({ book: target.book, maxAllowedCents: 2_500 }).expect(200);
+  const v = (await request(h.app).get('/api/analytics')).body;
+  expect(v.advanced.limits).toHaveLength(1);
+  expect(v.advanced.limits[0]).toMatchObject({ maxCents: 2_500 });
+  expect(v.advanced.limits[0].event).not.toBe(''); // joined through the trade
+  expect(v.advanced.limits[0].when).toBe(NOW + 76_000);
+});
+
+test('the analytics payload is deterministic between polls and forbidden-word-free', async () => {
+  const h = makeApp();
+  await promoteSome(h);
+  const a = (await request(h.app).get('/api/analytics')).body;
+  const b = (await request(h.app).get('/api/analytics')).body;
+  expect(b).toEqual(a); // shadow settlement never drifts between reads
+  expect(/append-only|ghost|picker|grader|gatekeeper|CLV/i.test(JSON.stringify(a))).toBe(false);
 });

@@ -13,6 +13,8 @@ import { defaultPlanDeps, startScheduler, type SchedulerHandle, type Timer } fro
 import { ANCHOR_LABELS, buildBrainView } from '../brain/report.js';
 import { lastPass, runBrainPass } from '../brain/pass.js';
 import { dayKey, isQuietHours } from '../scheduler/vancouverTime.js';
+import { RANGE_KEYS, buildAnalyticsView, profileView } from '../analytics/report.js';
+import type { RangeKey } from '../analytics/series.js';
 import { DEFAULT_SETTINGS, type Settings } from '../shared/defaults.js';
 import type { AlertSender, Leg, OddsProvider, Trade, TradeStatus } from '../shared/types.js';
 
@@ -298,6 +300,39 @@ export function createApp(o: AppOptions): App {
     const note = idx === 0 ? '' : ' — simulated mode maps every anchor to Pinnacle prices';
     repos.journal.add(clock(), `Reference pricer switched to ${ANCHOR_LABELS[idx]}${note}`);
     res.json({ anchor: buildBrainView(deps, clock()).anchor });
+  });
+
+  app.get('/api/profiles', (_req, res) => {
+    res.json({ profiles: repos.profiles.all().map(profileView) });
+  });
+
+  app.post('/api/profiles', (req, res) => {
+    const { name, startingCashCents } = (req.body ?? {}) as { name?: unknown; startingCashCents?: unknown };
+    if (typeof name !== 'string' || name.trim() === '') {
+      return fail(res, 400, 'bad_request', 'name must be a non-empty string');
+    }
+    if (typeof startingCashCents !== 'number' || !Number.isInteger(startingCashCents) || startingCashCents <= 0) {
+      return fail(res, 400, 'bad_request', 'startingCashCents must be a positive integer');
+    }
+    try {
+      // STARTS THE DAY YOU CREATE IT — the created date is the Vancouver day of the click.
+      const p = repos.profiles.create(name.trim(), startingCashCents, dayKey(clock()));
+      res.json({ profile: profileView(p) });
+    } catch {
+      return fail(res, 409, 'conflict', 'a profile with that name already exists'); // profiles.name UNIQUE
+    }
+  });
+
+  app.get('/api/analytics', (req, res) => {
+    const rangeRaw = typeof req.query.range === 'string' ? req.query.range : '30D';
+    if (!(RANGE_KEYS as readonly string[]).includes(rangeRaw)) {
+      return fail(res, 400, 'bad_request', 'range must be one of 1D, 5D, 30D, 1Y, MAX');
+    }
+    const profiles = repos.profiles.all();
+    const wanted = typeof req.query.profileId === 'string' ? Number(req.query.profileId) : profiles[0]?.id;
+    const profile = profiles.find((p) => p.id === wanted);
+    if (!profile) return fail(res, 404, 'not_found', 'no such profile');
+    res.json(buildAnalyticsView(deps, profile, rangeRaw as RangeKey, clock()));
   });
 
   app.use((_req, res) => fail(res, 404, 'not_found', 'no such route'));
