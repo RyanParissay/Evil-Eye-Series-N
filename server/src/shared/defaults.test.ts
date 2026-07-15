@@ -11,3 +11,11 @@ test('locked defaults match MASTER PROMPT', () => {
     marketBreadthPerWeekPerBook: 2, goGentleHeat: 30, stopHeat: 60,
   });
 });
+
+test('brain defaults match the MODEL CONTROLS copy', () => {
+  expect(DEFAULT_SETTINGS).toMatchObject({
+    heatWeightLimit: 23, heatWeightReject: 9, heatWeightCut: 14, heatWeightWithdrawal: -2,
+    heatHalfLifeDays: 21, brainCadenceHours: 6, brainKillSwitch: 0, anchorIdx: 0,
+    creditPlanMonthly: 100_000,
+  });
+});

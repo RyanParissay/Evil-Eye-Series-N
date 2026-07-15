@@ -131,7 +131,7 @@ test('reportLimited: writes limits_reports + journal, trade status unchanged', (
   const journal = repos.journal.all();
   expect(journal).toHaveLength(1);
   expect(journal[0]!.ts).toBe(NOW);
-  expect(journal[0]!.text).toContain('bet365');
+  expect(journal[0]!.text).toContain('Bet365 limit report → heat');
   expect(repos.trades.byId('a')!.status).toBe('CONFIRMED'); // limited ≠ any status change
 });
 

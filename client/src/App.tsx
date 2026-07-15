@@ -5,6 +5,7 @@ import { StatusLine } from './components/StatusLine';
 import { useAppState } from './hooks/useAppState';
 import { useTick } from './hooks/useTick';
 import { deriveStatusLine } from './lib/api';
+import { BrainScreen } from './screens/BrainScreen';
 import { PlaceholderScreen } from './screens/PlaceholderScreen';
 import { TradesScreen } from './screens/TradesScreen';
 
@@ -20,7 +21,7 @@ export function App() {
       <Nav tab={tab} onSelect={setTab} />
       <StatusLine state={state} />
       {tab === 'TRADES' && <TradesScreen state={state} now={now} refresh={refresh} />}
-      {tab === 'BRAIN' && <PlaceholderScreen label="BRAIN" planNumber={3} />}
+      {tab === 'BRAIN' && <BrainScreen />}
       {tab === 'ANALYTICS' && <PlaceholderScreen label="ANALYTICS" planNumber={4} />}
       {tab === 'SETTINGS' && <PlaceholderScreen label="SETTINGS" planNumber={5} />}
     </div>

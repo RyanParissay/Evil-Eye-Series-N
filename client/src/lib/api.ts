@@ -1,6 +1,7 @@
 // client/src/lib/api.ts — client mirror of the Plan 1 API contract + fetch helpers.
 // Fetch helpers NEVER throw: any network/HTTP failure → null (queries) or false (posts).
 import { formatScanTime } from './format';
+import type { BrainView } from './brain';
 
 export type Strategy = 'ARB' | 'MIDDLE' | 'EV';
 export type TradeStatus =
@@ -117,3 +118,19 @@ export const reportLimited = (
 ): Promise<boolean> =>
   postAction(`/api/trades/${id}/limited`, { book, maxAllowedCents });
 export const requestScan = (): Promise<boolean> => postAction('/api/scan');
+
+// ---- brain (Plan 3) ----------------------------------------------------------
+
+export async function fetchBrain(): Promise<BrainView | null> {
+  try {
+    const res = await fetch('/api/brain');
+    if (!res.ok) return null;
+    return (await res.json()) as BrainView;
+  } catch {
+    return null;
+  }
+}
+
+export const postBrainPass = (): Promise<boolean> => postAction('/api/brain/pass');
+export const setBrainAnchor = (idx: number): Promise<boolean> =>
+  postAction('/api/brain/anchor', { idx });

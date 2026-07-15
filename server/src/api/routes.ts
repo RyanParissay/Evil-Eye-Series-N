@@ -10,6 +10,8 @@ import {
   ConflictError, NotFoundError, confirmTrade, reportLimited, settleTrade, unconfirmTrade,
 } from '../pipeline/actions.js';
 import { defaultPlanDeps, startScheduler, type SchedulerHandle, type Timer } from '../scheduler/runner.js';
+import { ANCHOR_LABELS, buildBrainView } from '../brain/report.js';
+import { lastPass, runBrainPass } from '../brain/pass.js';
 import { dayKey, isQuietHours } from '../scheduler/vancouverTime.js';
 import { DEFAULT_SETTINGS, type Settings } from '../shared/defaults.js';
 import type { AlertSender, Leg, OddsProvider, Trade, TradeStatus } from '../shared/types.js';
@@ -127,15 +129,24 @@ const newestFirst = (a: Trade, b: Trade): number => b.createdAt - a.createdAt;
 
 const SETTINGS_KEYS = new Set(Object.keys(DEFAULT_SETTINGS));
 const HOUR_KEYS = new Set(['quietStartHour', 'quietEndHour']);
+/** Keys allowed to be ≤ 0 or bounded enums (brain knobs). */
+const RANGE_RULES: Record<string, { min: number; max: number; integer: boolean }> = {
+  heatWeightWithdrawal: { min: -100, max: 0, integer: false },
+  anchorIdx: { min: 0, max: 2, integer: true },
+  brainKillSwitch: { min: 0, max: 1, integer: true },
+};
 
-/** API-edge settings validation: tolerancePct ∈ [0,100], hours 0-23, every other stepper strictly positive. */
 function settingsPatch(body: unknown): { patch: Partial<Settings> } | { error: string } {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return { error: 'body must be a JSON object' };
   const patch: Record<string, number> = {};
   for (const [k, v] of Object.entries(body)) {
     if (!SETTINGS_KEYS.has(k)) return { error: `unknown setting: ${k}` };
     if (typeof v !== 'number' || !Number.isFinite(v)) return { error: `${k} must be a finite number` };
-    if (k === 'tolerancePct') {
+    const range = RANGE_RULES[k];
+    if (range) {
+      if (v < range.min || v > range.max) return { error: `${k} must be between ${range.min} and ${range.max}` };
+      if (range.integer && !Number.isInteger(v)) return { error: `${k} must be an integer` };
+    } else if (k === 'tolerancePct') {
       if (v < 0 || v > 100) return { error: 'tolerancePct must be between 0 and 100' };
     } else if (HOUR_KEYS.has(k)) {
       if (!Number.isInteger(v) || v < 0 || v > 23) return { error: `${k} must be an integer hour between 0 and 23` };
@@ -267,6 +278,26 @@ export function createApp(o: AppOptions): App {
     const v = settingsPatch(req.body);
     if ('error' in v) return fail(res, 400, 'bad_request', v.error);
     res.json({ settings: repos.settings.set(v.patch) });
+  });
+
+  app.get('/api/brain', (_req, res) => {
+    res.json(buildBrainView(deps, clock()));
+  });
+
+  // Manual consolidation pass (SETTINGS → UPDATE UNDERSTANDING wires here in Plan 5).
+  // Runs even under the kill switch: an explicit user command is not autonomous behavior.
+  app.post('/api/brain/pass', (_req, res) => {
+    runBrainPass(deps, clock());
+    res.json({ lastFullPassAt: lastPass(repos)!.ts });
+  });
+
+  app.post('/api/brain/anchor', (req, res) => {
+    const { idx } = (req.body ?? {}) as { idx?: unknown };
+    if (idx !== 0 && idx !== 1 && idx !== 2) return fail(res, 400, 'bad_request', 'idx must be 0, 1 or 2');
+    repos.settings.set({ anchorIdx: idx });
+    const note = idx === 0 ? '' : ' — simulated mode maps every anchor to Pinnacle prices';
+    repos.journal.add(clock(), `Reference pricer switched to ${ANCHOR_LABELS[idx]}${note}`);
+    res.json({ anchor: buildBrainView(deps, clock()).anchor });
   });
 
   app.use((_req, res) => fail(res, 404, 'not_found', 'no such route'));
