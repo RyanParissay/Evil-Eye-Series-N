@@ -7,7 +7,7 @@ import { expect, test } from 'vitest';
 import request from 'supertest';
 import { createApp } from './routes.js';
 import { SimOddsProvider } from '../providers/simOdds.js';
-import { isQuietHours } from '../scheduler/vancouverTime.js';
+import { dayKey, isQuietHours } from '../scheduler/vancouverTime.js';
 import { DEFAULT_SETTINGS } from '../shared/defaults.js';
 import type { OddsProvider, Quote, Trade } from '../shared/types.js';
 
@@ -326,4 +326,125 @@ test('no response body ever contains the forbidden words', async () => {
 
   expect(bodies.length).toBeGreaterThanOrEqual(18); // every route + every error shape sampled
   for (const body of bodies) expect(body).not.toMatch(FORBIDDEN);
+});
+
+// ---- display labels (bookLabel / selectionLabel) ----------------------------
+
+/** Minimal PENDING trade inserted directly via repos — bypasses the pipeline so
+ *  legs/event are fully controlled, letting label tests assert exact values. */
+function pendingTrade(id: string, now: number, event: string, category: Trade['category'],
+  legs: Trade['legs']): Trade {
+  return {
+    id, profileId: 1, category, event, sport: 'basketball', legs,
+    marginInitial: 0.02, marginRecheck: null, marginFinal: null,
+    status: 'PENDING', killReason: null, resultCents: null,
+    createdAt: now, verifyDueAt: now + 75_000, verifiedAt: null, freshUntil: null,
+    settledAt: null, eventStartsAt: now + 3_600_000,
+  };
+}
+
+test('leg bookLabel/selectionLabel: home/away/draw resolve off the event string, over/under title-case', async () => {
+  const h = makeApp();
+  const trade = pendingTrade('label-test-1', NOW, 'Lakers @ Celtics', 'ARB', [
+    { book: 'betway', selection: 'home', odds: 2.1, stakeCents: null },
+    { book: 'bwin', selection: 'away', odds: 2.05, stakeCents: null },
+    { book: 'sportsinteraction', selection: 'draw', odds: 3.4, stakeCents: null },
+    { book: 'pinnacle', selection: 'under', odds: 1.95, stakeCents: null },
+    { book: 'some-new-book', selection: 'over', odds: 1.9, stakeCents: null },
+  ]);
+  h.repos.trades.insert(trade, dayKey(NOW));
+
+  const res = await request(h.app).get('/api/state');
+  const t = (res.body.trades.pending as Array<{ id: string; legs: Array<Record<string, unknown>> }>)
+    .find((x) => x.id === 'label-test-1')!;
+  const byBook = new Map(t.legs.map((l) => [l.book as string, l]));
+  expect(byBook.get('betway')).toMatchObject({ bookLabel: 'Betway', selection: 'home', selectionLabel: 'Lakers' });
+  expect(byBook.get('bwin')).toMatchObject({ bookLabel: 'bwin', selection: 'away', selectionLabel: 'Celtics' });
+  expect(byBook.get('sportsinteraction')).toMatchObject({ bookLabel: 'Sports Interaction', selectionLabel: 'Draw' });
+  expect(byBook.get('pinnacle')).toMatchObject({ bookLabel: 'Pinnacle', selectionLabel: 'Under' });
+  expect(byBook.get('some-new-book')).toMatchObject({ bookLabel: 'some-new-book', selectionLabel: 'Over' });
+  // raw fields stay — the client's limited-flow POSTs keep using slugs
+  for (const l of t.legs) {
+    expect(typeof l.book).toBe('string');
+    expect(typeof l.selection).toBe('string');
+  }
+});
+
+test('bookLabel covers all 16 seeded books via the title-case map; unknown books fall back to raw', async () => {
+  const h = makeApp();
+  const BOOK_LABELS: Record<string, string> = {
+    pinnacle: 'Pinnacle', bet365: 'bet365', fanduel: 'FanDuel', draftkings: 'DraftKings',
+    betmgm: 'BetMGM', caesars: 'Caesars', bet99: 'Bet99', sportsinteraction: 'Sports Interaction',
+    betway: 'Betway', pointsbet: 'PointsBet', bwin: 'bwin', unibet: 'Unibet',
+    bodog: 'Bodog', betvictor: 'BetVictor', leovegas: 'LeoVegas', betrivers: 'BetRivers',
+  };
+  const books = [...Object.keys(BOOK_LABELS), 'some-future-book'];
+  const trade = pendingTrade('label-test-books', NOW, 'Arsenal vs Chelsea', 'EV',
+    books.map((book) => ({ book, selection: 'home', odds: 1.9, stakeCents: null })));
+  h.repos.trades.insert(trade, dayKey(NOW));
+
+  const res = await request(h.app).get('/api/state');
+  const t = (res.body.trades.pending as Array<{ id: string; legs: Array<{ book: string; bookLabel: string }> }>)
+    .find((x) => x.id === 'label-test-books')!;
+  for (const leg of t.legs) expect(leg.bookLabel).toBe(BOOK_LABELS[leg.book] ?? leg.book);
+});
+
+// ---- MIDDLE display edge scale -----------------------------------------------
+
+test('MIDDLE edgePct (costed): (middleRatio - 1) * costFrac at the settings-assumed hit rate', async () => {
+  const h = makeApp();
+  const trade = pendingTrade('middle-costed', NOW, 'Lakers @ Celtics', 'MIDDLE', [
+    { book: 'pointsbet', selection: 'over', odds: 1.9, stakeCents: null },
+    { book: 'bet365', selection: 'under', odds: 1.95, stakeCents: null },
+  ]);
+  h.repos.trades.insert(trade, dayKey(NOW));
+
+  const res = await request(h.app).get('/api/state');
+  const t = (res.body.trades.pending as Array<{ id: string; edgePct: number }>)
+    .find((x) => x.id === 'middle-costed')!;
+  // costFrac = 1/1.9 + 1/1.95 - 1 = 0.039136...; default middleRatio 1.5 →
+  // edgePct = (1.5 - 1) * 0.039136 * 100 = 1.9568 → 1.96
+  expect(t.edgePct).toBe(1.96);
+});
+
+test('MIDDLE edgePct (free): costFrac <= 0 is the guaranteed margin, -costFrac', async () => {
+  const h = makeApp();
+  const trade = pendingTrade('middle-free', NOW, 'Lakers @ Celtics', 'MIDDLE', [
+    { book: 'pointsbet', selection: 'over', odds: 2.5, stakeCents: null },
+    { book: 'bet365', selection: 'under', odds: 2.5, stakeCents: null },
+  ]);
+  h.repos.trades.insert(trade, dayKey(NOW));
+
+  const res = await request(h.app).get('/api/state');
+  const t = (res.body.trades.pending as Array<{ id: string; edgePct: number }>)
+    .find((x) => x.id === 'middle-free')!;
+  // costFrac = 1/2.5 + 1/2.5 - 1 = -0.2 → edgePct = -(-0.2) * 100 = 20
+  expect(t.edgePct).toBe(20);
+});
+
+test('MIDDLE edgePct scales with settings.middleRatio, read fresh at serialization time', async () => {
+  const h = makeApp();
+  await request(h.app).patch('/api/settings').send({ middleRatio: 2 });
+  const trade = pendingTrade('middle-ratio2', NOW, 'Lakers @ Celtics', 'MIDDLE', [
+    { book: 'pointsbet', selection: 'over', odds: 1.9, stakeCents: null },
+    { book: 'bet365', selection: 'under', odds: 1.95, stakeCents: null },
+  ]);
+  h.repos.trades.insert(trade, dayKey(NOW));
+
+  const res = await request(h.app).get('/api/state');
+  const t = (res.body.trades.pending as Array<{ id: string; edgePct: number }>)
+    .find((x) => x.id === 'middle-ratio2')!;
+  // ratio 2 → edgePct = (2 - 1) * 0.039136 * 100 = 3.9136 → 3.91
+  expect(t.edgePct).toBe(3.91);
+});
+
+test('ARB/EV edgePct is untouched by the MIDDLE display change (still mirrors marginPct)', async () => {
+  const h = makeApp();
+  await request(h.app).post('/api/scan');
+  const res = await request(h.app).get('/api/state');
+  const pending = res.body.trades.pending as Array<{ category: string; marginPct: number; edgePct: number }>;
+  expect(pending.length).toBeGreaterThan(0);
+  for (const t of pending) {
+    if (t.category !== 'MIDDLE') expect(t.edgePct).toBe(t.marginPct);
+  }
 });

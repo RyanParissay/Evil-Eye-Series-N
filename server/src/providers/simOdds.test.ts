@@ -161,6 +161,42 @@ test('consecutive fetches drift but keep event identity', () => {
   expect(moved).toBeGreaterThan(0);
 });
 
+test('event names are realistic matchups, not the old SIM-EVT- placeholder', () => {
+  const quotes = SimOddsProvider(mulberry32(13)).fetchQuotes(T0);
+  for (const [name, evQuotes] of byEvent(quotes)) {
+    expect(name).not.toMatch(/^SIM-EVT-/);
+    const sport = evQuotes[0]!.sport;
+    const sep = sport === 'soccer' || sport === 'tennis' ? ' vs ' : ' @ ';
+    expect(name).toContain(sep);
+    const [a, b] = name.split(sep);
+    expect(a!.length).toBeGreaterThan(0);
+    expect(b!.length).toBeGreaterThan(0);
+    expect(a).not.toBe(b);
+  }
+});
+
+test('event names are derived from the event index/sport, independent of the injected rng', () => {
+  const namesA = new Set(SimOddsProvider(mulberry32(1)).fetchQuotes(T0).map((q) => q.event));
+  const namesB = new Set(SimOddsProvider(mulberry32(999)).fetchQuotes(T0).map((q) => q.event));
+  expect([...namesB].sort()).toEqual([...namesA].sort());
+});
+
+test('same-sport events active at once never collide on a generated name', () => {
+  const quotes = SimOddsProvider(mulberry32(21)).fetchQuotes(T0);
+  const bySport = new Map<string, Set<string>>();
+  for (const q of quotes) {
+    const set = bySport.get(q.sport) ?? new Set<string>();
+    set.add(q.event);
+    bySport.set(q.sport, set);
+  }
+  // ROSTER concurrency: basketball x3, soccer/baseball/hockey x2, tennis x1.
+  expect(bySport.get('basketball')!.size).toBe(3);
+  expect(bySport.get('soccer')!.size).toBe(2);
+  expect(bySport.get('baseball')!.size).toBe(2);
+  expect(bySport.get('hockey')!.size).toBe(2);
+  expect(bySport.get('tennis')!.size).toBe(1);
+});
+
 test('expired events are replaced with fresh identities', () => {
   const p = SimOddsProvider(mulberry32(11));
   const firstNames = new Set(p.fetchQuotes(T0).map((q) => q.event));

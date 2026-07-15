@@ -25,7 +25,7 @@ export function PendingCard({ trade, now }: PendingCardProps) {
       <div className="legs">
         {trade.legs.map((leg, i) => (
           <button key={i} className="leg-btn pending">
-            {leg.book} — {leg.selection} @ {formatOdds(leg.odds)}
+            {leg.bookLabel ?? leg.book} — {leg.selectionLabel ?? leg.selection} @ {formatOdds(leg.odds)}
             <span className="leg-arrow">↗</span>
           </button>
         ))}

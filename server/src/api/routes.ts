@@ -37,23 +37,88 @@ export interface App {
 /** Statuses at or past promotion — the only cards allowed to show money. */
 const STAKE_VISIBLE: ReadonlySet<TradeStatus> = new Set(['VERIFIED', 'CONFIRMED', 'UNCONFIRMED', 'EXPIRED', 'KILLED', 'SETTLED']);
 
-type LegView = Omit<Leg, 'stakeCents'> & { stakeCents?: number | null };
+type LegView = Omit<Leg, 'stakeCents'> & { stakeCents?: number | null; bookLabel: string; selectionLabel: string };
 export type TradeView = Omit<Trade, 'legs'> & { legs: LegView[]; marginPct: number; edgePct: number };
 
 const pct2 = (frac: number): number => Math.round(frac * 10_000) / 100;
 
+/** Title-case display names for the 16 seeded books; anything else shows its raw slug. */
+const BOOK_LABELS: Record<string, string> = {
+  pinnacle: 'Pinnacle', bet365: 'bet365', fanduel: 'FanDuel', draftkings: 'DraftKings',
+  betmgm: 'BetMGM', caesars: 'Caesars', bet99: 'Bet99', sportsinteraction: 'Sports Interaction',
+  betway: 'Betway', pointsbet: 'PointsBet', bwin: 'bwin', unibet: 'Unibet',
+  bodog: 'Bodog', betvictor: 'BetVictor', leovegas: 'LeoVegas', betrivers: 'BetRivers',
+};
+
+const bookLabel = (book: string): string => BOOK_LABELS[book] ?? book;
+
+const titleCase = (raw: string): string =>
+  raw.split(/\s+/).filter(Boolean).map((w) => w[0]!.toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+
+/** simOdds.ts events read "Home @ Away" / "Home vs Away" — split back into the two team names. */
+function eventTeams(event: string): [string, string] | null {
+  for (const sep of [' vs ', ' @ ']) {
+    const i = event.indexOf(sep);
+    if (i >= 0) return [event.slice(0, i), event.slice(i + sep.length)];
+  }
+  return null;
+}
+
 /**
- * Trade plus display fields. marginPct/edgePct are the best-known edge as a
- * 2dp percentage (final > recheck > initial) — the UI labels it "margin" on
- * ARB/MIDDLE cards and "edge" on EV cards. PENDING legs NEVER carry stakeCents:
- * a pending card is book + selection + odds only.
+ * Human label for a leg's selection: home/away prefer the team name parsed from the
+ * event string (falls back to "Home"/"Away" if the event doesn't split cleanly — e.g.
+ * pre-existing data); draw is always "Draw"; everything else (including over/under,
+ * which carry no line on a persisted Leg) title-cases the raw slug.
  */
-function tradeView(t: Trade): TradeView {
+function selectionLabel(event: string, selection: string): string {
+  if (selection === 'draw') return 'Draw';
+  if (selection === 'home' || selection === 'away') {
+    const teams = eventTeams(event);
+    if (teams) return selection === 'home' ? teams[0] : teams[1];
+    return selection === 'home' ? 'Home' : 'Away';
+  }
+  return titleCase(selection);
+}
+
+/**
+ * MIDDLE display edge (this mapping only — internal marginInitial/marginRecheck/
+ * marginFinal and the qualification tolerance in engine/odds.ts are untouched).
+ * The internal basis (bothWinPayoutFrac - max(costFrac, 0)) is a tolerance-comparison
+ * number, not an EV. For display we derive an actual expected value from the locked
+ * "MIN MIDDLE QUALITY: 1.5x BREAKEVEN HIT RATE" semantics (qualification requires
+ * ratio = bothWinPayoutFrac/costFrac >= settings.middleRatio): assume the middle hits
+ * at exactly middleRatio x the breakeven rate. Let C = costFrac, B = bothWinPayoutFrac,
+ * R = middleRatio. Breakeven hit rate p0 solves p0*B = (1-p0)*C, i.e. p0*(B+C) = C.
+ * At p = R*p0, EV/stake = p*B - (1-p)*C = p*(B+C) - C = R*p0*(B+C) - C = R*C - C =
+ * (R-1)*C — independent of B, so only costFrac and the ratio matter for display.
+ * Free middles (costFrac <= 0) have no downside: the display edge is just the
+ * guaranteed margin, -costFrac. costFrac is recomputed here from the leg odds
+ * actually stored on the trade (Σ1/odds - 1), not read off any cached candidate value.
+ */
+function middleEdgePct(t: Trade, s: Settings): number {
+  const costFrac = t.legs.reduce((sum, l) => sum + 1 / l.odds, 0) - 1;
+  const frac = costFrac > 0 ? (s.middleRatio - 1) * costFrac : -costFrac;
+  return pct2(frac);
+}
+
+/**
+ * Trade plus display fields. marginPct is the best-known margin as a 2dp percentage
+ * (final > recheck > initial). edgePct mirrors marginPct EXCEPT for MIDDLE, where it's
+ * the display-scaled EV from middleEdgePct (see its comment) — the UI labels it "margin"
+ * on ARB cards and "edge" on EV/MIDDLE cards. PENDING legs NEVER carry stakeCents: a
+ * pending card is book + selection + odds only. Every leg also carries bookLabel/
+ * selectionLabel; the raw book/selection slugs stay for the client's POSTs.
+ */
+function tradeView(t: Trade, s: Settings): TradeView {
   const currentPct = pct2(t.marginFinal ?? t.marginRecheck ?? t.marginInitial);
-  const legs: LegView[] = STAKE_VISIBLE.has(t.status)
+  const rawLegs = STAKE_VISIBLE.has(t.status)
     ? t.legs
     : t.legs.map(({ book, selection, odds }) => ({ book, selection, odds }));
-  return { ...t, legs, marginPct: currentPct, edgePct: currentPct };
+  const legs: LegView[] = rawLegs.map((l) => ({
+    ...l, bookLabel: bookLabel(l.book), selectionLabel: selectionLabel(t.event, l.selection),
+  }));
+  const edgePct = t.category === 'MIDDLE' ? middleEdgePct(t, s) : currentPct;
+  return { ...t, legs, marginPct: currentPct, edgePct };
 }
 
 const newestFirst = (a: Trade, b: Trade): number => b.createdAt - a.createdAt;
@@ -131,17 +196,18 @@ export function createApp(o: AppOptions): App {
   app.get('/api/state', (_req, res) => {
     const now = clock();
     const day = dayKey(now);
+    const s = repos.settings.all();
     const verified = (['VERIFIED', 'CONFIRMED', 'UNCONFIRMED'] as const)
       .flatMap((st) => repos.trades.byStatus(st))
       .sort(newestFirst)
-      .map(tradeView);
-    const pending = repos.trades.byStatus('PENDING').sort(newestFirst).map(tradeView);
+      .map((t) => tradeView(t, s));
+    const pending = repos.trades.byStatus('PENDING').sort(newestFirst).map((t) => tradeView(t, s));
     const killedToday = repos.trades.byStatus('KILLED').filter((t) => dayKey(t.createdAt) === day).length;
     res.json({
       mode: 'SIMULATED',
       now,
       nextScanAt: scheduler.nextScanAt(now),
-      quietHours: isQuietHours(now, repos.settings.all()),
+      quietHours: isQuietHours(now, s),
       trades: { verified, pending },
       counts: { verifiedToday: repos.trades.verifiedSentToday(day), killedToday },
     });
@@ -153,7 +219,8 @@ export function createApp(o: AppOptions): App {
     const statuses: TradeStatus[] = view === 'history'
       ? ['SETTLED', 'EXPIRED', 'KILLED']
       : ['PENDING', 'VERIFIED', 'CONFIRMED', 'UNCONFIRMED', 'EXPIRED', 'KILLED'];
-    const trades = statuses.flatMap((st) => repos.trades.byStatus(st)).sort(newestFirst).map(tradeView);
+    const s = repos.settings.all();
+    const trades = statuses.flatMap((st) => repos.trades.byStatus(st)).sort(newestFirst).map((t) => tradeView(t, s));
     res.json({ view, trades });
   });
 
@@ -166,11 +233,11 @@ export function createApp(o: AppOptions): App {
   });
 
   app.post('/api/trades/:id/confirm', (req, res) => withActionErrors(res, () => {
-    res.json({ trade: tradeView(confirmTrade(repos, req.params.id, clock())) });
+    res.json({ trade: tradeView(confirmTrade(repos, req.params.id, clock()), repos.settings.all()) });
   }));
 
   app.post('/api/trades/:id/unconfirm', (req, res) => withActionErrors(res, () => {
-    res.json({ trade: tradeView(unconfirmTrade(repos, req.params.id, clock())) });
+    res.json({ trade: tradeView(unconfirmTrade(repos, req.params.id, clock()), repos.settings.all()) });
   }));
 
   app.post('/api/trades/:id/limited', (req, res) => withActionErrors(res, () => {
@@ -189,7 +256,7 @@ export function createApp(o: AppOptions): App {
     if (typeof amountCents !== 'number' || !Number.isFinite(amountCents) || amountCents < 0) {
       return fail(res, 400, 'bad_request', 'amountCents must be a non-negative number');
     }
-    res.json({ trade: tradeView(settleTrade(repos, req.params.id, result, amountCents, clock())) });
+    res.json({ trade: tradeView(settleTrade(repos, req.params.id, result, amountCents, clock()), repos.settings.all()) });
   }));
 
   app.get('/api/settings', (_req, res) => {

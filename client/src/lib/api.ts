@@ -14,6 +14,8 @@ export interface Leg {
   selection: string;
   odds: number;
   stakeCents: number | null; // null until status ≥ VERIFIED
+  bookLabel?: string;        // human display name — raw book slug still POSTed (limited flow)
+  selectionLabel?: string;   // human display name for selection
 }
 
 export interface TradeView {

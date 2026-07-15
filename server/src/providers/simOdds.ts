@@ -43,6 +43,53 @@ const ROSTER: Slot[] = [
   { role: 'PLAIN2', sport: 'basketball', books: ['pointsbet', 'fanduel'] },
 ];
 
+// Display-only team/player pools for event naming — 12 entries per sport, chosen so
+// every concurrency count in ROSTER (1, 2 or 3 same-sport slots active at once) divides
+// evenly into 12. American team sports read "Home @ Away"; soccer/tennis read "A vs B".
+const TEAM_POOLS: Record<string, readonly string[]> = {
+  basketball: ['Lakers', 'Celtics', 'Warriors', 'Nets', 'Heat', 'Bucks',
+    'Suns', 'Nuggets', 'Knicks', 'Mavericks', 'Clippers', 'Grizzlies'],
+  soccer: ['Arsenal', 'Chelsea', 'Liverpool', 'Man City', 'Man United', 'Tottenham',
+    'Barcelona', 'Real Madrid', 'Bayern Munich', 'Juventus', 'PSG', 'Inter Milan'],
+  baseball: ['Yankees', 'Red Sox', 'Dodgers', 'Cubs', 'Astros', 'Braves',
+    'Mets', 'Phillies', 'Giants', 'Cardinals', 'Padres', 'Blue Jays'],
+  hockey: ['Maple Leafs', 'Bruins', 'Rangers', 'Oilers', 'Avalanche', 'Lightning',
+    'Golden Knights', 'Panthers', 'Canucks', 'Penguins', 'Blackhawks', 'Kings'],
+  tennis: ['Alcaraz', 'Sinner', 'Djokovic', 'Medvedev', 'Zverev', 'Rublev',
+    'Tsitsipas', 'Ruud', 'Fritz', 'Rune', 'Hurkacz', 'Auger-Aliassime'],
+};
+
+/**
+ * rank = this slot's position among ROSTER slots sharing its sport (0-based);
+ * concurrency = how many ROSTER slots share that sport. Both are static — computed
+ * once from ROSTER's fixed order, never from rng or runtime state.
+ */
+const SLOT_SPORT_CONCURRENCY: Record<string, number> = {};
+for (const slot of ROSTER) SLOT_SPORT_CONCURRENCY[slot.sport] = (SLOT_SPORT_CONCURRENCY[slot.sport] ?? 0) + 1;
+const SLOT_SPORT_RANK: number[] = ROSTER.map((slot, i) =>
+  ROSTER.slice(0, i).filter((s) => s.sport === slot.sport).length);
+
+/**
+ * Realistic matchup name for a (re)planted event — a pure function of the event's
+ * global counter ("event index") and the ROSTER slot's sport/rank, NEVER the rng: this
+ * keeps names stable across drift ticks (same identity ⇒ same counter ⇒ same name) and
+ * keeps event-name generation from perturbing the rng draw sequence that plants odds.
+ *
+ * Home-team pool index is pinned to the slot's residue class mod its sport's concurrency
+ * (12 is divisible by every concurrency in ROSTER: 1, 2, 3), so two ROSTER slots sharing a
+ * sport can NEVER be planted with the same home team — and therefore never collide on the
+ * full event name — even though both draw from the same 12-entry pool over time.
+ */
+function deriveEventName(sport: string, rank: number, concurrency: number, eventIndex: number): string {
+  const pool = TEAM_POOLS[sport]!;
+  const n = pool.length;
+  const homeIdx = (rank + concurrency * eventIndex) % n;
+  const gap = 1 + (eventIndex * 7) % (n - 1); // 1..n-1 → awayIdx always differs from homeIdx
+  const awayIdx = (homeIdx + gap) % n;
+  const sep = sport === 'soccer' || sport === 'tennis' ? 'vs' : '@';
+  return `${pool[homeIdx]} ${sep} ${pool[awayIdx]}`;
+}
+
 type Probs = Array<[selection: string, prob: number]>;
 
 function spec(book: string, market: string, selection: string, line: number | null, baseOdds: number): QuoteSpec {
@@ -144,7 +191,7 @@ export function SimOddsProvider(rng: () => number): OddsProvider {
           // (Re)plant: fresh identity, base odds carry the full planted edge, drift resets.
           counter += 1;
           ev = {
-            name: `SIM-EVT-${counter}`,
+            name: deriveEventName(slot.sport, SLOT_SPORT_RANK[i]!, SLOT_SPORT_CONCURRENCY[slot.sport]!, counter),
             sport: slot.sport,
             startsAt: Math.round(now + uniform(MIN_START_MS, MAX_START_MS)),
             quotes: buildQuotes(slot),

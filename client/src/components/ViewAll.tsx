@@ -58,7 +58,7 @@ function AllTradesRow({ t }: { t: TradeView }) {
         {t.event} · {t.sport.toUpperCase()}
       </span>
       <span className="va-legs">
-        {t.legs.map((l) => `${l.book} ${formatOdds(l.odds)}`).join(' / ')}
+        {t.legs.map((l) => `${l.bookLabel ?? l.book} ${formatOdds(l.odds)}`).join(' / ')}
       </span>
       <span className={t.category === 'ARB' ? 'va-metric arb' : 'va-metric edge'}>
         {formatMetric(t.category, metricPct(t), { colon: false })}

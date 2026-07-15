@@ -43,7 +43,7 @@ export function LimitedPanel({ trade, onClose, refresh }: LimitedPanelProps) {
               setArmed(false);
             }}
           >
-            {leg.book}
+            {leg.bookLabel ?? leg.book}
           </button>
         ))}
       </div>
