@@ -9,12 +9,13 @@ interface DemoSeedControlProps {
   refresh: () => void;
 }
 
-type Status = 'idle' | 'loading' | 'done';
+type Status = 'idle' | 'loading' | 'done' | 'unavailable';
 
 const LABEL: Record<Status, string> = {
   idle: 'Load Demo Data',
   loading: 'Loading…',
   done: 'Demo data loaded',
+  unavailable: 'Demo data unavailable',
 };
 
 export function DemoSeedControl({ refresh }: DemoSeedControlProps) {
@@ -22,9 +23,11 @@ export function DemoSeedControl({ refresh }: DemoSeedControlProps) {
 
   const onClick = () => {
     setStatus('loading');
-    void seedDemo().then(() => {
-      setStatus('done');
-      refresh();
+    // seedDemo() resolves false when the server refuses (e.g. the live-mode
+    // gate → 409) or on any network failure — only claim success when it took.
+    void seedDemo().then((ok) => {
+      setStatus(ok ? 'done' : 'unavailable');
+      if (ok) refresh();
     });
   };
 
@@ -40,7 +43,7 @@ export function DemoSeedControl({ refresh }: DemoSeedControlProps) {
         disabled={status === 'loading'}
         style={{
           background: 'var(--raised-bg)', color: 'var(--body-text)',
-          border: '1px solid var(--grey-divider)', borderRadius: '4px',
+          border: '1px solid var(--grey-divider)',
           padding: '4px 10px', fontSize: '12px', cursor: status === 'loading' ? 'default' : 'pointer',
         }}
       >
