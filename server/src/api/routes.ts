@@ -10,6 +10,7 @@ import {
   ConflictError, NotFoundError, confirmTrade, reportLimited, settleTrade, unconfirmTrade,
 } from '../pipeline/actions.js';
 import { defaultPlanDeps, startScheduler, type SchedulerHandle, type Timer } from '../scheduler/runner.js';
+import { seedDemo } from '../demo/seed.js';
 import { ANCHOR_LABELS, buildBrainView } from '../brain/report.js';
 import { lastPass, runBrainPass } from '../brain/pass.js';
 import { dayKey, isQuietHours } from '../scheduler/vancouverTime.js';
@@ -298,6 +299,13 @@ export function createApp(o: AppOptions): App {
     const note = idx === 0 ? '' : ' — simulated mode maps every anchor to Pinnacle prices';
     repos.journal.add(clock(), `Reference pricer switched to ${ANCHOR_LABELS[idx]}${note}`);
     res.json({ anchor: buildBrainView(deps, clock()).anchor });
+  });
+
+  // --- DEMO SEED (feat-demo-seed) — additive, simulation-only backfill ---
+  app.post('/api/demo/seed', (_req, res) => {
+    const result = seedDemo(deps, clock());
+    if (result.gated) return fail(res, 409, 'conflict', 'demo data seed is unavailable in live mode');
+    res.json(result);
   });
 
   app.use((_req, res) => fail(res, 404, 'not_found', 'no such route'));

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DemoSeedControl } from './components/DemoSeedControl';
 import { Header } from './components/Header';
 import { Nav, type Tab } from './components/Nav';
 import { StatusLine } from './components/StatusLine';
@@ -18,6 +19,8 @@ export function App() {
   return (
     <div className="page">
       <Header modeLabel={modeLabel} />
+      {/* Demo scaffolding (feat-demo-seed) — additive, simulation-only backfill trigger */}
+      <DemoSeedControl refresh={refresh} />
       <Nav tab={tab} onSelect={setTab} />
       <StatusLine state={state} />
       {tab === 'TRADES' && <TradesScreen state={state} now={now} refresh={refresh} />}

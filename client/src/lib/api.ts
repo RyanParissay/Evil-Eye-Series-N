@@ -134,3 +134,7 @@ export async function fetchBrain(): Promise<BrainView | null> {
 export const postBrainPass = (): Promise<boolean> => postAction('/api/brain/pass');
 export const setBrainAnchor = (idx: number): Promise<boolean> =>
   postAction('/api/brain/anchor', { idx });
+
+// ---- demo data (feat-demo-seed) ----------------------------------------------
+
+export const seedDemo = (): Promise<boolean> => postAction('/api/demo/seed');
