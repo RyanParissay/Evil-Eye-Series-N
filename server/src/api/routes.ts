@@ -9,12 +9,17 @@ import type { PipeDeps } from '../pipeline/scan.js';
 import {
   ConflictError, NotFoundError, confirmTrade, reportLimited, settleTrade, unconfirmTrade,
 } from '../pipeline/actions.js';
-import { defaultPlanDeps, startScheduler, type SchedulerHandle, type Timer } from '../scheduler/runner.js';
+import { defaultPlanDeps, startScheduler, type HookTask, type SchedulerHandle, type Timer } from '../scheduler/runner.js';
 import { ANCHOR_LABELS, buildBrainView } from '../brain/report.js';
 import { lastPass, runBrainPass } from '../brain/pass.js';
 import { dayKey, isQuietHours } from '../scheduler/vancouverTime.js';
 import { DEFAULT_SETTINGS, type Settings } from '../shared/defaults.js';
 import type { AlertSender, Leg, OddsProvider, Trade, TradeStatus } from '../shared/types.js';
+import { AnthropicTextWriter, digestAfterPass } from '../brain/text.js';
+import { inboundPollHook } from '../live/inbound.js';
+import { backupHook } from '../live/backup.js';
+import { wireMode, modeLabel } from '../live/mode.js';
+import { missingLiveVars } from '../live/env.js';
 
 export interface AppOptions {
   dbPath: string;
@@ -24,6 +29,13 @@ export interface AppOptions {
   /** Overrides for tests; defaults are the sim provider on `rng` and the console+events_log sender. */
   provider?: OddsProvider;
   sender?: AlertSender;
+  /** Plan 6: injected fetch for every live integration. Tests default to a
+   *  THROWING stub — no sim code path may touch the network (HARD GATE 2). */
+  fetchImpl?: typeof fetch;
+  /** Plan 6: the env record live wiring reads. Tests default to {} — names absent. */
+  env?: NodeJS.ProcessEnv;
+  /** Plan 6: backups directory; undefined/null = no backup hook (tests). */
+  backupDir?: string | null;
 }
 
 export interface App {
@@ -189,7 +201,28 @@ export function createApp(o: AppOptions): App {
     s: () => repos.settings.all(),
     rng: o.rng,
   };
-  const scheduler = startScheduler(deps, defaultPlanDeps(deps), o.timer, clock);
+  const fetchImpl = o.fetchImpl ?? ((() => { throw new Error('no fetchImpl injected'); }) as unknown as typeof fetch);
+  const env = o.env ?? {};
+  const writer = AnthropicTextWriter(fetchImpl, env, repos, clock);
+  const hooks: HookTask[] = [inboundPollHook(deps, fetchImpl, env)];
+  if (o.backupDir != null) hooks.push(backupHook(db, repos, o.backupDir, clock));
+  hooks.push({
+    name: 'brain-digest',
+    nextAt(now: number): number | null {
+      if (!writer.available()) return null;
+      if (deps.s().brainKillSwitch !== 0) return null; // the switch stops autonomous text too
+      const today = dayKey(now);
+      const entries = repos.journal.all().filter((j) => dayKey(j.ts) === today);
+      if (entries.length === 0) return null;
+      return entries.some((j) => j.text.startsWith('Consolidation digest:')) ? null : now;
+    },
+    run(now: number): Promise<void> {
+      return digestAfterPass(deps, writer, now).then(() => undefined);
+    },
+  });
+  // Respect an explicitly injected provider/sender (tests); otherwise wire by mode.
+  if (o.provider === undefined && o.sender === undefined) wireMode(deps, env, repos, fetchImpl);
+  const scheduler = startScheduler(deps, defaultPlanDeps(deps), o.timer, clock, hooks);
 
   const app = express();
   app.use(express.json());
@@ -216,7 +249,7 @@ export function createApp(o: AppOptions): App {
     const pending = repos.trades.byStatus('PENDING').sort(newestFirst).map((t) => tradeView(t, s));
     const killedToday = repos.trades.byStatus('KILLED').filter((t) => dayKey(t.createdAt) === day).length;
     res.json({
-      mode: 'SIMULATED',
+      mode: modeLabel(s),
       now,
       nextScanAt: scheduler.nextScanAt(now),
       quietHours: isQuietHours(now, s),
@@ -300,6 +333,28 @@ export function createApp(o: AppOptions): App {
     const note = idx === 0 ? '' : ' — simulated mode maps every anchor to Pinnacle prices';
     repos.journal.add(clock(), `Reference pricer switched to ${ANCHOR_LABELS[idx]}${note}`);
     res.json({ anchor: buildBrainView(deps, clock()).anchor });
+  });
+
+  app.post('/api/mode', (req, res) => {
+    const { live } = (req.body ?? {}) as { live?: unknown };
+    if (live !== 0 && live !== 1) return fail(res, 400, 'bad_request', 'live must be 0 or 1');
+    if (live === 1) {
+      const missing = missingLiveVars(env);
+      if (missing.length > 0) {
+        // NAMES only — never a value (HARD GATE 3).
+        return fail(res, 409, 'conflict', `cannot go live — missing: ${missing.join(', ')}`);
+      }
+    }
+    const before = deps.s().liveMode;
+    repos.settings.set({ liveMode: live });
+    if (before !== live) {
+      // SIM→LIVE surfaces the unwired results feed every time (Design §13, NEW copy).
+      repos.journal.add(clock(), live === 1
+        ? 'Mode switched: SIMULATED → LIVE — results feed not wired; trades will not auto-settle'
+        : 'Mode switched: LIVE → SIMULATED');
+      wireMode(deps, env, repos, fetchImpl);
+    }
+    res.json({ mode: modeLabel(deps.s()) });
   });
 
   app.use((_req, res) => fail(res, 404, 'not_found', 'no such route'));

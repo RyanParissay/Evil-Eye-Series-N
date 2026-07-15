@@ -49,6 +49,8 @@ function makeApp(startNow: number = NOW) {
     rng,
     provider: frozen(SimOddsProvider(rng)),
     sender: { sendVerified: (t: Trade): void => { sent.push(t); } },
+    fetchImpl: (() => { throw new Error('NETWORK CALL ATTEMPTED IN SIM SUITE'); }) as unknown as typeof fetch,
+    env: {},
   });
   return { ...made, sent, timers, advance: (ms: number): void => { now += ms; } };
 }
@@ -548,4 +550,30 @@ test('PATCH /api/settings refuses liveMode — POST /api/mode owns it', async ()
   expect(res.status).toBe(400);
   expect(res.body.error.message).toContain('/api/mode');
   expect(h.repos.settings.all().liveMode).toBe(0); // untouched
+});
+
+test('POST /api/mode: refuses LIVE with missing env NAMES (values never appear)', async () => {
+  const h = makeApp();
+  const res = await request(h.app).post('/api/mode').send({ live: 1 });
+  expect(res.status).toBe(409);
+  expect(res.body.error.message).toBe(
+    'cannot go live — missing: ODDS_API_KEY, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM',
+  );
+  expect(h.repos.settings.all().liveMode).toBe(0); // still simulated
+  expect((await request(h.app).get('/api/state')).body.mode).toBe('SIMULATED');
+
+  const bad = await request(h.app).post('/api/mode').send({ live: 2 });
+  expect(bad.status).toBe(400);
+
+  const toSim = await request(h.app).post('/api/mode').send({ live: 0 }); // always allowed
+  expect(toSim.status).toBe(200);
+  expect(toSim.body.mode).toBe('SIMULATED');
+});
+
+test('sim mode never attempts a network call anywhere in the app lifecycle', async () => {
+  // makeApp is amended in this task to pass a THROWING fetchImpl — if any code
+  // path in the sim suite touches fetch, the whole suite fails loudly.
+  const h = makeApp();
+  await promoteSome(h); // scans, verifies, sends (sim sender), snapshots — no fetch
+  expect((await request(h.app).get('/api/state')).body.mode).toBe('SIMULATED');
 });

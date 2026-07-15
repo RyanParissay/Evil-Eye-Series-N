@@ -181,11 +181,17 @@ export function startScheduler(
 
   function onTimer(gen: number): void {
     if (stopped || gen !== generation) return; // stale wake: drop it
-    // No refresh fn and no hooks registered (every pre-live-mode wiring): stay
-    // fully synchronous — same invariant Task 2 established, which the sim
-    // scheduler tests (fake timer, fire-and-assert) depend on. Only detour
-    // through a microtask when there is actually a hook or refresh to await.
-    if (!deps.provider.refresh && hooks.length === 0) {
+    // Stay fully synchronous when there is genuinely no async work THIS wake:
+    // no live refresh, and no hook currently due. This preserves the sim
+    // scheduler tests (fake timer, fire-and-assert) even after createApp
+    // registers hooks (Plan 6 T7) whose nextAt returns null in sim/no-key.
+    // Only detour through a microtask when a refresh or a due hook must be awaited.
+    const now = clock();
+    const anyHookDue = hooks.some((h) => {
+      const at = h.nextAt(now);
+      return at !== null && at <= now;
+    });
+    if (!deps.provider.refresh && !anyHookDue) {
       finishTick();
       return;
     }
