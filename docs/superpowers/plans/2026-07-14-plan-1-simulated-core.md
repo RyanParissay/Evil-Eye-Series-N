@@ -266,7 +266,7 @@ test('arb split: 3-leg soccer', () => {
 });
 ```
 - [ ] **Step 2: Run** — Expected: FAIL
-- [ ] **Step 3: Implement** — Kelly `f* = (p·o − 1)/(o − 1)`, clamp ≥ 0, × `kellyFraction`, cap `kellyCapPct/100 × bankrollCents`, round. Arb: leg i gets `total × (1/oᵢ)/Σ(1/o)` with `total = flatPairCents` (2-leg) or `flatPairCents × 1.5` (3-leg), each leg capped/rounded, margin recomputed from rounded stakes.
+- [ ] **Step 3: Implement** — Kelly `f* = (p·o − 1)/(o − 1)`; **if `f* ≤ 0` return 0 — "no stake" is not a stake, so the min-$10 floor does not apply** (amended 2026-07-14 after review; pin with `expect(kellyStakeCents(0.4, 2.0, S)).toBe(0)`); else × `kellyFraction`, cap `kellyCapPct/100 × bankrollCents`, round. Arb: leg i gets `total × (1/oᵢ)/Σ(1/o)` with `total = flatPairCents` (2-leg) or `flatPairCents × 1.5` (3-leg), each leg capped/rounded, margin recomputed from rounded stakes.
 - [ ] **Step 4: Run** — Expected: PASS
 - [ ] **Step 5: Commit** — `feat: staking (quarter-kelly vs total bankroll, arb split, $5 rounding)`
 
