@@ -1,6 +1,7 @@
 import { TradeView, metricPct } from '../lib/api';
 import { formatCents, formatClock, formatMetric, formatOdds } from '../lib/format';
 import { liveTimer } from '../lib/timers';
+import { ConfirmButton } from './ConfirmButton';
 
 interface LiveCardProps {
   trade: TradeView;
@@ -8,7 +9,7 @@ interface LiveCardProps {
   refresh: () => void;
 }
 
-export function LiveCard({ trade, now }: LiveCardProps) {
+export function LiveCard({ trade, now, refresh }: LiveCardProps) {
   const timer = liveTimer(trade.freshUntil ?? now, now);
   const stale = timer.phase === 'STALE';
   return (
@@ -38,6 +39,7 @@ export function LiveCard({ trade, now }: LiveCardProps) {
         ))}
       </div>
       <div className="action-row">
+        <ConfirmButton trade={trade} refresh={refresh} />
         <span className={trade.category === 'ARB' ? 'metric-box arb' : 'metric-box edge'}>
           {formatMetric(trade.category, metricPct(trade), { colon: true })}
         </span>
