@@ -37,22 +37,64 @@ export interface App {
 /** Statuses at or past promotion — the only cards allowed to show money. */
 const STAKE_VISIBLE: ReadonlySet<TradeStatus> = new Set(['VERIFIED', 'CONFIRMED', 'UNCONFIRMED', 'EXPIRED', 'KILLED', 'SETTLED']);
 
-type LegView = Omit<Leg, 'stakeCents'> & { stakeCents?: number | null };
+type LegView = Omit<Leg, 'stakeCents'> & { stakeCents?: number | null; bookLabel: string; selectionLabel: string };
 export type TradeView = Omit<Trade, 'legs'> & { legs: LegView[]; marginPct: number; edgePct: number };
 
 const pct2 = (frac: number): number => Math.round(frac * 10_000) / 100;
+
+/** Title-case display names for the 16 seeded books; anything else shows its raw slug. */
+const BOOK_LABELS: Record<string, string> = {
+  pinnacle: 'Pinnacle', bet365: 'bet365', fanduel: 'FanDuel', draftkings: 'DraftKings',
+  betmgm: 'BetMGM', caesars: 'Caesars', bet99: 'Bet99', sportsinteraction: 'Sports Interaction',
+  betway: 'Betway', pointsbet: 'PointsBet', bwin: 'bwin', unibet: 'Unibet',
+  bodog: 'Bodog', betvictor: 'BetVictor', leovegas: 'LeoVegas', betrivers: 'BetRivers',
+};
+
+const bookLabel = (book: string): string => BOOK_LABELS[book] ?? book;
+
+const titleCase = (raw: string): string =>
+  raw.split(/\s+/).filter(Boolean).map((w) => w[0]!.toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+
+/** simOdds.ts events read "Home @ Away" / "Home vs Away" — split back into the two team names. */
+function eventTeams(event: string): [string, string] | null {
+  for (const sep of [' vs ', ' @ ']) {
+    const i = event.indexOf(sep);
+    if (i >= 0) return [event.slice(0, i), event.slice(i + sep.length)];
+  }
+  return null;
+}
+
+/**
+ * Human label for a leg's selection: home/away prefer the team name parsed from the
+ * event string (falls back to "Home"/"Away" if the event doesn't split cleanly — e.g.
+ * pre-existing data); draw is always "Draw"; everything else (including over/under,
+ * which carry no line on a persisted Leg) title-cases the raw slug.
+ */
+function selectionLabel(event: string, selection: string): string {
+  if (selection === 'draw') return 'Draw';
+  if (selection === 'home' || selection === 'away') {
+    const teams = eventTeams(event);
+    if (teams) return selection === 'home' ? teams[0] : teams[1];
+    return selection === 'home' ? 'Home' : 'Away';
+  }
+  return titleCase(selection);
+}
 
 /**
  * Trade plus display fields. marginPct/edgePct are the best-known edge as a
  * 2dp percentage (final > recheck > initial) — the UI labels it "margin" on
  * ARB/MIDDLE cards and "edge" on EV cards. PENDING legs NEVER carry stakeCents:
- * a pending card is book + selection + odds only.
+ * a pending card is book + selection + odds only. Every leg also carries
+ * bookLabel/selectionLabel; the raw book/selection slugs stay for the client's POSTs.
  */
 function tradeView(t: Trade): TradeView {
   const currentPct = pct2(t.marginFinal ?? t.marginRecheck ?? t.marginInitial);
-  const legs: LegView[] = STAKE_VISIBLE.has(t.status)
+  const rawLegs = STAKE_VISIBLE.has(t.status)
     ? t.legs
     : t.legs.map(({ book, selection, odds }) => ({ book, selection, odds }));
+  const legs: LegView[] = rawLegs.map((l) => ({
+    ...l, bookLabel: bookLabel(l.book), selectionLabel: selectionLabel(t.event, l.selection),
+  }));
   return { ...t, legs, marginPct: currentPct, edgePct: currentPct };
 }
 

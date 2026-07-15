@@ -42,7 +42,7 @@ export function LiveCard({ trade, now, refresh, limitedOpen, onToggleLimited }: 
       <div className="legs">
         {trade.legs.map((leg, i) => (
           <button key={i} className="leg-btn">
-            {leg.book} — {leg.selection} @ {formatOdds(leg.odds)}
+            {leg.bookLabel ?? leg.book} — {leg.selectionLabel ?? leg.selection} @ {formatOdds(leg.odds)}
             {leg.stakeCents !== null && (
               <span className="leg-stake">BET {formatCents(leg.stakeCents)} ↗</span>
             )}
