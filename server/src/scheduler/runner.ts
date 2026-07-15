@@ -9,6 +9,8 @@ import { runVerifyDue } from '../pipeline/verify.js';
 import { runSimSettlement } from '../pipeline/actions.js';
 import { planNext, type PlanState } from './plan.js';
 import { dayKey, isQuietHours, nextQuietEnd } from './vancouverTime.js';
+import { brainPassIfDue } from '../brain/pass.js';
+import { captureCloses } from '../brain/closes.js';
 
 export interface Timer {
   setTimeout(fn: () => void, ms: number): unknown;
@@ -73,11 +75,14 @@ export function startScheduler(deps: PipeDeps, planDeps: PlanDeps, timer: Timer,
     return Math.max(a.at, now); // 'scan' → its at; 'sleepUntil' → the scan runs right at wake
   }
 
-  /** One scheduled scan: snapshot → kill battery → due rechecks → sim settlement → daily bankroll snapshot. */
+  /** One scheduled scan: snapshot → kill battery → due rechecks → sim settlement
+   *  → brain hooks (close capture + cadence-gated consolidation pass) → daily snapshot. */
   function doScan(now: number): ScanSummary {
     const scan = runScan(deps, now);
     const verify = runVerifyDue(deps, now);
     const settlement = runSimSettlement(deps, now);
+    captureCloses(deps, now);   // pre-start closes from the freshest snapshot (verify refetch)
+    brainPassIfDue(deps, now);  // 6h consolidation cadence rides this tick — the one-timer invariant holds
     writeDailySnapshot(now);
     lastScanAt = now;
     return { scan, verify, settlement };

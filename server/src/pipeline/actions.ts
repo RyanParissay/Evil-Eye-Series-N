@@ -6,6 +6,7 @@
 import type { Trade, TradeStatus } from '../shared/types.js';
 import type { Repos } from '../db/db.js';
 import type { PipeDeps } from './scan.js';
+import { applyLimitsReport } from '../brain/pass.js';
 
 /** Invalid status transition — Task 13 maps this to HTTP 409. */
 export class ConflictError extends Error {
@@ -59,13 +60,15 @@ export function unconfirmTrade(repos: Repos, id: string, now: number): Trade {
 }
 
 /**
- * A book limited the account on this trade: log the report and journal it.
- * The trade keeps whatever status it had — being limited is not an outcome.
+ * A book limited the account on this trade: log the report, then update the
+ * brain immediately (MASTER PROMPT §4 — "logged to Advanced Analytics + Brain
+ * updated"): the book's heat/health/belief recompute now and the brain writes
+ * the journal line. The trade keeps whatever status it had.
  */
 export function reportLimited(repos: Repos, id: string, book: string, maxAllowedCents: number, now: number): void {
   const t = mustGet(repos, id);
   repos.limitsReports.add(t.id, book, maxAllowedCents, now);
-  repos.journal.add(now, `${t.category} ${t.event}: limited at ${book} — max allowed $${(maxAllowedCents / 100).toFixed(2)}.`);
+  applyLimitsReport(repos, repos.settings.all(), t, book, maxAllowedCents, now);
 }
 
 /**
