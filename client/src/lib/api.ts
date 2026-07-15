@@ -2,6 +2,7 @@
 // Fetch helpers NEVER throw: any network/HTTP failure → null (queries) or false (posts).
 import { formatScanTime } from './format';
 import type { BrainView } from './brain';
+import type { AnalyticsView, ProfileView, RangeKey } from './analytics';
 
 export type Strategy = 'ARB' | 'MIDDLE' | 'EV';
 export type TradeStatus =
@@ -134,3 +135,40 @@ export async function fetchBrain(): Promise<BrainView | null> {
 export const postBrainPass = (): Promise<boolean> => postAction('/api/brain/pass');
 export const setBrainAnchor = (idx: number): Promise<boolean> =>
   postAction('/api/brain/anchor', { idx });
+
+// ---- analytics (Plan 4) ----------------------------------------------------------
+
+export async function fetchProfiles(): Promise<ProfileView[] | null> {
+  try {
+    const res = await fetch('/api/profiles');
+    if (!res.ok) return null;
+    const data = (await res.json()) as { profiles?: ProfileView[] };
+    return Array.isArray(data.profiles) ? data.profiles : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function createProfile(name: string, startingCashCents: number): Promise<ProfileView | null> {
+  try {
+    const res = await fetch('/api/profiles', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name, startingCashCents }),
+    });
+    if (!res.ok) return null;
+    return ((await res.json()) as { profile: ProfileView }).profile;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchAnalytics(profileId: number, range: RangeKey): Promise<AnalyticsView | null> {
+  try {
+    const res = await fetch(`/api/analytics?profileId=${profileId}&range=${range}`);
+    if (!res.ok) return null;
+    return (await res.json()) as AnalyticsView;
+  } catch {
+    return null;
+  }
+}
