@@ -10,6 +10,8 @@ import {
   ConflictError, NotFoundError, confirmTrade, reportLimited, settleTrade, unconfirmTrade,
 } from '../pipeline/actions.js';
 import { defaultPlanDeps, startScheduler, type SchedulerHandle, type Timer } from '../scheduler/runner.js';
+import { ANCHOR_LABELS, buildBrainView } from '../brain/report.js';
+import { lastPass, runBrainPass } from '../brain/pass.js';
 import { dayKey, isQuietHours } from '../scheduler/vancouverTime.js';
 import { DEFAULT_SETTINGS, type Settings } from '../shared/defaults.js';
 import type { AlertSender, Leg, OddsProvider, Trade, TradeStatus } from '../shared/types.js';
@@ -276,6 +278,26 @@ export function createApp(o: AppOptions): App {
     const v = settingsPatch(req.body);
     if ('error' in v) return fail(res, 400, 'bad_request', v.error);
     res.json({ settings: repos.settings.set(v.patch) });
+  });
+
+  app.get('/api/brain', (_req, res) => {
+    res.json(buildBrainView(deps, clock()));
+  });
+
+  // Manual consolidation pass (SETTINGS → UPDATE UNDERSTANDING wires here in Plan 5).
+  // Runs even under the kill switch: an explicit user command is not autonomous behavior.
+  app.post('/api/brain/pass', (_req, res) => {
+    runBrainPass(deps, clock());
+    res.json({ lastFullPassAt: lastPass(repos)!.ts });
+  });
+
+  app.post('/api/brain/anchor', (req, res) => {
+    const { idx } = (req.body ?? {}) as { idx?: unknown };
+    if (idx !== 0 && idx !== 1 && idx !== 2) return fail(res, 400, 'bad_request', 'idx must be 0, 1 or 2');
+    repos.settings.set({ anchorIdx: idx });
+    const note = idx === 0 ? '' : ' — simulated mode maps every anchor to Pinnacle prices';
+    repos.journal.add(clock(), `Reference pricer switched to ${ANCHOR_LABELS[idx]}${note}`);
+    res.json({ anchor: buildBrainView(deps, clock()).anchor });
   });
 
   app.use((_req, res) => fail(res, 404, 'not_found', 'no such route'));

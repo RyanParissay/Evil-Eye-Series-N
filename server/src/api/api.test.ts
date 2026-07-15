@@ -463,3 +463,81 @@ test('PATCH settings: brain keys accept their special ranges', async () => {
   const badSwitch = await request(h.app).patch('/api/settings').send({ brainKillSwitch: 2 });
   expect(badSwitch.status).toBe(400);
 });
+
+// ---- brain read model + API routes (Task 7) ----------------------------------
+
+test('GET /api/brain: books, tiles, rationale, grades, journal from live tables', async () => {
+  const h = makeApp();
+  h.scheduler.scanNow(NOW);
+  h.advance(76_000);
+  h.scheduler.scanNow(NOW + 76_000);
+  const res = await request(h.app).get('/api/brain');
+  expect(res.status).toBe(200);
+  const b = res.body;
+  expect(b.books).toHaveLength(16);
+  expect(b.books[0]).toMatchObject({
+    name: 'pinnacle', displayName: 'Pinnacle', sharpExempt: true,
+    heat: 0, health: 'green', maxBetCents: null, wasCents: null,
+  });
+  expect(b.books.find((x: { name: string }) => x.name === 'sportsinteraction').displayName)
+    .toBe('Sports Interaction');
+  expect(b.tiles.credits.planCredits).toBe(100_000);
+  expect(b.tiles.credits.remainingCredits).toBeLessThan(100_000); // scans burned credits
+  expect(b.tiles.todaysPicks.sent).toBeGreaterThan(0);
+  expect(b.tiles.todaysPicks.of).toBe(b.tiles.todaysPicks.sent + b.tiles.todaysPicks.heldBack);
+  expect(b.tiles.doubleVerification.rechecked).toBeGreaterThan(0);
+  expect(b.rationale.candidates).toBeGreaterThanOrEqual(b.rationale.passed);
+  expect(b.rationale.passed).toBeGreaterThanOrEqual(b.rationale.sent);
+  expect(b.rationale.heldBackClauses.length).toBeGreaterThan(0);
+  expect(b.lastFullPassAt).toBe(NOW); // the first tick ran the pass
+  expect(b.killSwitch).toBe(false);
+  expect(b.grades.map((g: { strategy: string }) => g.strategy)).toEqual(['ARB', 'EV', 'MIDDLE']);
+  expect(b.journal.total).toBeGreaterThan(0);
+  expect(b.controls).toEqual({ limit: 23, reject: 9, cut: 14, withdrawal: -2, halfLifeDays: 21, cadenceHours: 6 });
+});
+
+test('POST /api/brain/pass runs immediately and stamps lastFullPassAt', async () => {
+  const h = makeApp();
+  const res = await request(h.app).post('/api/brain/pass');
+  expect(res.status).toBe(200);
+  expect(res.body.lastFullPassAt).toBe(NOW);
+});
+
+test('POST /api/brain/anchor: persists, journals honestly, effective stays PINNACLE', async () => {
+  const h = makeApp();
+  const res = await request(h.app).post('/api/brain/anchor').send({ idx: 1 });
+  expect(res.status).toBe(200);
+  expect(res.body.anchor).toMatchObject({ idx: 1, label: 'CIRCA', effective: 'PINNACLE' });
+  const texts = h.repos.journal.all().map((j) => j.text);
+  expect(texts).toContain('Reference pricer switched to CIRCA — simulated mode maps every anchor to Pinnacle prices');
+  const bad = await request(h.app).post('/api/brain/anchor').send({ idx: 3 });
+  expect(bad.status).toBe(400);
+});
+
+test('a TRADE LIMITED? report moves heat end-to-end through the API', async () => {
+  const h = makeApp();
+  h.scheduler.scanNow(NOW);
+  h.advance(76_000);
+  h.scheduler.scanNow(NOW + 76_000);
+  const verified = h.repos.trades.byStatus('VERIFIED');
+  const target = verified.flatMap((t) => t.legs.map((l) => ({ id: t.id, book: l.book })))
+    .find((x) => x.book !== 'pinnacle')!;
+  const res = await request(h.app)
+    .post(`/api/trades/${target.id}/limited`).send({ book: target.book, maxAllowedCents: 2_500 });
+  expect(res.status).toBe(200);
+  const brain = (await request(h.app).get('/api/brain')).body;
+  const book = brain.books.find((x: { name: string }) => x.name === target.book);
+  expect(book.heat).toBeGreaterThanOrEqual(23);
+  expect(book.maxBetCents).toBe(2_500);
+  expect(book.wasCents).toBe(50_000);
+  expect(brain.limitsThisMonth).toBe(1);
+  expect(brain.books.find((x: { name: string }) => x.name === target.book).marks)
+    .toContainEqual({ ts: NOW + 76_000, kind: 'LIMIT REPORTED' });
+});
+
+test('forbidden words never appear in the brain payload', async () => {
+  const h = makeApp();
+  h.scheduler.scanNow(NOW);
+  const res = await request(h.app).get('/api/brain');
+  expect(/append-only|ghost|picker|grader|gatekeeper|CLV/i.test(JSON.stringify(res.body))).toBe(false);
+});
