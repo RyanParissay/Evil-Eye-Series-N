@@ -127,6 +127,71 @@ test('scheduler chain: firing the captured timer callback boot-scans and resched
   expect(h.repos.trades.byStatus('PENDING').length).toBeGreaterThan(0);
 });
 
+/** Every trade row in the db regardless of status — a stale wake must not add or move any. */
+const ALL_STATUSES = ['PENDING', 'VERIFIED', 'CONFIRMED', 'UNCONFIRMED', 'EXPIRED', 'KILLED', 'SETTLED'] as const;
+function tradeCount(h: ReturnType<typeof makeApp>): number {
+  return ALL_STATUSES.reduce((n, st) => n + h.repos.trades.byStatus(st).length, 0);
+}
+
+test('manual scan mid-cadence-sleep re-arms the chain to its +75s verify wake', async () => {
+  const h = makeApp();
+  // Generous caps so the second wave's survivors are not held back — this test
+  // is about the scheduling seam, not the kill battery.
+  await request(h.app)
+    .patch('/api/settings')
+    .send({ dailyPickCap: 500, sharpVelocityPerDayPerBook: 500, marketBreadthPerWeekPerBook: 500 })
+    .expect(200);
+
+  h.timers[0]!.fn(); // boot tick: immediate scan, chain arms the +75s verify wake
+  h.advance(76_000);
+  h.timers[1]!.fn(); // wave-1 verify runs, chain arms the next cadence scan
+  expect(h.timers).toHaveLength(3);
+  expect(h.timers[2]!.ms).toBeGreaterThan(75_000); // mid-cadence sleep: the next wake is minutes away
+
+  h.advance(120_000); // two minutes into the sleep — the common manual-scan moment
+  const scanAt = NOW + 76_000 + 120_000;
+  const scan = await request(h.app).post('/api/scan').expect(200);
+  expect(scan.body.scan.created).toBeGreaterThan(0);
+
+  // The manual scan must re-arm the chain: exactly ONE new wake, due at the
+  // +75s verify recheck — NOT left to the old cadence wake minutes out.
+  expect(h.timers).toHaveLength(4);
+  expect(h.timers[3]!.ms).toBe(75_000);
+
+  // Firing that wake at +75s verifies the manual scan's pendings on time.
+  h.advance(75_000);
+  h.timers[3]!.fn();
+  const state = await request(h.app).get('/api/state').expect(200);
+  expect(state.body.trades.pending).toHaveLength(0);
+  const wave2 = (state.body.trades.verified as Array<{ verifiedAt: number | null }>)
+    .filter((t) => t.verifiedAt === scanAt + 75_000);
+  expect(wave2.length).toBeGreaterThan(0);
+});
+
+test('stale wake after a manual scan is a no-op: no double scan, no extra timer, cadence intact', async () => {
+  const h = makeApp();
+  h.timers[0]!.fn(); // boot scan; +75s verify wake armed
+  h.advance(76_000);
+  h.timers[1]!.fn(); // wave-1 verify; cadence scan wake armed — mid-cadence sleep begins
+  const staleWake = h.timers[2]!; // superseded by the manual scan below
+
+  h.advance(60_000);
+  await request(h.app).post('/api/scan').expect(200);
+  expect(h.timers).toHaveLength(4); // the manual scan armed the replacement wake
+
+  h.advance(75_000);
+  h.timers[3]!.fn(); // the live chain's wake: due work runs, next wake armed
+  const timerCount = h.timers.length;
+  const trades = tradeCount(h);
+  const at = NOW + 76_000 + 60_000 + 75_000;
+  const nextScan = h.scheduler.nextScanAt(at);
+
+  staleWake.fn(); // the pre-manual-scan wake finally fires — stale generation
+  expect(h.timers).toHaveLength(timerCount); // it did NOT reschedule: exactly one live chain
+  expect(tradeCount(h)).toBe(trades); // and did NOT scan or verify anything
+  expect(h.scheduler.nextScanAt(at)).toBe(nextScan); // cadence intact
+});
+
 test('confirm → unconfirm cycle via API', async () => {
   const h = makeApp();
   const verified = await promoteSome(h);

@@ -29,7 +29,7 @@ export interface ScanSummary {
 export interface SchedulerHandle {
   /** Test/manual hook: run every due action at clock() now. Never schedules — the timer chain stays single. */
   tick(): void;
-  /** Manual scan (POST /api/scan): the full scan bundle immediately, bypassing the cadence. */
+  /** Manual scan (POST /api/scan): the full scan bundle immediately, bypassing the cadence, then re-arms the chain so the +75s verify recheck is honored. */
   scanNow(now: number): ScanSummary;
   /** When the next scan will run — the dashboard's countdown. */
   nextScanAt(now: number): number;
@@ -55,6 +55,11 @@ export function startScheduler(deps: PipeDeps, planDeps: PlanDeps, timer: Timer,
   let lastScanAt: number | null = null;
   let plannedScanAt: number | null = null; // set whenever a tick computes when the next scan lands
   let stopped = false;
+  // Which arming of the chain is live. scanNow bumps this and arms a fresh
+  // wake; a timeout armed under an older generation is stale and returns
+  // without executing or rescheduling. The Timer seam has no clearTimeout, so
+  // superseded wakes die by this check — exactly one LIVE chain ever runs.
+  let generation = 0;
 
   const state = (now: number): PlanState => ({
     lastScanAt,
@@ -102,18 +107,24 @@ export function startScheduler(deps: PipeDeps, planDeps: PlanDeps, timer: Timer,
     }
   }
 
-  function onTimer(): void {
-    if (stopped) return;
+  /** Arm the chain's next wake under the current generation. */
+  function arm(delayMs: number): void {
+    const gen = generation;
+    timer.setTimeout(() => { onTimer(gen); }, delayMs);
+  }
+
+  function onTimer(gen: number): void {
+    if (stopped || gen !== generation) return; // stale wake (superseded by a manual scan): drop it
     let delayMs = RETRY_MS;
     try {
       delayMs = Math.max(0, runDue() - clock()); // overdue ats clamp to "run immediately"
     } catch (err) {
       console.error('[scheduler] tick failed — retrying in 60s', err);
     }
-    timer.setTimeout(onTimer, delayMs); // the ONE outstanding timeout: the chain reschedules itself
+    arm(delayMs); // the ONE live timeout: the chain reschedules itself
   }
 
-  timer.setTimeout(onTimer, 0); // seed the chain; with lastScanAt null the first tick scans immediately
+  arm(0); // seed the chain; with lastScanAt null the first tick scans immediately
 
   return {
     tick(): void {
@@ -122,6 +133,13 @@ export function startScheduler(deps: PipeDeps, planDeps: PlanDeps, timer: Timer,
     scanNow(now: number): ScanSummary {
       const summary = doScan(now);
       plannedScanAt = planScanAt(now); // the manual scan resets the cadence the countdown shows
+      // Re-arm the chain NOW: the previously scheduled wake may be a cadence
+      // sleep minutes out, but this scan's pendings are due at +75s. Bump the
+      // generation (the superseded wake will no-op) and arm one fresh wake for
+      // the next due action — after a fresh scan, planNext's verify recheck.
+      generation += 1;
+      const next = planNext(state(now), now, deps.s(), deps.rng);
+      arm(Math.max(0, next.at - now));
       return summary;
     },
     nextScanAt(now: number): number {
