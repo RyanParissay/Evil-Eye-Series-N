@@ -81,13 +81,35 @@ function selectionLabel(event: string, selection: string): string {
 }
 
 /**
- * Trade plus display fields. marginPct/edgePct are the best-known edge as a
- * 2dp percentage (final > recheck > initial) — the UI labels it "margin" on
- * ARB/MIDDLE cards and "edge" on EV cards. PENDING legs NEVER carry stakeCents:
- * a pending card is book + selection + odds only. Every leg also carries
- * bookLabel/selectionLabel; the raw book/selection slugs stay for the client's POSTs.
+ * MIDDLE display edge (this mapping only — internal marginInitial/marginRecheck/
+ * marginFinal and the qualification tolerance in engine/odds.ts are untouched).
+ * The internal basis (bothWinPayoutFrac - max(costFrac, 0)) is a tolerance-comparison
+ * number, not an EV. For display we derive an actual expected value from the locked
+ * "MIN MIDDLE QUALITY: 1.5x BREAKEVEN HIT RATE" semantics (qualification requires
+ * ratio = bothWinPayoutFrac/costFrac >= settings.middleRatio): assume the middle hits
+ * at exactly middleRatio x the breakeven rate. Let C = costFrac, B = bothWinPayoutFrac,
+ * R = middleRatio. Breakeven hit rate p0 solves p0*B = (1-p0)*C, i.e. p0*(B+C) = C.
+ * At p = R*p0, EV/stake = p*B - (1-p)*C = p*(B+C) - C = R*p0*(B+C) - C = R*C - C =
+ * (R-1)*C — independent of B, so only costFrac and the ratio matter for display.
+ * Free middles (costFrac <= 0) have no downside: the display edge is just the
+ * guaranteed margin, -costFrac. costFrac is recomputed here from the leg odds
+ * actually stored on the trade (Σ1/odds - 1), not read off any cached candidate value.
  */
-function tradeView(t: Trade): TradeView {
+function middleEdgePct(t: Trade, s: Settings): number {
+  const costFrac = t.legs.reduce((sum, l) => sum + 1 / l.odds, 0) - 1;
+  const frac = costFrac > 0 ? (s.middleRatio - 1) * costFrac : -costFrac;
+  return pct2(frac);
+}
+
+/**
+ * Trade plus display fields. marginPct is the best-known margin as a 2dp percentage
+ * (final > recheck > initial). edgePct mirrors marginPct EXCEPT for MIDDLE, where it's
+ * the display-scaled EV from middleEdgePct (see its comment) — the UI labels it "margin"
+ * on ARB cards and "edge" on EV/MIDDLE cards. PENDING legs NEVER carry stakeCents: a
+ * pending card is book + selection + odds only. Every leg also carries bookLabel/
+ * selectionLabel; the raw book/selection slugs stay for the client's POSTs.
+ */
+function tradeView(t: Trade, s: Settings): TradeView {
   const currentPct = pct2(t.marginFinal ?? t.marginRecheck ?? t.marginInitial);
   const rawLegs = STAKE_VISIBLE.has(t.status)
     ? t.legs
@@ -95,7 +117,8 @@ function tradeView(t: Trade): TradeView {
   const legs: LegView[] = rawLegs.map((l) => ({
     ...l, bookLabel: bookLabel(l.book), selectionLabel: selectionLabel(t.event, l.selection),
   }));
-  return { ...t, legs, marginPct: currentPct, edgePct: currentPct };
+  const edgePct = t.category === 'MIDDLE' ? middleEdgePct(t, s) : currentPct;
+  return { ...t, legs, marginPct: currentPct, edgePct };
 }
 
 const newestFirst = (a: Trade, b: Trade): number => b.createdAt - a.createdAt;
@@ -173,17 +196,18 @@ export function createApp(o: AppOptions): App {
   app.get('/api/state', (_req, res) => {
     const now = clock();
     const day = dayKey(now);
+    const s = repos.settings.all();
     const verified = (['VERIFIED', 'CONFIRMED', 'UNCONFIRMED'] as const)
       .flatMap((st) => repos.trades.byStatus(st))
       .sort(newestFirst)
-      .map(tradeView);
-    const pending = repos.trades.byStatus('PENDING').sort(newestFirst).map(tradeView);
+      .map((t) => tradeView(t, s));
+    const pending = repos.trades.byStatus('PENDING').sort(newestFirst).map((t) => tradeView(t, s));
     const killedToday = repos.trades.byStatus('KILLED').filter((t) => dayKey(t.createdAt) === day).length;
     res.json({
       mode: 'SIMULATED',
       now,
       nextScanAt: scheduler.nextScanAt(now),
-      quietHours: isQuietHours(now, repos.settings.all()),
+      quietHours: isQuietHours(now, s),
       trades: { verified, pending },
       counts: { verifiedToday: repos.trades.verifiedSentToday(day), killedToday },
     });
@@ -195,7 +219,8 @@ export function createApp(o: AppOptions): App {
     const statuses: TradeStatus[] = view === 'history'
       ? ['SETTLED', 'EXPIRED', 'KILLED']
       : ['PENDING', 'VERIFIED', 'CONFIRMED', 'UNCONFIRMED', 'EXPIRED', 'KILLED'];
-    const trades = statuses.flatMap((st) => repos.trades.byStatus(st)).sort(newestFirst).map(tradeView);
+    const s = repos.settings.all();
+    const trades = statuses.flatMap((st) => repos.trades.byStatus(st)).sort(newestFirst).map((t) => tradeView(t, s));
     res.json({ view, trades });
   });
 
@@ -208,11 +233,11 @@ export function createApp(o: AppOptions): App {
   });
 
   app.post('/api/trades/:id/confirm', (req, res) => withActionErrors(res, () => {
-    res.json({ trade: tradeView(confirmTrade(repos, req.params.id, clock())) });
+    res.json({ trade: tradeView(confirmTrade(repos, req.params.id, clock()), repos.settings.all()) });
   }));
 
   app.post('/api/trades/:id/unconfirm', (req, res) => withActionErrors(res, () => {
-    res.json({ trade: tradeView(unconfirmTrade(repos, req.params.id, clock())) });
+    res.json({ trade: tradeView(unconfirmTrade(repos, req.params.id, clock()), repos.settings.all()) });
   }));
 
   app.post('/api/trades/:id/limited', (req, res) => withActionErrors(res, () => {
@@ -231,7 +256,7 @@ export function createApp(o: AppOptions): App {
     if (typeof amountCents !== 'number' || !Number.isFinite(amountCents) || amountCents < 0) {
       return fail(res, 400, 'bad_request', 'amountCents must be a non-negative number');
     }
-    res.json({ trade: tradeView(settleTrade(repos, req.params.id, result, amountCents, clock())) });
+    res.json({ trade: tradeView(settleTrade(repos, req.params.id, result, amountCents, clock()), repos.settings.all()) });
   }));
 
   app.get('/api/settings', (_req, res) => {

@@ -388,3 +388,63 @@ test('bookLabel covers all 16 seeded books via the title-case map; unknown books
     .find((x) => x.id === 'label-test-books')!;
   for (const leg of t.legs) expect(leg.bookLabel).toBe(BOOK_LABELS[leg.book] ?? leg.book);
 });
+
+// ---- MIDDLE display edge scale -----------------------------------------------
+
+test('MIDDLE edgePct (costed): (middleRatio - 1) * costFrac at the settings-assumed hit rate', async () => {
+  const h = makeApp();
+  const trade = pendingTrade('middle-costed', NOW, 'Lakers @ Celtics', 'MIDDLE', [
+    { book: 'pointsbet', selection: 'over', odds: 1.9, stakeCents: null },
+    { book: 'bet365', selection: 'under', odds: 1.95, stakeCents: null },
+  ]);
+  h.repos.trades.insert(trade, dayKey(NOW));
+
+  const res = await request(h.app).get('/api/state');
+  const t = (res.body.trades.pending as Array<{ id: string; edgePct: number }>)
+    .find((x) => x.id === 'middle-costed')!;
+  // costFrac = 1/1.9 + 1/1.95 - 1 = 0.039136...; default middleRatio 1.5 →
+  // edgePct = (1.5 - 1) * 0.039136 * 100 = 1.9568 → 1.96
+  expect(t.edgePct).toBe(1.96);
+});
+
+test('MIDDLE edgePct (free): costFrac <= 0 is the guaranteed margin, -costFrac', async () => {
+  const h = makeApp();
+  const trade = pendingTrade('middle-free', NOW, 'Lakers @ Celtics', 'MIDDLE', [
+    { book: 'pointsbet', selection: 'over', odds: 2.5, stakeCents: null },
+    { book: 'bet365', selection: 'under', odds: 2.5, stakeCents: null },
+  ]);
+  h.repos.trades.insert(trade, dayKey(NOW));
+
+  const res = await request(h.app).get('/api/state');
+  const t = (res.body.trades.pending as Array<{ id: string; edgePct: number }>)
+    .find((x) => x.id === 'middle-free')!;
+  // costFrac = 1/2.5 + 1/2.5 - 1 = -0.2 → edgePct = -(-0.2) * 100 = 20
+  expect(t.edgePct).toBe(20);
+});
+
+test('MIDDLE edgePct scales with settings.middleRatio, read fresh at serialization time', async () => {
+  const h = makeApp();
+  await request(h.app).patch('/api/settings').send({ middleRatio: 2 });
+  const trade = pendingTrade('middle-ratio2', NOW, 'Lakers @ Celtics', 'MIDDLE', [
+    { book: 'pointsbet', selection: 'over', odds: 1.9, stakeCents: null },
+    { book: 'bet365', selection: 'under', odds: 1.95, stakeCents: null },
+  ]);
+  h.repos.trades.insert(trade, dayKey(NOW));
+
+  const res = await request(h.app).get('/api/state');
+  const t = (res.body.trades.pending as Array<{ id: string; edgePct: number }>)
+    .find((x) => x.id === 'middle-ratio2')!;
+  // ratio 2 → edgePct = (2 - 1) * 0.039136 * 100 = 3.9136 → 3.91
+  expect(t.edgePct).toBe(3.91);
+});
+
+test('ARB/EV edgePct is untouched by the MIDDLE display change (still mirrors marginPct)', async () => {
+  const h = makeApp();
+  await request(h.app).post('/api/scan');
+  const res = await request(h.app).get('/api/state');
+  const pending = res.body.trades.pending as Array<{ category: string; marginPct: number; edgePct: number }>;
+  expect(pending.length).toBeGreaterThan(0);
+  for (const t of pending) {
+    if (t.category !== 'MIDDLE') expect(t.edgePct).toBe(t.marginPct);
+  }
+});
