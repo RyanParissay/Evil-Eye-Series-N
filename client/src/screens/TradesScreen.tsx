@@ -17,6 +17,7 @@ export function TradesScreen({ state, now, refresh }: TradesScreenProps) {
   return (
     <main>
       <h2 className="section-header">VERIFIED LIVE ({verified.length})</h2>
+      {verified.length === 0 && <div className="empty-note">NOTHING VERIFIED RIGHT NOW</div>}
       {verified.map((t) => (
         <LiveCard
           key={t.id}
@@ -28,6 +29,7 @@ export function TradesScreen({ state, now, refresh }: TradesScreenProps) {
         />
       ))}
       <h2 className="section-header pending">PENDING VERIFICATION ({pending.length})</h2>
+      {pending.length === 0 && <div className="empty-note">NO CANDIDATES IN VERIFICATION</div>}
       {pending.map((t) => (
         <PendingCard key={t.id} trade={t} now={now} />
       ))}
