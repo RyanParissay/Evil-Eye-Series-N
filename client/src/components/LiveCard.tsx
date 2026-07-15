@@ -1,4 +1,4 @@
-import { TradeView, metricPct } from '../lib/api';
+import { TradeView, metricPct, requestScan } from '../lib/api';
 import { formatCents, formatClock, formatMetric, formatOdds } from '../lib/format';
 import { liveTimer } from '../lib/timers';
 import { ConfirmButton } from './ConfirmButton';
@@ -29,6 +29,14 @@ export function LiveCard({ trade, now, refresh, limitedOpen, onToggleLimited }: 
               {formatClock(timer.seconds)}
             </span>
           </span>
+          {stale && (
+            <button
+              className="refresh-chip"
+              onClick={() => void requestScan().then(() => refresh())}
+            >
+              REFRESH?
+            </button>
+          )}
         </span>
       </div>
       <div className="legs">
