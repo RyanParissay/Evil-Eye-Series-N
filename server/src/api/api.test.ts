@@ -541,3 +541,11 @@ test('forbidden words never appear in the brain payload', async () => {
   const res = await request(h.app).get('/api/brain');
   expect(/append-only|ghost|picker|grader|gatekeeper|CLV/i.test(JSON.stringify(res.body))).toBe(false);
 });
+
+test('PATCH /api/settings refuses liveMode — POST /api/mode owns it', async () => {
+  const h = makeApp();
+  const res = await request(h.app).patch('/api/settings').send({ liveMode: 1 });
+  expect(res.status).toBe(400);
+  expect(res.body.error.message).toContain('/api/mode');
+  expect(h.repos.settings.all().liveMode).toBe(0); // untouched
+});

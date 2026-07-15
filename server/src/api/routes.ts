@@ -141,6 +141,7 @@ function settingsPatch(body: unknown): { patch: Partial<Settings> } | { error: s
   const patch: Record<string, number> = {};
   for (const [k, v] of Object.entries(body)) {
     if (!SETTINGS_KEYS.has(k)) return { error: `unknown setting: ${k}` };
+    if (k === 'liveMode') return { error: 'liveMode is switched via POST /api/mode' };
     if (typeof v !== 'number' || !Number.isFinite(v)) return { error: `${k} must be a finite number` };
     const range = RANGE_RULES[k];
     if (range) {

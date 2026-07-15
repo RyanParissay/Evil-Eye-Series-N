@@ -19,3 +19,7 @@ test('brain defaults match the MODEL CONTROLS copy', () => {
     creditPlanMonthly: 100_000,
   });
 });
+
+test('live-mode default is SIMULATED', () => {
+  expect(DEFAULT_SETTINGS.liveMode).toBe(0);
+});
