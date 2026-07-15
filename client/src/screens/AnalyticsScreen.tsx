@@ -7,6 +7,7 @@ import { RangeChips } from '../components/RangeChips';
 import { ProfitChart } from '../components/ProfitChart';
 import { MonthlyTable } from '../components/MonthlyTable';
 import { TimeToActFunnel } from '../components/TimeToActFunnel';
+import { AdvancedAnalytics } from '../components/AdvancedAnalytics';
 
 export function AnalyticsScreen() {
   const [profiles, setProfiles] = useState<ProfileView[]>([]);
@@ -57,6 +58,12 @@ export function AnalyticsScreen() {
       <p className="bankroll-note">{bankrollFootnote(view.bankrollCents)}</p>
       <MonthlyTable rows={view.monthly} />
       <TimeToActFunnel funnel={view.funnel} />
+      <AdvancedAnalytics adv={view.advanced} since={view.advanced.leaderboards.since} />
+      {view.simulated && (
+        <p className="sim-footnote">
+          EVERY FIGURE ON THIS PAGE IS SIMULATED PAPER MONEY — A SHADOW POSITION, NOT A LIVE PROMISE.
+        </p>
+      )}
     </main>
   );
 }
