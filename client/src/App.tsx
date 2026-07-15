@@ -5,6 +5,7 @@ import { StatusLine } from './components/StatusLine';
 import { useAppState } from './hooks/useAppState';
 import { useTick } from './hooks/useTick';
 import { deriveStatusLine } from './lib/api';
+import { AnalyticsScreen } from './screens/AnalyticsScreen';
 import { BrainScreen } from './screens/BrainScreen';
 import { PlaceholderScreen } from './screens/PlaceholderScreen';
 import { TradesScreen } from './screens/TradesScreen';
@@ -22,7 +23,7 @@ export function App() {
       <StatusLine state={state} />
       {tab === 'TRADES' && <TradesScreen state={state} now={now} refresh={refresh} />}
       {tab === 'BRAIN' && <BrainScreen />}
-      {tab === 'ANALYTICS' && <PlaceholderScreen label="ANALYTICS" planNumber={4} />}
+      {tab === 'ANALYTICS' && <AnalyticsScreen />}
       {tab === 'SETTINGS' && <PlaceholderScreen label="SETTINGS" planNumber={5} />}
     </div>
   );

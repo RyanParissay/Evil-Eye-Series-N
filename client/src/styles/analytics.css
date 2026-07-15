@@ -1,0 +1,129 @@
+/* client/src/styles/analytics.css — ANALYTICS screen. Every value from
+   design-inventory §4 unless marked "not pinned by inventory". */
+
+/* ---------- top row (§4.1) ---------- */
+.an-top { display: flex; gap: 26px; margin-top: 18px; align-items: baseline; flex-wrap: wrap; }
+.profile-group { position: relative; display: flex; }
+.profile-chip { background: #fff; color: #000; font-size: 13px; font-weight: 600; letter-spacing: 0.14em; padding: 7px 14px; }
+.profile-btn { background: none; border: 2px solid #fff; border-left: none; color: #fff; padding: 5px 12px; letter-spacing: 0.1em; font-size: 13px; font-family: inherit; cursor: pointer; }
+.profile-btn:hover { background: var(--raised-bg); }
+.profile-menu { position: absolute; top: calc(100% + 4px); left: 0; background: #000; border: 2px solid var(--grey-panel); min-width: 200px; z-index: 10; }
+.profile-item { display: block; width: 100%; text-align: left; background: none; border: none; color: var(--muted-label); font-size: 12px; letter-spacing: 0.1em; padding: 9px 12px; font-family: inherit; cursor: pointer; }
+.profile-item.current { color: #fff; }
+.profile-add { display: block; width: 100%; text-align: left; background: none; border: none; border-top: 1px solid var(--grey-subtle-row); color: #fff; font-size: 12px; letter-spacing: 0.1em; padding: 9px 12px; font-family: inherit; cursor: pointer; }
+.fund-box { margin-left: auto; border: 2px solid var(--grey-panel); padding: 6px 12px; font-size: 14px; letter-spacing: 0.1em; color: var(--muted-label); white-space: nowrap; }
+.fund-strong { color: #fff; font-weight: 600; }
+
+/* ---------- add-profile form (§4.2) ---------- */
+.add-form { border: 2px solid var(--grey-panel); margin-top: 12px; padding: 14px; display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-size: 11px; letter-spacing: 0.14em; color: var(--muted-label); }
+.add-input { background: #000; color: #fff; border: 2px solid var(--grey-divider); padding: 8px 10px; font-size: 13px; font-weight: 500; font-family: inherit; font-variant-numeric: tabular-nums; }
+.add-input:focus { border-color: #fff; outline: none; }
+.add-input.name { width: 160px; }
+.add-input.cash { width: 120px; }
+.create-btn { background: var(--faint); color: var(--hover-bg); border: none; padding: 10px 16px; font-size: 11px; letter-spacing: 0.12em; font-weight: 500; font-family: inherit; cursor: default; }
+.create-btn.ready { background: #fff; color: #000; cursor: pointer; }
+.add-note { font-size: 11px; letter-spacing: 0.08em; color: var(--faint); }
+
+/* ---------- range chips (§4.3 — the §0.4 joined-chip group) ---------- */
+.chip-group { display: flex; gap: 0; border: 2px solid #fff; width: max-content; margin-top: 18px; }
+.chip { background: none; border: none; border-left: 2px solid #fff; color: var(--muted-label); padding: 8px 18px; font-size: 12px; font-weight: 500; letter-spacing: 0.14em; font-family: inherit; cursor: pointer; }
+.chip:first-child { border-left: none; }
+.chip.active { background: #fff; color: #000; }
+
+/* ---------- charts (§4.4–4.5) ---------- */
+.chart-title { margin: 22px 0 8px; font-size: 13px; letter-spacing: 0.16em; color: var(--body-text); font-weight: 400; }
+.chart-plate { background: var(--chart-bg); border: 3px solid var(--blue); padding: 14px 14px 10px; }
+.chart-svg { width: 100%; height: 210px; display: block; }
+.grid-minor { stroke: var(--chart-minor); stroke-width: 1; }
+.grid-major { stroke: var(--chart-ink); stroke-width: 1.5; }
+.grid-base { stroke: var(--chart-ink); stroke-width: 2; }
+.axis-label { fill: var(--chart-ink); font-size: 12px; font-weight: 700; font-family: inherit; }
+.trend { fill: none; stroke: var(--blue); stroke-width: 3.5; stroke-linejoin: round; stroke-linecap: round; }
+.bullet { fill: var(--blue); }
+.bullet-last { fill: var(--blue); stroke: var(--chart-ink); stroke-width: 1.5; }
+.date-row { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: var(--chart-ink); padding: 4px 0 2px 50px; }
+.chart-empty { font-size: 12px; letter-spacing: 0.1em; color: var(--chart-ink); padding: 40px 0; text-align: center; }
+.stats-row { display: flex; gap: 28px; margin-top: 10px; font-size: 14px; letter-spacing: 0.12em; flex-wrap: wrap; }
+.stat-label { color: var(--body-text); }
+.stat-value { font-weight: 500; }
+.stat-value.pos { color: var(--green-money); }
+.stat-value.neg { color: var(--red); }
+.stat-value.plain { color: #fff; }
+.bankroll-note { margin: 18px 0 0; font-size: 11px; letter-spacing: 0.1em; line-height: 1.7; color: var(--faint); }
+
+/* ---------- monthly table (§4.6) ---------- */
+.monthly { border: 2px solid var(--grey-divider); margin-top: 22px; font-size: 12px; }
+.monthly-head { display: grid; grid-template-columns: 0.8fr repeat(7, 0.7fr) 1fr 0.8fr; gap: 6px; padding: 9px 14px; border-bottom: 1px solid var(--grey-divider); font-size: 10px; letter-spacing: 0.12em; color: var(--faint); }
+.monthly-row { display: grid; grid-template-columns: 0.8fr repeat(7, 0.7fr) 1fr 0.8fr; gap: 6px; padding: 9px 14px; border-bottom: 1px solid var(--grey-subtle-row); }
+.monthly-row:last-child { border-bottom: none; }
+.m-month { color: #fff; font-weight: 500; letter-spacing: 0.08em; }
+.m-pl { color: #fff; font-weight: 500; }
+
+/* ---------- TIME TO ACT funnel (§4.7) ---------- */
+.funnel { border: 2px solid var(--grey-panel); padding: 14px; margin-top: 8px; }
+.funnel-title { font-size: 11px; letter-spacing: 0.14em; color: var(--muted-label); margin-bottom: 12px; }
+.funnel-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.funnel-label { font-size: 11px; letter-spacing: 0.1em; min-width: 190px; color: var(--muted-label); }
+.funnel-track { flex: 1; height: 14px; border: 1px solid var(--grey-divider); }
+.funnel-fill { height: 100%; background: #fff; }
+.funnel-fill.dead { background: var(--faint); }
+.funnel-value { font-size: 12px; font-weight: 500; color: #fff; min-width: 44px; text-align: right; }
+.funnel-foot { font-size: 11px; letter-spacing: 0.08em; color: var(--faint); margin-top: 12px; }
+
+/* ---------- ADVANCED ANALYTICS (§4.8) ---------- */
+.cta-blue { background: var(--blue); }
+.adv-section-head { margin: 18px 0 8px; font-size: 15px; font-weight: 600; letter-spacing: 0.14em; color: var(--blue); }
+.adv-box { border: 2px solid var(--grey-divider); }
+.ob-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--grey-divider); font-size: 12px; color: var(--body-text); }
+.ob-row:last-child { border-bottom: none; }
+.ob-status { color: var(--muted-label); letter-spacing: 0.08em; white-space: nowrap; }
+.lb-sub { display: flex; gap: 10px; align-items: center; font-size: 11px; letter-spacing: 0.14em; color: var(--muted-label); margin-bottom: 8px; }
+.since-chip { border: 1px solid var(--muted-label); color: var(--body-text); padding: 2px 8px; font-size: 11px; letter-spacing: 0.1em; }
+.lb-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.board { border: 2px solid var(--grey-panel); }
+.board-title { padding: 8px 14px; border-bottom: 1px solid var(--grey-divider); font-size: 11px; letter-spacing: 0.14em; color: #fff; font-weight: 500; }
+.board-row { display: flex; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--grey-divider); font-size: 12px; }
+.board-row:last-child { border-bottom: none; }
+.board-row .book { color: var(--body-text); flex: 1; }
+.board-count { color: #fff; }
+.board-pct { color: var(--muted-label); min-width: 40px; text-align: right; }
+.cost-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cost-tile { border: 2px solid var(--grey-panel); padding: 12px 14px; }
+.cost-tile.span2 { grid-column: span 2; }
+.cost-label { font-size: 10px; letter-spacing: 0.14em; color: var(--muted-label); }
+.cost-value { font-size: 20px; font-weight: 500; color: #fff; margin-top: 6px; }
+.cost-note { font-size: 11px; color: var(--faint); letter-spacing: 0.04em; margin-top: 4px; }
+.gate-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.gate-label { font-size: 11px; letter-spacing: 0.08em; color: var(--body-text); min-width: 200px; }
+.gate-track { flex: 1; height: 14px; border: 1px solid var(--grey-divider); }
+.gate-fill { height: 100%; background: #fff; }
+.gate-fill.top { background: var(--yellow); }
+.gate-cost { font-size: 12px; font-weight: 500; color: #fff; min-width: 56px; text-align: right; }
+.gate-note { font-size: 11px; color: var(--faint); min-width: 150px; }
+.limits-box { border: 2px solid var(--blue); }
+.limits-head { padding: 10px 14px; border-bottom: 1px solid var(--blue-dim-border); font-size: 13px; font-weight: 600; letter-spacing: 0.14em; color: var(--blue); }
+.limits-row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 14px; border-bottom: 1px solid var(--grey-divider); font-size: 12px; color: var(--body-text); }
+.limits-row:last-child { border-bottom: none; }
+.limits-right { color: var(--blue); letter-spacing: 0.08em; font-weight: 500; white-space: nowrap; }
+.opp-box { border: 2px solid var(--blue); margin-top: 18px; }
+.opp-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--blue-dim-border); font-size: 13px; font-weight: 600; letter-spacing: 0.14em; color: var(--blue); }
+.opp-toggle { display: flex; border: 1px solid var(--blue); }
+.opp-chip { background: none; border: none; color: var(--blue); padding: 4px 10px; font-size: 10px; letter-spacing: 0.12em; font-family: inherit; cursor: pointer; }
+.opp-chip.active { background: var(--blue); color: #000; }
+.opp-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+.opp-col { border-right: 1px solid var(--blue-dim-border); padding: 10px 14px; }
+.opp-col:last-child { border-right: none; }
+.opp-col-title { font-size: 11px; letter-spacing: 0.12em; color: var(--muted-label); }
+.opp-subhead { display: grid; grid-template-columns: 1.3fr 0.6fr 0.9fr; font-size: 10px; letter-spacing: 0.12em; color: var(--faint); border-bottom: 1px solid var(--grey-subtle-row); padding: 6px 0; margin-top: 6px; }
+.opp-subhead .right { text-align: right; }
+.opp-row { display: grid; grid-template-columns: 1.3fr 0.6fr 0.9fr; font-size: 12px; padding: 5px 0; }
+.opp-row .book { color: #fff; }
+.opp-count { color: var(--body-text); text-align: right; }
+.opp-avg { color: var(--blue); text-align: right; font-weight: 500; }
+.see-all { background: none; border: none; font-size: 12px; letter-spacing: 0.14em; color: var(--faint); padding: 10px 14px; font-family: inherit; cursor: pointer; text-align: left; }
+.see-all:hover { color: #fff; }
+
+/* ---------- sim footnote (§4.9) ---------- */
+.sim-footnote { margin: 26px auto 0; max-width: 560px; font-size: 12px; letter-spacing: 0.12em; line-height: 1.7; color: var(--muted-label); text-align: center; }
