@@ -58,7 +58,7 @@ The client-side mirror of this contract is `client/src/lib/api.ts` (Task 4) — 
 4. **NEXT SCAN** renders live from `nextScanAt` as `JUL 13 · 10:47 PM` uppercase in America/Vancouver via pure `formatScanTime(epochMs)`. When state is `null` (server down): `NEXT SCAN —` and the badge defaults to `SIMULATED`. No error banner.
 5. **Pending cards keep the tinted metric box** (inventory discrepancy 5: mockup wins) — still NO stakes; the leg stake slot is only a grey `↗`.
 6. **Card metric boxes:** ARB → `MARGIN: {x}%` (with colon) border/text `#a8e8be`; EV/MIDDLE → `EDGE: +{x}%` `#f2e08a`. ALL TRADES cells use NO colon (`MARGIN 2.5%` / `EDGE +3.1%`). Both via `formatMetric(category, pct, { colon })`, **1 decimal place**.
-7. **Money:** integer cents. `formatCents(c)` → `$35` / `$10,000` (no decimals when `c % 100 === 0`, thousands separators) else `$2.20`. `formatSignedCents(c)` always 2dp with `+` / U+2212 minus: `+$2.20`, `−$20.00`. `parseDollarsToCents('$25')` → `2500` (strip non-digits; empty/no-digit → `null`) feeds the limited flow's `maxAllowedCents`.
+7. **Money:** integer cents. `formatCents(c)` → `$35` / `$10,000` (no decimals when `c % 100 === 0`, thousands separators) else `$2.20`. `formatSignedCents(c)` always 2dp with `+` / U+2212 minus: `+$2.20`, `−$20.00`. `parseDollarsToCents('$25')` → `2500`, `'$25.50'` → `2550` (optional 2-decimal fraction; `$`/`,`/spaces stripped; empty, junk, or 3+ decimals → `null`) feeds the limited flow's `maxAllowedCents`.
 8. `formatClock(sec)` → `m:ss` (floor, pad2): 86 → `1:26`, 0 → `0:00`, 161 → `2:41`.
 9. `formatOdds(n)` → always 2dp (`3.10`, `2.06`). Leg button text: `{book} — {leg.selection} @ {formatOdds(odds)}`; verified stake segment `BET {formatCents(stakeCents)} ↗` (divider `border-left: 1px solid #cfcfcf; margin-left: 14px; padding-left: 14px`, weight 700).
 10. **TRADE LIMITED? panel** per inventory §2.2 verbatim: label `WHICH BOOK LIMITED YOU? — ONE AT A TIME; REOPEN TO REPORT ANOTHER`; single-select book chips (re-click deselects); label `MAX BET THEY ALLOWED`; input placeholder `$25`; send button 3 states — disabled grey `✓ SEND TO MODEL` until book + digit, ready white `✓ SEND TO MODEL`, armed yellow `CONFIRM? ✓`; second click POSTs `/limited` then closes + resets. Only ONE card's panel open at a time; opening resets state; the `TRADE LIMITED?` button inverts while open.
@@ -70,7 +70,7 @@ The client-side mirror of this contract is `client/src/lib/api.ts` (Task 4) — 
 16. **Adjudications made by this plan** (not covered by the locked calls — flagged for review):
     a. `GET /api/trades` response envelope is unspecified in Plan 1 — `fetchTrades` accepts BOTH a bare `TradeView[]` and `{ trades: TradeView[] }`.
     b. `marginPct`/`edgePct` are typed `number | null` (Plan 1 doesn't say whether both are present on every category); `metricPct(t)` picks by category and defaults to 0.
-    c. Plan 1's `view=all` is "every non-settled trade", which can literally include KILLED/EXPIRED; the ALL TRADES status cell therefore has defensive renderings beyond the four locked mappings: SETTLED→`CONFIRMED {±$x.xx}` (result-colored, per mockup rows 5–7), KILLED→`KILLED — {killReason with _ → space}` #e0442c, EXPIRED→`EXPIRED` #5a5a5a.
+    c. Plan 1's `view=all` is "every non-settled trade", which can literally include KILLED/EXPIRED; the ALL TRADES status cell therefore has defensive renderings beyond the four locked mappings: SETTLED→`CONFIRMED {±$x.xx}` (result-colored, per mockup rows 5–7), KILLED→`KILLED — {label}` #e0442c where label comes from the mockup-attested `KILL_LABEL` map (FAILED_VERIFICATION→`VERIFICATION`, ROUNDING_DESTROYS_MARGIN→`ROUNDING`, HEAT_GATE→`HEAT GATE`, QUOTE_STALE→`QUOTE STALE`; unmapped reasons fall back to underscore → space), EXPIRED→`EXPIRED` #5a5a5a.
     d. `useAppState` also returns a `refresh()` so POST actions reflect immediately instead of waiting ≤5s for the next poll.
     e. Timer rounding: FRESH uses `ceil` (never shows 0:00 while still fresh), STALE and the pending countdown use `floor`/`ceil` respectively — pinned in Task 6 specs.
     f. `formatWhen` delegates to `formatScanTime` (both surfaces use the identical `MMM DD · h:mm AM/PM` Vancouver format).
@@ -79,6 +79,9 @@ The client-side mirror of this contract is `client/src/lib/api.ts` (Task 4) — 
     i. Two files not in the locked file map were required by this plan's own TDD demands: `client/src/lib/api.test.ts` (Task 4's `deriveStatusLine` spec) and `client/src/lib/reveal.ts` + `reveal.test.ts` (Task 12's list-controls spec).
     j. Unpinned spacings marked in `global.css`: book-chips row `margin-top: 6px`, limited input/send row `display:flex; gap:10px`, CTA caption `margin-top: 8px`, VIEW ALL section `margin-top: 16px`, placeholder panel `padding: 13px 16px` (patterned on §3.3), empty-state notes render as borderless divs.
     k. The graveyard toggle count is `counts.killedToday` from `/api/state` (locked call 11); the graveyard rows are ALL KILLED rows from `view=history` — they can disagree in count (history may hold older kills). Rendered as specified.
+    l. The mockup's HISTORY includes `UNCONFIRMED` chip + `NO REPLY` rows (inventory §2.4 rows 4/10/16), but Plan 1's `view=history` is "SETTLED/EXPIRED/KILLED" — UNCONFIRMED trades won't appear there until they settle or expire. `HistoryRow` still carries a defensive UNCONFIRMED branch (chip #9a9a9a + `NO REPLY` #5a5a5a) and the history filter admits UNCONFIRMED, so the UI is correct under either reading of the contract.
+    m. Derived-data normalizations vs demo strings: ALL TRADES legs cells render `{book} {odds}` joined ` / ` — the demo's hand-written variants (`FanDuel −3.5 @ 1.98`, `BetMGM +3.5 / Pinnacle −1.5`, truncated `Marathon`) carry selections/lines the same cell sometimes omits; likewise `historyDescription` renders `{category} · {event} · {$stakes}` and cannot reproduce demo variants like `EV · DraftKings · Mariners ML @ 2.05 · $20`. Uniform derivation from TradeView is deliberate; demo strings are not test expectations.
+    n. The open ALL TRADES/HISTORY boxes fetch once on CTA open and are NOT refreshed by the 5s poll or by confirm/unconfirm/limited actions — a just-confirmed row can read `VERIFIED LIVE` until the boxes are reopened. Accepted for Plan 2 (the mockup's lists are static demo data); revisit if it bothers in use.
 
 ## File Map
 
@@ -551,14 +554,19 @@ test('formatMetric: card style (colon) vs list style (no colon), 1dp', () => {
   expect(formatMetric('ARB', 2.44, { colon: false })).toBe('MARGIN 2.4%');
 });
 
-test('parseDollarsToCents: strip non-digits; empty/no-digit → null', () => {
+test('parseDollarsToCents: dollars + optional 2dp fraction; junk → null', () => {
   expect(parseDollarsToCents('$25')).toBe(2500);
   expect(parseDollarsToCents('25')).toBe(2500);
   expect(parseDollarsToCents('$1,000')).toBe(100_000);
   expect(parseDollarsToCents(' $50 ')).toBe(5000);
+  expect(parseDollarsToCents('$25.50')).toBe(2550);
+  expect(parseDollarsToCents('25.5')).toBe(2550);
+  expect(parseDollarsToCents('0.05')).toBe(5);
   expect(parseDollarsToCents('')).toBeNull();
   expect(parseDollarsToCents('$')).toBeNull();
   expect(parseDollarsToCents('abc')).toBeNull();
+  expect(parseDollarsToCents('25.999')).toBeNull();
+  expect(parseDollarsToCents('.50')).toBeNull();
 });
 
 test('formatScanTime: America/Vancouver, MMM DD · h:mm AM/PM, uppercase', () => {
@@ -631,11 +639,16 @@ export function formatMetric(
   return `EDGE${sep}+${pct.toFixed(1)}%`;
 }
 
-/** "$25" → 2500. Strips every non-digit; empty / no digit → null. */
+/** "$25" → 2500, "$25.50" → 2550. Optional 2dp fraction; empty/junk/3+dp → null. */
 export function parseDollarsToCents(input: string): number | null {
-  const digits = input.replace(/\D/g, '');
-  if (digits === '') return null;
-  return Number(digits) * 100;
+  const cleaned = input.replace(/[$,\s]/g, '');
+  const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(cleaned);
+  if (m === null) return null;
+  const whole = m[1];
+  if (whole === undefined) return null;
+  const frac = m[2];
+  const cents = frac === undefined ? 0 : Number(frac.padEnd(2, '0'));
+  return Number(whole) * 100 + cents;
 }
 
 const VANCOUVER = new Intl.DateTimeFormat('en-US', {
@@ -1428,7 +1441,7 @@ git commit -m "feat(client): confirm cycle button"
 - Consumes: `TradeView`, `reportLimited` (Task 4); `parseDollarsToCents` (Task 3).
 - Produces: `LimitedPanel({ trade, onClose, refresh })`. `LiveCard` props widen to `{ trade, now, refresh, limitedOpen, onToggleLimited }` (kept through Tasks 11–13). TradesScreen owns `limitedOpenId: string | null` — only one card's panel open; opening a panel mounts it fresh (book/amount/armed reset by construction).
 
-- [ ] **Step 1: Create `client/src/components/LimitedPanel.tsx`** (§2.2 verbatim copy; send enabled = book selected AND input contains a digit — `parseDollarsToCents` returning non-null is exactly the inventory's `/\d/` rule)
+- [ ] **Step 1: Create `client/src/components/LimitedPanel.tsx`** (§2.2 verbatim copy; send enabled = book selected AND `parseDollarsToCents` returns non-null — deliberately stricter than the inventory's `/\d/` arming rule so junk like `abc25` can never arm a send whose cents conversion would fail; Decision note 7)
 
 ```tsx
 import { useState } from 'react';
@@ -1918,6 +1931,16 @@ interface ViewAllProps {
 /* Locked mapping for the four active statuses; SETTLED/KILLED/EXPIRED are
    defensive (Plan 1's view=all is "every non-settled trade", which can
    literally include terminal rows) and follow the mockup's colors. */
+
+/* Mockup-attested KILLED abbreviations (ALL TRADES rows 9/10/13/17);
+   unmapped reasons fall back to underscore → space (Decision note 16c). */
+const KILL_LABEL: Record<string, string> = {
+  FAILED_VERIFICATION: 'VERIFICATION',
+  ROUNDING_DESTROYS_MARGIN: 'ROUNDING',
+  HEAT_GATE: 'HEAT GATE',
+  QUOTE_STALE: 'QUOTE STALE',
+};
+
 function allStatusCell(t: TradeView): { text: string; color: string } {
   switch (t.status) {
     case 'PENDING':
@@ -1935,8 +1958,11 @@ function allStatusCell(t: TradeView): { text: string; color: string } {
         color: cents >= 0 ? 'var(--green)' : 'var(--red)',
       };
     }
-    case 'KILLED':
-      return { text: `KILLED — ${(t.killReason ?? '').replace(/_/g, ' ')}`, color: 'var(--red)' };
+    case 'KILLED': {
+      const reason = t.killReason ?? '';
+      const label = KILL_LABEL[reason] ?? reason.replace(/_/g, ' ');
+      return { text: `KILLED — ${label}`, color: 'var(--red)' };
+    }
     case 'EXPIRED':
       return { text: 'EXPIRED', color: 'var(--faint)' };
   }
@@ -1972,23 +1998,40 @@ function historyDescription(t: TradeView): string {
   return `${base} · ${stakes.map((c) => formatCents(c)).join('/')}`;
 }
 
+/* Three history outcomes (§2.4): SETTLED → CONFIRMED chip colored by result;
+   UNCONFIRMED → UNCONFIRMED chip + NO REPLY (mockup rows 4/10/16); else EXPIRED + —.
+   Plan 1's history view says SETTLED/EXPIRED/KILLED only — the UNCONFIRMED branch
+   is defensive in case its executor follows the mockup (Decision note 16l). */
 function HistoryRow({ t }: { t: TradeView }) {
-  const settled = t.status === 'SETTLED';
   const cents = t.resultCents ?? 0;
-  const chipColor = settled
-    ? cents >= 0 ? 'var(--green-money)' : 'var(--red)'
-    : 'var(--faint)';
-  const resultText = settled
-    ? `${cents >= 0 ? 'WON' : 'LOST'} ${formatSignedCents(cents)}`
-    : '—';
+  let chip: string;
+  let chipColor: string;
+  let resultText: string;
+  let resultColor: string;
+  if (t.status === 'SETTLED') {
+    chip = 'CONFIRMED';
+    chipColor = cents >= 0 ? 'var(--green-money)' : 'var(--red)';
+    resultText = `${cents >= 0 ? 'WON' : 'LOST'} ${formatSignedCents(cents)}`;
+    resultColor = chipColor;
+  } else if (t.status === 'UNCONFIRMED') {
+    chip = 'UNCONFIRMED';
+    chipColor = 'var(--muted-label)';
+    resultText = 'NO REPLY';
+    resultColor = 'var(--faint)';
+  } else {
+    chip = 'EXPIRED';
+    chipColor = 'var(--faint)';
+    resultText = '—';
+    resultColor = 'var(--faint)';
+  }
   return (
     <div className="hist-row">
       <span className="hist-desc">{historyDescription(t)}</span>
       <span className="hist-outcome">
         <span className="chip" style={{ color: chipColor }}>
-          {settled ? 'CONFIRMED' : 'EXPIRED'}
+          {chip}
         </span>
-        <span style={{ color: chipColor }}>{resultText}</span>
+        <span style={{ color: resultColor }}>{resultText}</span>
       </span>
       <span className="hist-when">{formatWhen(t.settledAt ?? t.createdAt)}</span>
     </div>
@@ -2047,7 +2090,9 @@ export function ViewAll({ killedToday }: ViewAllProps) {
 
   const allRows = all ?? [];
   const histAll = history ?? [];
-  const histRows = histAll.filter((t) => t.status === 'SETTLED' || t.status === 'EXPIRED');
+  const histRows = histAll.filter(
+    (t) => t.status === 'SETTLED' || t.status === 'EXPIRED' || t.status === 'UNCONFIRMED',
+  );
   const killedRows = histAll.filter((t) => t.status === 'KILLED'); // graveyard ONLY
   const allCtl = revealControls(allReveal, allRows.length);
   const histCtl = revealControls(histReveal, histRows.length);

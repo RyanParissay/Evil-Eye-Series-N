@@ -47,14 +47,19 @@ test('formatMetric: card style (colon) vs list style (no colon), 1dp', () => {
   expect(formatMetric('ARB', 2.44, { colon: false })).toBe('MARGIN 2.4%');
 });
 
-test('parseDollarsToCents: strip non-digits; empty/no-digit → null', () => {
+test('parseDollarsToCents: dollars + optional 2dp fraction; junk → null', () => {
   expect(parseDollarsToCents('$25')).toBe(2500);
   expect(parseDollarsToCents('25')).toBe(2500);
   expect(parseDollarsToCents('$1,000')).toBe(100_000);
   expect(parseDollarsToCents(' $50 ')).toBe(5000);
+  expect(parseDollarsToCents('$25.50')).toBe(2550);
+  expect(parseDollarsToCents('25.5')).toBe(2550);
+  expect(parseDollarsToCents('0.05')).toBe(5);
   expect(parseDollarsToCents('')).toBeNull();
   expect(parseDollarsToCents('$')).toBeNull();
   expect(parseDollarsToCents('abc')).toBeNull();
+  expect(parseDollarsToCents('25.999')).toBeNull();
+  expect(parseDollarsToCents('.50')).toBeNull();
 });
 
 test('formatScanTime: America/Vancouver, MMM DD · h:mm AM/PM, uppercase', () => {

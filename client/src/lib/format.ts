@@ -44,11 +44,16 @@ export function formatMetric(
   return `EDGE${sep}+${pct.toFixed(1)}%`;
 }
 
-/** "$25" → 2500. Strips every non-digit; empty / no digit → null. */
+/** "$25" → 2500, "$25.50" → 2550. Optional 2dp fraction; empty/junk/3+dp → null. */
 export function parseDollarsToCents(input: string): number | null {
-  const digits = input.replace(/\D/g, '');
-  if (digits === '') return null;
-  return Number(digits) * 100;
+  const cleaned = input.replace(/[$,\s]/g, '');
+  const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(cleaned);
+  if (m === null) return null;
+  const whole = m[1];
+  if (whole === undefined) return null;
+  const frac = m[2];
+  const cents = frac === undefined ? 0 : Number(frac.padEnd(2, '0'));
+  return Number(whole) * 100 + cents;
 }
 
 const VANCOUVER = new Intl.DateTimeFormat('en-US', {
