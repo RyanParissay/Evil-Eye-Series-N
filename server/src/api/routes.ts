@@ -11,7 +11,8 @@ import {
 } from '../pipeline/actions.js';
 import { defaultPlanDeps, startScheduler, type SchedulerHandle, type Timer } from '../scheduler/runner.js';
 import { ANCHOR_LABELS, buildBrainView } from '../brain/report.js';
-import { lastPass, runBrainPass } from '../brain/pass.js';
+import { lastPass, runBrainPass, displayName } from '../brain/pass.js';
+import { buildSettingsView, tradesCsv } from '../settings/report.js';
 import { dayKey, isQuietHours } from '../scheduler/vancouverTime.js';
 import { DEFAULT_SETTINGS, type Settings } from '../shared/defaults.js';
 import type { AlertSender, Leg, OddsProvider, Trade, TradeStatus } from '../shared/types.js';
@@ -349,6 +350,70 @@ export function createApp(o: AppOptions): App {
     const note = idx === 0 ? '' : ' — simulated mode maps every anchor to Pinnacle prices';
     repos.journal.add(clock(), `Reference pricer switched to ${ANCHOR_LABELS[idx]}${note}`);
     res.json({ anchor: buildBrainView(deps, clock()).anchor });
+  });
+
+  app.get('/api/settings/view', (_req, res) => {
+    res.json(buildSettingsView(deps, clock()));
+  });
+
+  app.patch('/api/books/:name', (req, res) => {
+    const book = repos.books.byName(req.params.name);
+    if (!book) return fail(res, 404, 'not_found', 'no such book');
+    const { enabled, sport } = (req.body ?? {}) as { enabled?: unknown; sport?: unknown };
+    if (enabled === undefined && sport === undefined) return fail(res, 400, 'bad_request', 'nothing to change');
+    if (book.sharpExempt === 1) return fail(res, 409, 'conflict', 'sharp books are always on');
+    if (enabled !== undefined && enabled !== 0 && enabled !== 1) {
+      return fail(res, 400, 'bad_request', 'enabled must be 0 or 1');
+    }
+    const roster = new Set(repos.books.all().filter((b) => b.sport !== 'ANY').map((b) => b.sport));
+    if (sport !== undefined && (typeof sport !== 'string' || !roster.has(sport))) {
+      return fail(res, 400, 'bad_request', 'sport must be one of the roster sports');
+    }
+    // Changes here are written to the brain journal (§5.7 — literal).
+    if (enabled !== undefined && enabled !== book.enabled) {
+      repos.books.setEnabled(book.name, enabled);
+      repos.journal.add(clock(), `Books: ${displayName(book.name)} turned ${enabled === 1 ? 'ON' : 'OFF'}`);
+    }
+    if (sport !== undefined && sport !== book.sport) {
+      repos.books.setSport(book.name, sport);
+      repos.journal.add(clock(), `Books: ${displayName(book.name)} sport ${book.sport} → ${sport}`);
+    }
+    const b = repos.books.byName(book.name)!;
+    res.json({
+      book: {
+        name: b.name, displayName: displayName(b.name), sport: b.sport,
+        sharpExempt: b.sharpExempt === 1, enabled: b.enabled === 1,
+      },
+    });
+  });
+
+  app.post('/api/whatsapp/test', (_req, res) => {
+    // Plan 5 stub: sim sends NOTHING anywhere — the event row is the whole effect.
+    // Plan 6 swaps these internals behind the same route (dev-mode seams only).
+    repos.eventsLog.add(clock(), 'wa_test', JSON.stringify({ to: deps.s().whatsappNumber || null, simulated: true }));
+    res.json({ ok: true, simulated: true });
+  });
+
+  app.get('/api/export/trades.csv', (_req, res) => {
+    res.setHeader('content-type', 'text/csv; charset=utf-8');
+    res.setHeader('content-disposition', 'attachment; filename="evil-eye-trades.csv"');
+    res.send(tradesCsv(repos.trades.exportColumns(), repos.trades.exportRows()));
+  });
+
+  app.get('/api/export/all.json', (_req, res) => {
+    res.setHeader('content-disposition', 'attachment; filename="evil-eye-export.json"');
+    res.json({
+      exportedAt: clock(),
+      settings: repos.settings.all(),
+      profiles: repos.profiles.all(),
+      books: repos.books.all(),
+      trades: repos.trades.exportRows(),
+      journal: repos.journal.all(),
+      eventsLog: repos.eventsLog.all(),
+      creditsUsage: repos.credits.all(),
+      limitsReports: repos.limitsReports.all(),
+      bankrollSnapshots: repos.profiles.all().flatMap((p) => repos.snapshots.byProfile(p.id)),
+    });
   });
 
   app.use((_req, res) => fail(res, 404, 'not_found', 'no such route'));
