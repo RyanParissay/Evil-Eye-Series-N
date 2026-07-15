@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAnalytics } from '../hooks/useAnalytics';
 import { fetchProfiles } from '../lib/api';
-import { fundStartText, type ProfileView, type RangeKey } from '../lib/analytics';
+import { bankrollFootnote, fundStartText, type ProfileView, type RangeKey } from '../lib/analytics';
 import { ProfileBar } from '../components/ProfileBar';
 import { RangeChips } from '../components/RangeChips';
+import { ProfitChart } from '../components/ProfitChart';
 
 export function AnalyticsScreen() {
   const [profiles, setProfiles] = useState<ProfileView[]>([]);
@@ -46,6 +47,12 @@ export function AnalyticsScreen() {
         </div>
       </div>
       <RangeChips range={range} onSelect={setRange} />
+      <ProfitChart title="CONFIRMED — PROFIT ($)" data={view.confirmed} />
+      <ProfitChart
+        title="ALL (CONFIRMED + UNCONFIRMED) — IF EVERY PICK WAS FOLLOWED ($)"
+        data={view.all}
+      />
+      <p className="bankroll-note">{bankrollFootnote(view.bankrollCents)}</p>
     </main>
   );
 }
