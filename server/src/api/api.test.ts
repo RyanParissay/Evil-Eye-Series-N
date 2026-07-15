@@ -541,3 +541,48 @@ test('forbidden words never appear in the brain payload', async () => {
   const res = await request(h.app).get('/api/brain');
   expect(/append-only|ghost|picker|grader|gatekeeper|CLV/i.test(JSON.stringify(res.body))).toBe(false);
 });
+
+test('PATCH settings: strings validate, the mix trio is all-or-nothing and sums to 100', async () => {
+  const h = makeApp();
+  const okStr = await request(h.app).patch('/api/settings')
+    .send({ whatsappNumber: '+1 604 555 8112', disabledSports: 'soccer' });
+  expect(okStr.status).toBe(200);
+  expect(okStr.body.settings.whatsappNumber).toBe('+1 604 555 8112');
+  expect((await request(h.app).patch('/api/settings').send({ whatsappNumber: 'hello' })).status).toBe(400);
+  expect((await request(h.app).patch('/api/settings').send({ whatsappNumber: '' })).status).toBe(200); // clearing is legal
+  expect((await request(h.app).patch('/api/settings').send({ disabledSports: 'SOCCER!' })).status).toBe(400);
+
+  expect((await request(h.app).patch('/api/settings').send({ mixArbPct: 50 })).status).toBe(400); // trio only
+  expect((await request(h.app).patch('/api/settings')
+    .send({ mixArbPct: 50, mixMiddlePct: 30, mixEvPct: 30 })).status).toBe(400); // 110 ≠ 100
+  const okMix = await request(h.app).patch('/api/settings')
+    .send({ mixArbPct: 100, mixMiddlePct: 0, mixEvPct: 0 });
+  expect(okMix.status).toBe(200);
+  expect(okMix.body.settings.mixArbPct).toBe(100);
+
+  expect((await request(h.app).patch('/api/settings').send({ anchorFallback: 3 })).status).toBe(400);
+  expect((await request(h.app).patch('/api/settings').send({ journalMinPerDay: 5 })).status).toBe(400);
+  expect((await request(h.app).patch('/api/settings').send({ oneSportRule: 0 })).status).toBe(200);
+});
+
+test('PATCH settings: safety keys are calm-locked; advanced keys journal their changes', async () => {
+  const h = makeApp();
+  const ok = await request(h.app).patch('/api/settings').send({ goGentleHeat: 25 });
+  expect(ok.status).toBe(200); // every book green — editable
+  let texts = h.repos.journal.all().map((j) => j.text);
+  expect(texts).toContain('Settings changed: goGentleHeat 30 → 25');
+
+  h.repos.books.update('bet365', 41, 'yellow', null); // one book struggles (Plan 3 writer)
+  const locked = await request(h.app).patch('/api/settings').send({ stopHeat: 70 });
+  expect(locked.status).toBe(409);
+  const alsoLocked = await request(h.app).patch('/api/settings').send({ oneSportRule: 0 });
+  expect(alsoLocked.status).toBe(409);
+  const nonSafety = await request(h.app).patch('/api/settings').send({ minEvEdgePct: 2.5 });
+  expect(nonSafety.status).toBe(200); // only SAFETY keys lock
+  texts = h.repos.journal.all().map((j) => j.text);
+  expect(texts).toContain('Settings changed: minEvEdgePct 2 → 2.5');
+
+  const mainPanel = await request(h.app).patch('/api/settings').send({ staleRemoveMin: 12 });
+  expect(mainPanel.status).toBe(200);
+  expect(h.repos.journal.all().some((j) => j.text.includes('staleRemoveMin'))).toBe(false); // not advanced — no journal
+});

@@ -129,18 +129,40 @@ const newestFirst = (a: Trade, b: Trade): number => b.createdAt - a.createdAt;
 
 const SETTINGS_KEYS = new Set(Object.keys(DEFAULT_SETTINGS));
 const HOUR_KEYS = new Set(['quietStartHour', 'quietEndHour']);
-/** Keys allowed to be ≤ 0 or bounded enums (brain knobs). */
+/** Keys allowed to be ≤ 0 or bounded enums (brain + settings-screen knobs). */
 const RANGE_RULES: Record<string, { min: number; max: number; integer: boolean }> = {
   heatWeightWithdrawal: { min: -100, max: 0, integer: false },
   anchorIdx: { min: 0, max: 2, integer: true },
   brainKillSwitch: { min: 0, max: 1, integer: true },
+  anchorFallback: { min: 0, max: 2, integer: true },
+  oneSportRule: { min: 0, max: 1, integer: true },
+  journalMinPerDay: { min: 1, max: 4, integer: true },
+  mixArbPct: { min: 0, max: 100, integer: true },
+  mixMiddlePct: { min: 0, max: 100, integer: true },
+  mixEvPct: { min: 0, max: 100, integer: true },
+};
+const MIX_KEYS = ['mixArbPct', 'mixMiddlePct', 'mixEvPct'] as const;
+/** String-typed settings and their validators (null = ok, string = error message). */
+const STRING_RULES: Record<string, (v: string) => string | null> = {
+  whatsappNumber: (v) =>
+    v === '' || /^\+\d[\d ]{6,18}$/.test(v) ? null : 'whatsappNumber must look like +1 604 555 0000 (or be empty)',
+  disabledSports: (v) =>
+    /^[a-z]*(,[a-z]+)*$/.test(v) ? null : 'disabledSports must be a comma-joined list of lowercase sport slugs',
 };
 
 function settingsPatch(body: unknown): { patch: Partial<Settings> } | { error: string } {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return { error: 'body must be a JSON object' };
-  const patch: Record<string, number> = {};
+  const patch: Record<string, number | string> = {};
   for (const [k, v] of Object.entries(body)) {
     if (!SETTINGS_KEYS.has(k)) return { error: `unknown setting: ${k}` };
+    const stringRule = STRING_RULES[k];
+    if (stringRule) {
+      if (typeof v !== 'string') return { error: `${k} must be a string` };
+      const err = stringRule(v);
+      if (err !== null) return { error: err };
+      patch[k] = v;
+      continue;
+    }
     if (typeof v !== 'number' || !Number.isFinite(v)) return { error: `${k} must be a finite number` };
     const range = RANGE_RULES[k];
     if (range) {
@@ -155,8 +177,26 @@ function settingsPatch(body: unknown): { patch: Partial<Settings> } | { error: s
     }
     patch[k] = v;
   }
+  // STRATEGY MIX — LOCKED TO 100: the trio moves together or not at all.
+  const mixTouched = MIX_KEYS.filter((k) => k in patch);
+  if (mixTouched.length > 0) {
+    if (mixTouched.length !== 3) return { error: 'mixArbPct, mixMiddlePct and mixEvPct must be patched together' };
+    const sum = MIX_KEYS.reduce((acc, k) => acc + (patch[k] as number), 0);
+    if (sum !== 100) return { error: 'strategy mix must sum to exactly 100' };
+  }
   return { patch: patch as Partial<Settings> };
 }
+
+/** §5.7 is literal: advanced-expander keys journal their changes. */
+const ADVANCED_JOURNAL_KEYS = new Set([
+  'minArbMarginPct', 'minEvEdgePct', 'middleRatio', 'freshWindowSecs',
+  'anchorFallback', 'sharpVelocityPerDayPerBook', 'marketBreadthPerWeekPerBook',
+  'oneSportRule', 'goGentleHeat', 'stopHeat', 'journalMinPerDay', 'disabledSports',
+]);
+/** Calm-locked: editable only while every non-sharp book is green (§5.7 helper sentence). */
+const SAFETY_KEYS = new Set([
+  'sharpVelocityPerDayPerBook', 'marketBreadthPerWeekPerBook', 'oneSportRule', 'goGentleHeat', 'stopHeat',
+]);
 
 function fail(res: Response, status: number, code: string, message: string): void {
   res.status(status).json({ error: { code, message } });
@@ -275,9 +315,20 @@ export function createApp(o: AppOptions): App {
   });
 
   app.patch('/api/settings', (req, res) => {
-    const v = settingsPatch(req.body);
-    if ('error' in v) return fail(res, 400, 'bad_request', v.error);
-    res.json({ settings: repos.settings.set(v.patch) });
+    const parsed = settingsPatch(req.body);
+    if ('error' in parsed) return fail(res, 400, 'bad_request', parsed.error);
+    if (Object.keys(parsed.patch).some((k) => SAFETY_KEYS.has(k))
+      && repos.books.all().some((b) => !b.sharpExempt && b.health !== 'green')) {
+      return fail(res, 409, 'conflict', 'account safety rules are locked while any book is amber or red');
+    }
+    const before = repos.settings.all();
+    const settings = repos.settings.set(parsed.patch);
+    for (const [k, v] of Object.entries(parsed.patch)) {
+      if (ADVANCED_JOURNAL_KEYS.has(k) && before[k as keyof Settings] !== v) {
+        repos.journal.add(clock(), `Settings changed: ${k} ${String(before[k as keyof Settings])} → ${String(v)}`);
+      }
+    }
+    res.json({ settings });
   });
 
   app.get('/api/brain', (_req, res) => {

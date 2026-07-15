@@ -7,7 +7,7 @@ const NOW = 1_800_000_000_000; // epoch ms (schema convention: timestamps are IN
 const FRESH = NOW - 10_000; // 10s old — well inside freshWindowSecs (120s)
 
 function mkBook(name: string, sport: string, sharpExempt: 0 | 1, heat: number): Book {
-  return { name, sport, sharpExempt, heat, health: 'green', maxBeliefCents: null };
+  return { name, sport, sharpExempt, heat, health: 'green', maxBeliefCents: null, enabled: 1 };
 }
 
 /** bet365: basketball, heat 0 · pinnacle: ANY, sharp-exempt, heat 99 · fanduel: basketball, heat 70 */

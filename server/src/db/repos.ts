@@ -5,7 +5,7 @@ import type { Db } from './db.js';
 export type BookHealth = 'green' | 'yellow' | 'red';
 export interface Book {
   name: string; sport: string; sharpExempt: 0 | 1; heat: number;
-  health: BookHealth; maxBeliefCents: number | null;
+  health: BookHealth; maxBeliefCents: number | null; enabled: 0 | 1;
 }
 export interface Profile { id: number; name: string; startingCashCents: number; createdDate: string; }
 export interface JournalEntry { id: number; ts: number; text: string; }
@@ -23,7 +23,7 @@ interface TradeRow {
 }
 interface BookRow {
   name: string; sport: string; sharp_exempt: 0 | 1; heat: number;
-  health: BookHealth; max_belief_cents: number | null;
+  health: BookHealth; max_belief_cents: number | null; enabled: 0 | 1;
 }
 
 function rowToTrade(r: TradeRow): Trade {
@@ -39,7 +39,7 @@ function rowToTrade(r: TradeRow): Trade {
 function rowToBook(r: BookRow): Book {
   return {
     name: r.name, sport: r.sport, sharpExempt: r.sharp_exempt, heat: r.heat,
-    health: r.health, maxBeliefCents: r.max_belief_cents,
+    health: r.health, maxBeliefCents: r.max_belief_cents, enabled: r.enabled,
   };
 }
 
@@ -102,6 +102,12 @@ export function Repos(db: Db) {
         AND EXISTS (SELECT 1 FROM json_each(t.legs) WHERE json_extract(json_each.value, '$.book') = @book)
       ORDER BY verified_at ASC, id ASC`),
     eventsByKind: db.prepare('SELECT * FROM events_log WHERE kind = ? ORDER BY ts ASC, id ASC'),
+    bookSetEnabled: db.prepare('UPDATE books SET enabled = ? WHERE name = ?'),
+    bookSetSport: db.prepare('UPDATE books SET sport = ? WHERE name = ?'),
+    tradeSentTodayByCategory: db.prepare(
+      'SELECT COUNT(*) AS n FROM trades WHERE day_key = ? AND category = ? AND verified_at IS NOT NULL'),
+    tradeExportRows: db.prepare('SELECT * FROM trades ORDER BY created_at ASC, id ASC'),
+    tradeExportColumns: db.prepare('PRAGMA table_info(trades)'),
   };
 
   const bindTrade = (t: Trade) => ({
@@ -166,6 +172,17 @@ export function Repos(db: Db) {
       return (st.tradeSentVolumeByBook.all({ book }) as { va: number; market: string | null }[])
         .map((r) => ({ verifiedAt: r.va, market: r.market }));
     },
+    /** SENT semantics per category — the strategy-mix allowance's counter. */
+    sentTodayByCategory(dayKey: string, category: Trade['category']): number {
+      return (st.tradeSentTodayByCategory.get(dayKey, category) as { n: number }).n;
+    },
+    /** Raw whole-table dump (snake_case, legs as stored JSON) — exports only, never a view. */
+    exportRows(): Record<string, unknown>[] {
+      return st.tradeExportRows.all() as Record<string, unknown>[];
+    },
+    exportColumns(): string[] {
+      return (st.tradeExportColumns.all() as { name: string }[]).map((c) => c.name);
+    },
   };
 
   const settings = {
@@ -197,6 +214,9 @@ export function Repos(db: Db) {
     update(name: string, heat: number, health: BookHealth, maxBeliefCents: number | null): void {
       st.bookUpdate.run({ name, heat, health, maxBeliefCents });
     },
+    /** MY BOOKS panel writers (Plan 5). The route guards sharp books; these don't. */
+    setEnabled(name: string, enabled: 0 | 1): void { st.bookSetEnabled.run(enabled, name); },
+    setSport(name: string, sport: string): void { st.bookSetSport.run(sport, name); },
   };
 
   const journal = {

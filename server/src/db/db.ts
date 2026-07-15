@@ -33,8 +33,16 @@ export function openDb(path: string): Db {
   const db = new Database(path);
   db.pragma('journal_mode = WAL'); // no-op for :memory:, durable-fast for file dbs
   db.exec(schemaSql);
+  migrate(db);
   seedIfEmpty(db);
   return db;
+}
+
+/** Idempotent column migrations for databases created before this plan (data kept
+ *  forever — never recreate, never drop). */
+function migrate(db: Db): void {
+  const bookCols = (db.prepare('PRAGMA table_info(books)').all() as { name: string }[]).map((c) => c.name);
+  if (!bookCols.includes('enabled')) db.exec('ALTER TABLE books ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1');
 }
 
 function count(db: Db, table: 'settings' | 'profiles' | 'books'): number {
