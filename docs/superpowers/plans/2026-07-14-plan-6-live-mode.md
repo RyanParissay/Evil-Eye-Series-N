@@ -20,7 +20,7 @@
 ## Design (locked — every mechanism decided here)
 
 1. **Env loading (Task 1):** `loadV1Env()` reads `~/evil-eye-arbitrage/.env` (override path via `EE_ENV_PATH` — tests point it at fixtures with FAKE values) and copies ONLY the seven known names into `process.env`, never overwriting an already-set variable. The parser handles `KEY=VALUE`, optional `export `, `#` comments, and single/double quotes. `presentLiveVars(env)`/`missingLiveVars(env)` report NAMES only. `PORT`/`APP_URL` belong to the V1 server: V2 keeps listening on the locked **4400** and uses `APP_URL` (when set) only inside outbound WhatsApp text as the tap-back link — `PORT` is loaded but deliberately unconsumed (Decision 2).
-2. **Mode is a settings key** (`liveMode: 0`) that `PATCH /api/settings` REFUSES to touch (`use POST /api/mode`) — flipping mode has side effects (rewiring, gating) that a bare settings write must not trigger. `POST /api/mode {live: 1}` → 409 `cannot go live — missing: <names>` unless `ODDS_API_KEY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM` are all present; on success it sets the key, journals `Mode switched: SIMULATED → LIVE` (or reverse), and calls `wireMode`. `{live: 0}` always succeeds. `GET /api/state` derives `mode` from the key; the header badge, Plan 4's `simulated` flag and Plan 5's view all follow it.
+2. **Mode is a settings key** (`liveMode: 0`) that `PATCH /api/settings` REFUSES to touch (`use POST /api/mode`) — flipping mode has side effects (rewiring, gating) that a bare settings write must not trigger. `POST /api/mode {live: 1}` → 409 `cannot go live — missing: <names>` unless `ODDS_API_KEY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM` are all present; on success it sets the key, journals the flip — SIM→LIVE writes `Mode switched: SIMULATED → LIVE — results feed not wired; trades will not auto-settle` (NEW copy — the settlement gap stays visible every time the switch flips, Design §13), LIVE→SIM writes `Mode switched: LIVE → SIMULATED` — and calls `wireMode`. `{live: 0}` always succeeds. `GET /api/state` derives `mode` from the key; the header badge, Plan 4's `simulated` flag and Plan 5's view all follow it.
 3. **`wireMode(deps, env, repos, fetchImpl)`** swaps `deps.provider`/`deps.sender` in place: LIVE → `OddsApiProvider` + `TwilioWhatsAppSender`; SIMULATED → `SimOddsProvider(rng)` + the existing sim sender. Called at boot and after each successful mode flip. The pipeline never knows which is wired — that is the seam's whole point.
 4. **Provider seam grows ONE optional method**: `OddsProvider.refresh?(now): Promise<void>`. The live provider fetches sports/odds there, maps them to `Quote[]`, caches them, and `fetchQuotes(now)` returns the cache — the pipeline stays synchronous and byte-identical. The runner's timer callback and `POST /api/scan` await `refresh` when present; `SimOddsProvider` doesn't define it, so sim behavior is untouched. Credits are recorded from the API's OWN `x-requests-used`/`x-requests-remaining` response headers (delta since last seen; first sighting seeds the baseline) — the forecaster shows real burn. A failed refresh keeps the previous cache, writes an events_log `provider_error` row (message only, no key), and never throws into the chain.
 5. **Hooks ride the one timer** (Task 4): `startScheduler(deps, planDeps, timer, clock, hooks: HookTask[] = [])` where `HookTask = { name: string; nextAt(now): number | null; run(now): Promise<void> }`. The timer callback becomes an async orchestration (`pump()`): await `provider.refresh?` → await each hook whose `nextAt(now) ≤ now` → `runDue()` (unchanged sync core) → arm at `min(planNext wake, soonest hook wake)`. `planNext` is NOT modified; `tick()` stays sync for the existing sim tests; the handle gains `pump(): Promise<void>` as the test/manual entry. Hook errors are caught per-hook (events row), the chain never dies.
@@ -31,6 +31,7 @@
 10. **The DATA-panel MODE switch** (Task 9) is the §2.2 two-click armed pattern: badge → click → armed `GO LIVE? ✓` (yellow) → click → `POST /api/mode {live:1}` → on 409 the armed state clears and the row shows `MISSING: <names>` (NEW copy, names only); flipping back arms `GO SIMULATED? ✓`. The client never auto-flips anything; the mode arrives from the server on the next poll. INPUTS statuses (Plan 3 brain screen + Plan 5 advanced panel) flip their sim-honest `SIM` chips to `LIVE` / `POLL 45S` when the view reports live mode.
 11. **Everything degrades, nothing crashes**: provider failure → stale cache + honest events row; Twilio failure → events row; Anthropic failure/no-key/cap → deterministic text stands. Live mode may never take the scheduler chain down — every hook and refresh is wrapped.
 12. **Demo values are not test expectations** (inventory §7.3/§8): the mockup's `LIVE`/`POLL 45S` statuses, `$0.84 / $3.00`, `LAST 03:00` and `61,212 / 100,000` are filler; every number derives from live tables. Copy stays verbatim where fixed.
+13. **Sim settlement is SIMULATED-mode-only** (PM adjudication): `runSimSettlement` no-ops (all zeros) when `liveMode === 1` — rolling rng outcomes on REAL trades would fabricate WON/LOST money, the one dishonesty every plan forbids. In LIVE mode nothing auto-settles until a real results feed ships (an explicitly deferred future plan — Decision 13). The gate sits inside `runSimSettlement` itself: the runner's `doScan` settlement call is its only production caller, and gating the function protects every path. Manual `POST /api/trades/:id/settle` keeps working in both modes — the user reporting a real outcome is not fabrication.
 
 ## Global Constraints
 
@@ -42,7 +43,7 @@
 - ALL UI copy verbatim from `docs/handoff/design-inventory.md` (exact glyphs: `—`, `·`, `│` U+2502 in leg lines, `✓`, `−` U+2212). New copy flagged `(NEW copy)` where it appears.
 - One total bankroll; no skip feature; no promo strategy; data kept forever (backup FILES rotate ×14, database rows never).
 - Quiet hours 00:00–08:00 America/Vancouver stop scans, sends AND inbound polls; the nightly backup waits for the first post-03:00 pump (Design §9); all wall-clock logic via `Intl.DateTimeFormat` with `timeZone: 'America/Vancouver'`.
-- Ports: server **4400** (regardless of the V1 `PORT` variable — Decision 2), Vite dev **5174**. All commands run from the repo root.
+- Ports: server **4400** (regardless of the V1 `PORT` variable — Decision 2), Vite dev **5174**. All commands run from the repo root. **Worktree isolation:** the user's own dev servers permanently occupy 4400/5174 from the main checkout — every manual verify/smoke boots from the EXECUTION WORKTREE with the server port patched to a free port ≥ 4499 (temporary local edit of `PORT` in `server/src/index.ts`, never committed; client pointed at it via `EE_API_TARGET`), curls adjusted to match, and NEVER against the main checkout.
 - TDD every task; commit after every task. The full suite must stay green throughout (server 117 + client 20 at authoring baseline, plus Plans 3–5's additions — Plan 6 executes LAST, after Plans 3, 4 and 5 have merged).
 
 ## Interface Contracts (referenced by all tasks)
@@ -109,6 +110,9 @@ digestAfterPass(deps: PipeDeps, writer: TextWriter, now: number): Promise<boolea
 wireMode(deps: PipeDeps, env: NodeJS.ProcessEnv, repos: Repos, fetchImpl: typeof fetch): 'SIMULATED' | 'LIVE'
 modeLabel(s: Settings): 'SIMULATED' | 'LIVE'
 
+// server/src/pipeline/actions.ts (Task 7 — Design §13)
+runSimSettlement(deps, now)   // no-ops ({ settled: 0, won: 0, lost: 0 }) when liveMode === 1
+
 // Routes added/changed in server/src/api/routes.ts (Task 7)
 POST /api/mode        body { live: 0 | 1 } → { mode: 'SIMULATED' | 'LIVE' }
                       (400 bad body · 409 `cannot go live — missing: <names>` — NAMES only)
@@ -137,6 +141,7 @@ inputStatus(live: boolean, kind: 'feed' | 'poll'): { text: string; tone: 'sim' |
 10. **Mode flips rewire in place** (`wireMode` swaps `deps.provider`/`deps.sender`); no restart needed. In-flight trades survive: verify's recheck uses whatever provider is wired at that tick — a SIM→LIVE flip mid-pending is the user's explicit act (and LIVE→SIM is always safe).
 11. **Client mode tests are pure-label tests only** (HARD GATE 1): `modeSwitchLabel`/`missingText`/`inputStatus` — no client test posts to `/api/mode` with `live: 1`.
 12. **`smoke.test.ts` and every existing test keep passing untouched**: `AppOptions` additions are optional with sim-preserving defaults; `GET /api/state`'s `mode` remains `'SIMULATED'` wherever `liveMode` is 0 — which is everywhere in tests, forever (HARD GATE 1).
+13. **Real settlement is DEFERRED to a future results-feed plan** (PM adjudication, Design §13): LIVE mode never rng-settles; until the feed exists, live trades settle only through the existing manual settle route. No executor may "helpfully" wire rng settlement in live mode — that is fabricated money and a locked-rule violation (HARD GATE 6 applies to any pressure to do so). The SIM→LIVE journal line surfaces the unwired feed on every flip.
 
 ## File Map
 
@@ -158,6 +163,7 @@ server/src/brain/pass.ts                         (Modify T6 — digest hook poin
 server/src/settings/report.ts                    (Modify T6 — llmSpentCents from µ$; Modify T7 — mode from liveMode)
 server/src/analytics/report.ts                   (Modify T7 — simulated flag from liveMode)
 server/src/live/mode.ts + mode.test.ts           (Create T7)
+server/src/pipeline/actions.ts                   (Modify T7 — sim-settlement liveMode gate, Design §13)
 server/src/index.ts                              (Modify T8 — env load, wireMode, hooks, backup dir)
 client/src/lib/settings.ts + settings.test.ts    (Modify T9 — mode switch + input status helpers)
 client/src/lib/api.ts                            (Modify T9 — setMode)
@@ -1685,15 +1691,15 @@ git commit -m "feat(server): Anthropic brain text seam — haiku digest, no-key 
 
 ---
 
-### Task 7: The mode switch — wireMode, POST /api/mode, honest flags everywhere
+### Task 7: The mode switch — wireMode, POST /api/mode, sim-settlement gate, honest flags
 
 **Files:**
 - Create: `server/src/live/mode.ts`, `server/src/live/mode.test.ts`
-- Modify: `server/src/api/routes.ts`, `server/src/api/api.test.ts`, `server/src/settings/report.ts`, `server/src/analytics/report.ts`
+- Modify: `server/src/api/routes.ts`, `server/src/api/api.test.ts`, `server/src/pipeline/actions.ts`, `server/src/settings/report.ts`, `server/src/analytics/report.ts`
 
 **Interfaces:**
 - Consumes: everything above.
-- Produces: `wireMode`, `modeLabel`, `POST /api/mode`, live-aware `GET /api/state`, `AppOptions.fetchImpl/env/backupDir`, hooks assembled inside `createApp`.
+- Produces: `wireMode`, `modeLabel`, `POST /api/mode`, the LIVE settlement no-op (Design §13), live-aware `GET /api/state`, `AppOptions.fetchImpl/env/backupDir`, hooks assembled inside `createApp`.
 
 - [ ] **Step 1: Write the failing specs**
 
@@ -1703,6 +1709,8 @@ Create `server/src/live/mode.test.ts`:
 import { expect, test } from 'vitest';
 import { Repos, openDb } from '../db/db.js';
 import type { PipeDeps } from '../pipeline/scan.js';
+import type { Trade } from '../shared/types.js';
+import { runSimSettlement } from '../pipeline/actions.js';
 import { modeLabel, wireMode } from './mode.js';
 
 const throwing = (() => { throw new Error('NETWORK CALL ATTEMPTED'); }) as unknown as typeof fetch;
@@ -1745,6 +1753,27 @@ test('wireMode: sim wires the sim provider (no refresh); live wires the live pai
     freshUntil: 1, settledAt: null, eventStartsAt: 9,
   });
   expect(deps.repos.eventsLog.all().some((e) => e.kind === 'wa_dev')).toBe(true);
+});
+
+test('LIVE mode never rng-settles — sim settlement is a no-op on real money (Design §13)', () => {
+  const deps = mkDeps();
+  const confirmed: Trade = {
+    id: 'real-1', profileId: 1, category: 'EV', event: 'A vs B', sport: 'basketball',
+    legs: [{ book: 'bet365', selection: 'home', odds: 2.1, stakeCents: 2_000 }],
+    marginInitial: 0.03, marginRecheck: 0.03, marginFinal: 0.03, status: 'CONFIRMED',
+    killReason: null, resultCents: null, createdAt: 0, verifyDueAt: 0, verifiedAt: 0,
+    freshUntil: 1, settledAt: null, eventStartsAt: 0, // +3h cutoff long past at NOW below
+  };
+  deps.repos.trades.insert(confirmed, '2026-07-14', null);
+  // Sanctioned unit pattern (HARD GATE 1, same as the wireMode unit above): the key is
+  // set directly on the isolated repos — no POST /api/mode, no wiring, no network.
+  deps.repos.settings.set({ liveMode: 1 });
+  const NOW = Date.UTC(2026, 6, 14, 19, 0);
+  expect(runSimSettlement(deps, NOW)).toEqual({ settled: 0, won: 0, lost: 0 });
+  expect(deps.repos.trades.byId('real-1')!.status).toBe('CONFIRMED'); // untouched — no fabricated money
+  expect(deps.repos.trades.byId('real-1')!.resultCents).toBeNull();
+  deps.repos.settings.set({ liveMode: 0 });
+  expect(runSimSettlement(deps, NOW).settled).toBe(1); // paper money settles exactly as before
 });
 ```
 
@@ -1909,7 +1938,10 @@ with imports `AnthropicTextWriter, digestAfterPass` from `../brain/text.js`, `in
     const before = deps.s().liveMode;
     repos.settings.set({ liveMode: live });
     if (before !== live) {
-      repos.journal.add(clock(), `Mode switched: ${before === 1 ? 'LIVE' : 'SIMULATED'} → ${live === 1 ? 'LIVE' : 'SIMULATED'}`);
+      // SIM→LIVE surfaces the unwired results feed every time (Design §13, NEW copy).
+      repos.journal.add(clock(), live === 1
+        ? 'Mode switched: SIMULATED → LIVE — results feed not wired; trades will not auto-settle'
+        : 'Mode switched: LIVE → SIMULATED');
       wireMode(deps, env, repos, fetchImpl);
     }
     res.json({ mode: modeLabel(deps.s()) });
@@ -1921,6 +1953,23 @@ with imports `AnthropicTextWriter, digestAfterPass` from `../brain/text.js`, `in
 ```ts
     fetchImpl: (() => { throw new Error('NETWORK CALL ATTEMPTED IN SIM SUITE'); }) as unknown as typeof fetch,
     env: {},
+```
+
+6. Gate rng settlement to paper money (Design §13) — in `server/src/pipeline/actions.ts`, replace the head of `runSimSettlement`:
+
+```ts
+// OLD
+export function runSimSettlement(deps: PipeDeps, now: number): { settled: number; won: number; lost: number } {
+  const { repos } = deps;
+  let won = 0;
+// NEW
+export function runSimSettlement(deps: PipeDeps, now: number): { settled: number; won: number; lost: number } {
+  const { repos } = deps;
+  // Plan 6 (Design §13): rng outcomes are SIM-ONLY. In LIVE mode nothing
+  // auto-settles until a real results feed ships — fabricating WON/LOST on
+  // real money is the one dishonesty every plan forbids. Manual settles stand.
+  if (deps.s().liveMode === 1) return { settled: 0, won: 0, lost: 0 };
+  let won = 0;
 ```
 
 In `server/src/settings/report.ts`, the mode field reads the key — replace `mode: 'SIMULATED',` with:
@@ -1938,7 +1987,7 @@ In `server/src/settings/report.ts`, the mode field reads the key — replace `mo
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `npm test -w server && npm run typecheck -w server`
-Expected: full suite PASS — including every pre-existing test now running under the THROWING fetch stub, which is itself the proof of HARD GATE 2 for the whole sim surface.
+Expected: full suite PASS — including every pre-existing test now running under the THROWING fetch stub, which is itself the proof of HARD GATE 2 for the whole sim surface, plus the sim-settlement gate unit (LIVE never rng-settles, Design §13).
 
 - [ ] **Step 5: Commit**
 
@@ -2200,7 +2249,8 @@ grep -rln 'the-odds-api\.com\|api\.twilio\.com\|api\.anthropic\.com' server/src 
 #      server/src/live/inbound.ts, server/src/brain/text.ts
 # 2. No test sets a real-looking live credential or flips to live:
 grep -rn "liveMode: 1\|live: 1" server/src/**/*.test.ts client/src/**/*.test.ts
-#    → only mode.test.ts's wireMode unit (fake env record, throwing fetch) — review each hit by hand
+#    → only mode.test.ts's wireMode + sim-settlement-gate units (fake env records, direct
+#      repos key set, throwing fetch — the sanctioned HARD GATE 1 pattern) — review each hit by hand
 grep -rn "process.env.ODDS_API_KEY\s*=\|process.env.TWILIO" server/src client/src
 #    → no output (env is passed as records, never mutated)
 # 3. The .env path is read in exactly one place:
@@ -2218,7 +2268,9 @@ Expected: server + client suites all pass; both typechecks clean. The entire ser
 
 - [ ] **Step 3: End-to-end smoke (manual, real processes — the app STAYS SIMULATED)**
 
-Terminal A: `npm run dev` (4400). Terminal B: `npm run dev:client` (5174). Then:
+> **Worktree isolation (PM directive):** the user's dev servers occupy 4400/5174 from the main checkout. Run this smoke FROM THE EXECUTION WORKTREE with the server port patched to a free port ≥ 4499 (temporarily edit `PORT` in `server/src/index.ts`; revert before committing) and start the client with `EE_API_TARGET=http://localhost:<port> npm run dev:client` (Vite auto-bumps its own port). Adjust every `localhost:4400`/`:5174` below to the patched ports. Never boot against, or POST to, the user's 4400.
+
+Terminal A: `npm run dev` (patched port). Terminal B: `EE_API_TARGET=http://localhost:<port> npm run dev:client`. Then:
 1. Badge reads SIMULATED; TRADES/BRAIN/ANALYTICS/SETTINGS all behave exactly as before this plan (regression pass).
 2. `curl -s localhost:4400/api/state | grep mode` → SIMULATED. `curl -s -X POST localhost:4400/api/mode -H 'content-type: application/json' -d '{"live":0}'` → `{"mode":"SIMULATED"}` (the always-allowed direction).
 3. DATA panel: arm the switch, observe `GO LIVE? ✓`, then click elsewhere / let the 409 path run per Task 9 — **never complete a flip to LIVE**.
@@ -2243,6 +2295,7 @@ git commit -m "fix(live): hard-gate audit findings"
 - **No-network proof strategy:** every live client takes `fetchImpl`; the api test harness injects a THROWING stub for the entire sim suite (T7) — any accidental network attempt anywhere fails every test loudly; dev-mode and no-key tests also use throwing stubs at the unit level. Test env records carry fake values only; `process.env` is never mutated by tests.
 - **Env hygiene:** values never serialized — `missingLiveVars` and every error/journal string carry NAMES only; `provider_error`/`wa_error`/`llm_error` payloads carry status codes or truncated messages, and the T2 test asserts the key never appears in a payload. `PORT`/`APP_URL` semantics locked (Decision 2); `ANTHROPIC_API_KEY` as the eighth name is flagged as the one pre-resolved ambiguity (Decision 3) — anything further stops the line (HARD GATE 6).
 - **Money math:** LLM ledger in integer micro-dollars (1 input-token = 1 µ$, 1 output-token = 5 µ$ — exact at Haiku 4.5's $1/$5 pricing); cap check `spent + worstCase > 3,000,000 µ$` refuses BEFORE the request; display converts µ$→cents rounding UP (never understate spend); Odds API credits from the provider's own usage headers as deltas. All integer arithmetic.
+- **Settlement honesty (PM adjudication):** rng settlement is gated to SIMULATED inside `runSimSettlement` (T7, Design §13) — LIVE mode never fabricates WON/LOST on real trades; the SIM→LIVE journal line keeps the unwired results feed visible on every flip; real settlement is an explicitly deferred results-feed plan (Decision 13); manual settles work in both modes; the gate has its own direct-key unit (the sanctioned HARD GATE 1 pattern, listed in T10's audit expectations); Plan 4's shadow-settlement design carries the matching sim-only caveat.
 - **Cross-plan edits are exact and minimal:** Plan 5's `settings/report.ts` (two replacements: µ$ ledger, mode label), Plan 4's `simulated` flag (one line), Plan 3's brain INPUTS statuses (prop-threaded helper), the api harness (two option lines). Everything else is additive. `AppOptions` additions are optional with sim-preserving defaults — Decision 12 pins that no existing test changes.
 - **Deferred (deliberate, documented):** (1) The Odds API sport-key roster is a locked constant (Decision 4) — making it a setting is future work once live usage shows the need. (2) Reply codes handle exactly `1`/`3` (no skip feature — other bodies are recorded and ignored). (3) The digest rewrites today's lines once per day — richer LLM duties (site-detail prose) stay deterministic until the product asks otherwise. (4) `wa_dev` events are the dev-mode audit trail; a dev-mode UI surface is future work.
 - **Placeholder scan:** no TBD/TODO/"similar to task N" anywhere; every code step is complete file content or an exact old→new replacement; commands carry expected outputs; the two adapt-notes (harness option names, `pump` naming) state the binding spec explicitly.
