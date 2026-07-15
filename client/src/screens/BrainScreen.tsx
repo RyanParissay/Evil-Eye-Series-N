@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { useBrain } from '../hooks/useBrain';
 import { killSwitchLabel, passTimeLabel } from '../lib/brain';
+import { BrainJournal } from '../components/BrainJournal';
 import { EngineStrip } from '../components/EngineStrip';
 import { RationalePanel } from '../components/RationalePanel';
 import { SiteDetail } from '../components/SiteDetail';
 import { SiteTable } from '../components/SiteTable';
+import { StrategyPerformance } from '../components/StrategyPerformance';
 
 export function BrainScreen() {
   const { brain, refresh } = useBrain();
-  const [selectedSite, setSelectedSite] = useState('betmgm'); // mockup default, present in the first 5 rows
+  const [selectedSite, setSelectedSite] = useState('betmgm');
   const [allSites, setAllSites] = useState(false);
+  const [journalOpen, setJournalOpen] = useState(false);
 
   if (!brain) {
     return (
@@ -39,6 +42,12 @@ export function BrainScreen() {
         onToggle={() => setAllSites((v) => !v)}
       />
       {selected && <SiteDetail book={selected} />}
+      <StrategyPerformance grades={brain.grades} />
+      <BrainJournal
+        journal={brain.journal}
+        open={journalOpen}
+        onToggle={() => setJournalOpen((v) => !v)}
+      />
     </main>
   );
 }
