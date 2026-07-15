@@ -9,6 +9,9 @@ export interface Trade {
   status: TradeStatus; killReason: KillReason | null; resultCents: number | null;
   createdAt: number; verifyDueAt: number; verifiedAt: number | null; freshUntil: number | null;
   settledAt: number | null; eventStartsAt: number;
+  /** Plan 4: when the user confirmed (survives settlement — status alone forgets).
+   *  Optional so pre-plan fixtures compile; undefined ≡ null at the db boundary. */
+  confirmedAt?: number | null;
 }
 export interface Quote { book: string; sport: string; event: string; market: string;
   selection: string; odds: number; line: number | null; fetchedAt: number; eventStartsAt: number; }

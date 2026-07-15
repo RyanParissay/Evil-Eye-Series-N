@@ -33,8 +33,17 @@ export function openDb(path: string): Db {
   const db = new Database(path);
   db.pragma('journal_mode = WAL'); // no-op for :memory:, durable-fast for file dbs
   db.exec(schemaSql);
+  migrate(db);
   seedIfEmpty(db);
   return db;
+}
+
+/** Idempotent column migrations for databases created before Plan 4 (data kept forever —
+ *  never recreate, never drop). CREATE TABLE IF NOT EXISTS ignores new columns on old dbs,
+ *  so each addition needs its own guarded ALTER. */
+function migrate(db: Db): void {
+  const cols = (db.prepare('PRAGMA table_info(trades)').all() as { name: string }[]).map((c) => c.name);
+  if (!cols.includes('confirmed_at')) db.exec('ALTER TABLE trades ADD COLUMN confirmed_at INTEGER');
 }
 
 function count(db: Db, table: 'settings' | 'profiles' | 'books'): number {

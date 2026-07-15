@@ -15,7 +15,9 @@ test('opens in-memory db, seeds defaults, round-trips a trade', () => {
     legs: [{ book: 'bet365', selection: 'A ML', odds: 2.1, stakeCents: null }],
     marginInitial: 0.012, marginRecheck: null, marginFinal: null, status: 'PENDING',
     killReason: null, resultCents: null, createdAt: 1000, verifyDueAt: 76_000,
-    verifiedAt: null, freshUntil: null, settledAt: null, eventStartsAt: 9_999_999 };
+    verifiedAt: null, freshUntil: null, settledAt: null,
+    confirmedAt: null, // Plan 4: rowToTrade always emits the column
+    eventStartsAt: 9_999_999 };
   r.trades.insert(t, '2026-07-14'); // ADAPTED: insert takes the Vancouver dayKey as 2nd arg (stamped as day_key)
   expect(r.trades.byId('t1')).toEqual(t);
   expect(r.trades.byStatus('PENDING')).toHaveLength(1);
@@ -32,7 +34,7 @@ function mkTrade(over: Partial<Trade>): Trade {
     legs: [{ book: 'bet365', selection: 'A ML', odds: 2.1, stakeCents: null }],
     marginInitial: 0.012, marginRecheck: null, marginFinal: null, status: 'PENDING',
     killReason: null, resultCents: null, createdAt: 1000, verifyDueAt: 76_000,
-    verifiedAt: null, freshUntil: null, settledAt: null, eventStartsAt: 9_999_999, ...over };
+    verifiedAt: null, freshUntil: null, settledAt: null, confirmedAt: null, eventStartsAt: 9_999_999, ...over };
 }
 
 test('day counters: "sent" = verified_at stamped; day_key/book/market filters apply', () => {

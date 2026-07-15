@@ -47,16 +47,26 @@ function transition(repos: Repos, id: string, from: TradeStatus, to: TradeStatus
   return t;
 }
 
-/** VERIFIED → CONFIRMED ("I placed these bets"). `now` rides the uniform action signature. */
+/** VERIFIED → CONFIRMED — stamps confirmedAt (Plan 4: the followed-pick timestamp;
+ *  a no-op double-tap keeps the first stamp). */
 export function confirmTrade(repos: Repos, id: string, now: number): Trade {
-  void now;
-  return transition(repos, id, 'VERIFIED', 'CONFIRMED', 'confirm');
+  const t = transition(repos, id, 'VERIFIED', 'CONFIRMED', 'confirm');
+  if (t.confirmedAt == null) {
+    t.confirmedAt = now;
+    repos.trades.update(t);
+  }
+  return t;
 }
 
-/** CONFIRMED → VERIFIED — the UI cycle back when a confirm was a mis-tap. */
+/** CONFIRMED → VERIFIED — the UI cycle back when a confirm was a mis-tap. Clears the stamp. */
 export function unconfirmTrade(repos: Repos, id: string, now: number): Trade {
   void now;
-  return transition(repos, id, 'CONFIRMED', 'VERIFIED', 'unconfirm');
+  const t = transition(repos, id, 'CONFIRMED', 'VERIFIED', 'unconfirm');
+  if (t.confirmedAt != null) {
+    t.confirmedAt = null;
+    repos.trades.update(t);
+  }
+  return t;
 }
 
 /**
@@ -128,7 +138,7 @@ function markSettled(t: Trade, resultCents: number, now: number): void {
  * - MIDDLE: hits with prob 0.30 → BOTH legs cash; a miss cashes one side, and
  *   the worse-paying leg is the basis (the conservative single-leg payout).
  */
-function simOutcome(t: Trade, rng: () => number): { won: boolean; resultCents: number } {
+export function simOutcome(t: Trade, rng: () => number): { won: boolean; resultCents: number } {
   const stakes = t.legs.map((l) => l.stakeCents ?? 0);
   const totalStaked = stakes.reduce((a, b) => a + b, 0);
   const payouts = t.legs.map((l, i) => l.odds * stakes[i]!);

@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS trades (
   verified_at     INTEGER,
   fresh_until     INTEGER,
   settled_at      INTEGER,
+  confirmed_at    INTEGER,
   event_starts_at INTEGER NOT NULL,
   day_key         TEXT NOT NULL     -- Vancouver day stamped at insert
 );

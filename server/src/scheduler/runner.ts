@@ -88,10 +88,14 @@ export function startScheduler(deps: PipeDeps, planDeps: PlanDeps, timer: Timer,
     return { scan, verify, settlement };
   }
 
+  /** One bankroll snapshot per profile per Vancouver day: starting cash + settled
+   *  CONFIRMED money (real actions only — Plan 4's ALL chart shadow-settles the rest
+   *  at read time and never writes back). */
   function writeDailySnapshot(now: number): void {
-    const profile = deps.repos.profiles.all()[0]!; // seeded default profile
-    const settledCents = deps.repos.trades.byStatus('SETTLED').reduce((sum, t) => sum + (t.resultCents ?? 0), 0);
-    deps.repos.snapshots.writeDaily(profile.id, dayKey(now), profile.startingCashCents + settledCents);
+    const day = dayKey(now);
+    for (const p of deps.repos.profiles.all()) {
+      deps.repos.snapshots.writeDaily(p.id, day, p.startingCashCents + deps.repos.trades.settledConfirmedCents(p.id));
+    }
   }
 
   /**

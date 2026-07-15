@@ -14,12 +14,23 @@ export interface CreditsEntry { id: number; ts: number; n: number; }
 export interface LimitsReport { id: number; tradeId: string; book: string; maxAllowedCents: number; sentAt: number; }
 export interface BankrollSnapshot { profileId: number; dayKey: string; bankrollCents: number; }
 
+/** The analytics read model's single query row: a Trade plus the insert-stamped
+ *  day_key/market the shared Trade type deliberately omits. */
+export interface AnalyticsTradeRow {
+  id: string; category: Trade['category']; event: string; sport: string; legs: Leg[];
+  marginInitial: number; marginRecheck: number | null; marginFinal: number | null;
+  status: TradeStatus; killReason: Trade['killReason']; resultCents: number | null;
+  createdAt: number; verifiedAt: number | null; confirmedAt: number | null;
+  settledAt: number | null; eventStartsAt: number; dayKey: string; market: string | null;
+}
+
 interface TradeRow {
   id: string; profile_id: number; category: Trade['category']; event: string; sport: string;
   market: string | null; legs: string; margin_initial: number; margin_recheck: number | null;
   margin_final: number | null; status: TradeStatus; kill_reason: Trade['killReason'];
   result_cents: number | null; created_at: number; verify_due_at: number; verified_at: number | null;
   fresh_until: number | null; settled_at: number | null; event_starts_at: number; day_key: string;
+  confirmed_at: number | null;
 }
 interface BookRow {
   name: string; sport: string; sharp_exempt: 0 | 1; heat: number;
@@ -32,7 +43,7 @@ function rowToTrade(r: TradeRow): Trade {
     legs: JSON.parse(r.legs) as Leg[], marginInitial: r.margin_initial, marginRecheck: r.margin_recheck,
     marginFinal: r.margin_final, status: r.status, killReason: r.kill_reason, resultCents: r.result_cents,
     createdAt: r.created_at, verifyDueAt: r.verify_due_at, verifiedAt: r.verified_at,
-    freshUntil: r.fresh_until, settledAt: r.settled_at, eventStartsAt: r.event_starts_at,
+    freshUntil: r.fresh_until, settledAt: r.settled_at, confirmedAt: r.confirmed_at, eventStartsAt: r.event_starts_at,
   };
 }
 
@@ -49,16 +60,16 @@ export function Repos(db: Db) {
     tradeInsert: db.prepare(`INSERT INTO trades (
         id, profile_id, category, event, sport, market, legs, margin_initial, margin_recheck, margin_final,
         status, kill_reason, result_cents, created_at, verify_due_at, verified_at, fresh_until, settled_at,
-        event_starts_at, day_key)
+        confirmed_at, event_starts_at, day_key)
       VALUES (@id, @profileId, @category, @event, @sport, @market, @legs, @marginInitial, @marginRecheck,
         @marginFinal, @status, @killReason, @resultCents, @createdAt, @verifyDueAt, @verifiedAt, @freshUntil,
-        @settledAt, @eventStartsAt, @dayKey)`),
+        @settledAt, @confirmedAt, @eventStartsAt, @dayKey)`),
     tradeUpdate: db.prepare(`UPDATE trades SET
         profile_id = @profileId, category = @category, event = @event, sport = @sport, legs = @legs,
         margin_initial = @marginInitial, margin_recheck = @marginRecheck, margin_final = @marginFinal,
         status = @status, kill_reason = @killReason, result_cents = @resultCents, created_at = @createdAt,
         verify_due_at = @verifyDueAt, verified_at = @verifiedAt, fresh_until = @freshUntil,
-        settled_at = @settledAt, event_starts_at = @eventStartsAt
+        settled_at = @settledAt, confirmed_at = @confirmedAt, event_starts_at = @eventStartsAt
       WHERE id = @id`), // market + day_key are stamped at insert and immutable
     tradeById: db.prepare('SELECT * FROM trades WHERE id = ?'),
     tradeByStatus: db.prepare('SELECT * FROM trades WHERE status = ? ORDER BY created_at ASC'),
@@ -102,6 +113,9 @@ export function Repos(db: Db) {
         AND EXISTS (SELECT 1 FROM json_each(t.legs) WHERE json_extract(json_each.value, '$.book') = @book)
       ORDER BY verified_at ASC, id ASC`),
     eventsByKind: db.prepare('SELECT * FROM events_log WHERE kind = ? ORDER BY ts ASC, id ASC'),
+    tradeAnalyticsRows: db.prepare('SELECT * FROM trades WHERE profile_id = ? ORDER BY created_at ASC, id ASC'),
+    tradeSettledConfirmedCents: db.prepare(`SELECT COALESCE(SUM(result_cents), 0) AS c FROM trades
+      WHERE profile_id = ? AND status = 'SETTLED' AND confirmed_at IS NOT NULL`),
   };
 
   const bindTrade = (t: Trade) => ({
@@ -109,7 +123,7 @@ export function Repos(db: Db) {
     legs: JSON.stringify(t.legs), marginInitial: t.marginInitial, marginRecheck: t.marginRecheck,
     marginFinal: t.marginFinal, status: t.status, killReason: t.killReason, resultCents: t.resultCents,
     createdAt: t.createdAt, verifyDueAt: t.verifyDueAt, verifiedAt: t.verifiedAt, freshUntil: t.freshUntil,
-    settledAt: t.settledAt, eventStartsAt: t.eventStartsAt,
+    settledAt: t.settledAt, confirmedAt: t.confirmedAt ?? null, eventStartsAt: t.eventStartsAt,
   });
 
   const trades = {
@@ -165,6 +179,21 @@ export function Repos(db: Db) {
     sentVolumeByBook(book: string): { verifiedAt: number; market: string | null }[] {
       return (st.tradeSentVolumeByBook.all({ book }) as { va: number; market: string | null }[])
         .map((r) => ({ verifiedAt: r.va, market: r.market }));
+    },
+    /** Every trade of one profile with its insert-stamped day_key/market — the analytics read model's diet. */
+    analyticsRows(profileId: number): AnalyticsTradeRow[] {
+      return (st.tradeAnalyticsRows.all(profileId) as TradeRow[]).map((r) => ({
+        id: r.id, category: r.category, event: r.event, sport: r.sport,
+        legs: JSON.parse(r.legs) as Leg[],
+        marginInitial: r.margin_initial, marginRecheck: r.margin_recheck, marginFinal: r.margin_final,
+        status: r.status, killReason: r.kill_reason, resultCents: r.result_cents,
+        createdAt: r.created_at, verifiedAt: r.verified_at, confirmedAt: r.confirmed_at,
+        settledAt: r.settled_at, eventStartsAt: r.event_starts_at, dayKey: r.day_key, market: r.market,
+      }));
+    },
+    /** Real money: Σ settled results the user actually confirmed — the snapshot writer's sum. */
+    settledConfirmedCents(profileId: number): number {
+      return (st.tradeSettledConfirmedCents.get(profileId) as { c: number }).c;
     },
   };
 
