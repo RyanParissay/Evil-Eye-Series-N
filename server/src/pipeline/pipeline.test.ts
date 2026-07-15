@@ -141,10 +141,9 @@ test('verify: edge held → VERIFIED with rounded stakes, fresh window, alert lo
     for (const leg of t.legs) {
       expect(leg.stakeCents).not.toBeNull();
       expect(leg.stakeCents! % 500).toBe(0); // $5 rounding
-      // ARB split and promoted EV Kelly always clear the $10 floor; a costed
-      // middle may Kelly to 0 (no stake is not a stake — the floor never applies).
-      if (t.category !== 'MIDDLE') expect(leg.stakeCents!).toBeGreaterThanOrEqual(1_000);
-      else expect(leg.stakeCents!).toBeGreaterThanOrEqual(0);
+      // Flat-pair split (ARB + MIDDLE) and promoted-EV Kelly all clear the $10
+      // floor — a promoted card never shows a $0 leg (amended 2026-07-14).
+      expect(leg.stakeCents!).toBeGreaterThanOrEqual(1_000);
     }
   }
   // Every promotion fired exactly one alert; the sim sender logs each to events_log.
@@ -261,4 +260,142 @@ test('no stakes ever appear on PENDING serializations', () => {
   for (const t of repos.trades.byStatus('PENDING')) {
     expect(/"stakeCents":\s*\d/.test(JSON.stringify(t))).toBe(false); // nor does any API-bound shape
   }
+});
+
+// ---- promotion staking (amended 2026-07-14) --------------------------------
+
+/** Handcrafted quote on the seeded book roster; fetchedAt is stamped by the provider. */
+function q(book: string, sport: string, event: string, market: string, selection: string, odds: number, line: number | null): Quote {
+  return { book, sport, event, market, selection, odds, line, fetchedAt: 0, eventStartsAt: NOW + 3_600_000 };
+}
+
+/** Same quotes every fetch (scan and recheck see identical prices). */
+function staticQuotes(quotes: Quote[]): OddsProvider {
+  return { fetchQuotes: (now) => quotes.map((x) => ({ ...x, fetchedAt: now })) };
+}
+
+/** First fetch (the scan) sees `first`; every later fetch (the recheck) sees `later`. */
+function twoPhase(first: Quote[], later: Quote[]): OddsProvider {
+  let fetches = 0;
+  return {
+    fetchQuotes(now: number): Quote[] {
+      fetches += 1;
+      return (fetches === 1 ? first : later).map((x) => ({ ...x, fetchedAt: now }));
+    },
+  };
+}
+
+test('costed middle promotes with flat-pair stakes; marginFinal stays the recheck edge', () => {
+  // 1.95/1.95 on split lines: sumInv > 1 (costed), ratio ≈ 37 qualifies. Under
+  // Kelly-with-devig-complementary-probs this middle stakes $0/$0 — a middle is
+  // two balanced opposite bets and takes the flat-pair equal-payout split.
+  const { deps, repos, sent } = makeHarness(() => staticQuotes([
+    q('pointsbet', 'basketball', 'MID-EVT', 'total', 'over', 1.95, 210.5),
+    q('bet365', 'basketball', 'MID-EVT', 'total', 'under', 1.95, 216.5),
+  ]));
+  const scan = runScan(deps, NOW);
+  expect(scan).toEqual({ created: 1, killed: 0 });
+
+  const res = runVerifyDue(deps, VNOW);
+  expect(res).toEqual({ promoted: 1, killed: 0, expired: 0 });
+
+  const [t] = repos.trades.byStatus('VERIFIED');
+  expect(t!.category).toBe('MIDDLE');
+  // Flat-pair $100 split at even odds: $50/$50 — every leg ≥ minStake, $5-rounded.
+  expect(t!.legs.map((l) => l.stakeCents)).toEqual([5_000, 5_000]);
+  for (const leg of t!.legs) {
+    expect(leg.stakeCents!).toBeGreaterThanOrEqual(1_000);
+    expect(leg.stakeCents! % 500).toBe(0);
+  }
+  // marginFinal is the recheck edge (bothWinPayoutFrac − max(costFrac, 0)), NOT
+  // the arb roundedMargin of these stakes (−0.025 — a middle is not an arb, and
+  // the ROUNDING_DESTROYS_MARGIN re-check must not touch it).
+  expect(t!.marginFinal!).toBeCloseTo(0.95 - (2 / 1.95 - 1), 12);
+  expect(t!.marginFinal!).toBeGreaterThan(0);
+  expect(sent).toHaveLength(1);
+});
+
+test('ARB whose recheck odds let rounding eat the margin → KILLED ROUNDING_DESTROYS_MARGIN', () => {
+  const arbQ = (home: number, away: number) => [
+    q('bet365', 'basketball', 'ARB-EVT', 'moneyline', 'home', home, null),
+    q('fanduel', 'basketball', 'ARB-EVT', 'moneyline', 'away', away, null),
+  ];
+  // Scan 1.347/4.04: margin 1.008%, rounded stakes 7500/2500 lock in +1% — passes
+  // the scan-time gate. Recheck 1.391/3.686: margin 0.980% still inside the 5%
+  // tolerance, but the split rounds to 7500/2500 whose min payout is 9215 —
+  // rounding destroyed the margin at the odds actually being staked.
+  const { deps, repos, sent } = makeHarness(() => twoPhase(arbQ(1.347, 4.04), arbQ(1.391, 3.686)));
+  const scan = runScan(deps, NOW);
+  expect(scan).toEqual({ created: 1, killed: 0 });
+
+  const res = runVerifyDue(deps, VNOW);
+  expect(res).toEqual({ promoted: 0, killed: 1, expired: 0 });
+  expect(sent).toHaveLength(0);
+
+  const [t] = repos.trades.byStatus('KILLED');
+  expect(t!.killReason).toBe('ROUNDING_DESTROYS_MARGIN');
+  expect(t!.marginRecheck!).toBeGreaterThan(0); // drift passed tolerance — rounding, not the line move, killed it
+  expect(t!.verifiedAt).toBeNull();
+  for (const leg of t!.legs) expect(leg.stakeCents).toBeNull(); // killed trades never carry stakes
+  // The invariant the amendment locks: a VERIFIED trade never persists marginFinal ≤ 0.
+  for (const v of repos.trades.byStatus('VERIFIED')) expect(v.marginFinal!).toBeGreaterThan(0);
+});
+
+test('defensive zero-stake guard: all legs stake to 0 → EXPIRED, journal notes held back — zero stake', () => {
+  // Hand-built EV whose recheck edge is negative but inside a loose tolerance of
+  // its (bad) initial margin: Kelly returns 0, and a $0 card must never promote.
+  const { deps, repos, sent } = makeHarness(() => staticQuotes([
+    q('pinnacle', 'baseball', 'ZERO-EVT', 'moneyline', 'home', 1.9, null),
+    q('pinnacle', 'baseball', 'ZERO-EVT', 'moneyline', 'away', 2.1, null),
+    q('draftkings', 'baseball', 'ZERO-EVT', 'moneyline', 'away', 1.8, null),
+  ]));
+  repos.trades.insert(
+    mkTrade({
+      id: 'zero-stake',
+      event: 'ZERO-EVT',
+      legs: [{ book: 'draftkings', selection: 'away', odds: 1.8, stakeCents: null }],
+      marginInitial: -0.2, // fair away = 0.475 → recheck edge −0.145, within tolerance of −0.2
+      verifyDueAt: NOW,
+    }),
+    DAY, 'moneyline',
+  );
+
+  const res = runVerifyDue(deps, VNOW);
+  expect(res).toEqual({ promoted: 0, killed: 0, expired: 1 });
+  expect(sent).toHaveLength(0);
+
+  const t = repos.trades.byId('zero-stake')!;
+  expect(t.status).toBe('EXPIRED');
+  expect(t.verifiedAt).toBeNull(); // held back was never sent
+  for (const leg of t.legs) expect(leg.stakeCents).toBeNull();
+  expect(repos.journal.all().some((j) => j.text.includes('held back — zero stake'))).toBe(true);
+});
+
+test('probe: across 50 seeds every promoted MIDDLE carries real stakes on both legs', () => {
+  // The review found 59% of promoted middles were $0/$0 across 50 seeds under
+  // Kelly staking. Flat-pair staking must leave none.
+  let middlesPromoted = 0;
+  for (let seed = 1; seed <= 50; seed++) {
+    const db = openDb(':memory:');
+    const repos = Repos(db);
+    const rng = mulberry32(seed);
+    const sender: AlertSender = { sendVerified(): void {} };
+    const deps: PipeDeps = { repos, provider: frozen(SimOddsProvider(rng)), sender, s: () => repos.settings.all(), rng };
+    repos.settings.set({ dailyPickCap: 1_000 }); // the cap is not what's under probe
+    runScan(deps, NOW);
+    runVerifyDue(deps, VNOW);
+    for (const t of repos.trades.byStatus('VERIFIED')) {
+      expect(t.marginFinal!).toBeGreaterThan(0); // no VERIFIED trade ever persists marginFinal ≤ 0
+      for (const leg of t.legs) expect(leg.stakeCents!).toBeGreaterThan(0);
+      if (t.category === 'MIDDLE') {
+        middlesPromoted += 1;
+        for (const leg of t.legs) {
+          expect(leg.stakeCents!).toBeGreaterThanOrEqual(1_000);
+          expect(leg.stakeCents! % 500).toBe(0);
+        }
+      }
+    }
+    db.close();
+  }
+  expect(middlesPromoted).toBeGreaterThan(0); // the probe actually exercised middles
 });

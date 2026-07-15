@@ -78,6 +78,26 @@ export function runVerifyDue(deps: PipeDeps, now: number): { promoted: number; k
       continue;
     }
 
+    // Stakes at the RECHECK odds — the prices the card will actually show.
+    const odds = fresh.map((q) => q.odds);
+    const staked = stakeAtRecheck(t, odds, recheck, s);
+    if (staked === null) {
+      // ARB only: the scan-time rounding gate re-applied at the odds actually
+      // being staked — $5 rounding ate the margin, so the "sure thing" isn't.
+      killTrade(repos, t, 'ROUNDING_DESTROYS_MARGIN');
+      killed += 1;
+      continue;
+    }
+    if (staked.stakes.every((st) => st === 0)) {
+      // Defensive — unreachable with the bases above (flat-pair floors at
+      // minStake; promoted EV entered at ≥2% edge): never alert a $0 card.
+      t.status = 'EXPIRED';
+      repos.trades.update(t);
+      repos.journal.add(now, `${t.category} ${t.event} passed verification but was held back — zero stake.`);
+      expired += 1;
+      continue;
+    }
+
     // Daily pick cap — SENT semantics: promoting stamps verified_at, so the
     // count grows as this loop promotes and the cap can fill mid-run.
     if (repos.trades.verifiedSentToday(day) >= s.dailyPickCap) {
@@ -88,7 +108,7 @@ export function runVerifyDue(deps: PipeDeps, now: number): { promoted: number; k
       continue;
     }
 
-    promote(t, fresh, recheck, s, now);
+    promote(t, odds, staked, s, now);
     repos.trades.update(t);
     deps.sender.sendVerified(t);
     promoted += 1;
@@ -99,7 +119,7 @@ export function runVerifyDue(deps: PipeDeps, now: number): { promoted: number; k
 
 interface Recheck {
   edge: number;
-  /** Per-leg fair win probs for Kelly staking; null for ARB (split staking). */
+  /** Per-leg fair win probs for Kelly staking (EV only); null for ARB and MIDDLE (flat-pair split). */
   fairProbs: number[] | null;
 }
 
@@ -114,39 +134,51 @@ function recomputeEdge(t: Trade, fresh: Quote[], all: Quote[]): Recheck | null {
       return { edge: evEdge(p, odds[0]!), fairProbs: [p] };
     }
     case 'MIDDLE': {
+      // Same tolerance-comparison basis as detection (candidates.ts). No fair
+      // probs: a middle stakes by the flat-pair split, never by Kelly.
       const m = middleMetrics(odds[0]!, odds[1]!);
-      // Same tolerance-comparison basis as detection (candidates.ts).
-      // Staking probs: the leg pair devigged as if complementary — the legs
-      // overlap (both can win), so true win probs sum to 1 + P(both win) ≥ 1
-      // and the devig is a conservative floor. Free middles Kelly positive;
-      // a costed middle may Kelly to 0 (no stake is not a stake — no floor).
-      return { edge: m.bothWinPayoutFrac - Math.max(m.costFrac, 0), fairProbs: devigFairProbs(odds) };
+      return { edge: m.bothWinPayoutFrac - Math.max(m.costFrac, 0), fairProbs: null };
     }
   }
 }
 
-function promote(t: Trade, fresh: Quote[], recheck: Recheck, s: Settings, now: number): void {
-  const odds = fresh.map((q) => q.odds);
-  let stakes: number[];
-  let marginFinal: number;
-  if (t.category === 'ARB') {
-    // Equal-payout split; the final margin is the one the ROUNDED stakes lock in.
-    const r = arbStakesCents(odds, s);
-    stakes = r.stakes;
-    marginFinal = r.roundedMargin;
-  } else {
-    stakes = t.legs.map((_, i) => kellyStakeCents(recheck.fairProbs![i]!, odds[i]!, s));
-    marginFinal = recheck.edge; // rounding does not move an EV/MIDDLE edge
+interface Staked {
+  stakes: number[];
+  marginFinal: number;
+}
+
+/**
+ * Stakes at recheck odds (amended 2026-07-14). ARB and MIDDLE both take the
+ * arbStakesCents flat-pair equal-payout split — a middle is two balanced
+ * opposite bets; Kelly with devig-complementary probs is structurally ≤ 0 for
+ * every costed middle and is NOT a middle staking basis. EV keeps Kelly; its
+ * ≥2% entry threshold keeps the stake positive. Returns null only for an ARB
+ * whose ROUNDED stakes no longer lock in a positive margin.
+ */
+function stakeAtRecheck(t: Trade, odds: number[], recheck: Recheck, s: Settings): Staked | null {
+  if (t.category === 'EV') {
+    return { stakes: odds.map((o, i) => kellyStakeCents(recheck.fairProbs![i]!, o, s)), marginFinal: recheck.edge };
   }
+  const r = arbStakesCents(odds, s);
+  if (t.category === 'ARB') {
+    // The final margin is the one the ROUNDED stakes lock in; ≤ 0 → no arb.
+    return r.roundedMargin <= 0 ? null : { stakes: r.stakes, marginFinal: r.roundedMargin };
+  }
+  // MIDDLE: split stakes, but the margin basis stays the recheck edge — a
+  // middle is not an arb, and its roundedMargin means nothing.
+  return { stakes: r.stakes, marginFinal: recheck.edge };
+}
+
+function promote(t: Trade, odds: number[], staked: Staked, s: Settings, now: number): void {
   // Legs take the verified prices — the alert says exactly what to bet, at what odds.
-  t.legs = t.legs.map((leg, i) => ({ ...leg, odds: odds[i]!, stakeCents: stakes[i]! }));
+  t.legs = t.legs.map((leg, i) => ({ ...leg, odds: odds[i]!, stakeCents: staked.stakes[i]! }));
   t.status = 'VERIFIED';
   t.verifiedAt = now;
   t.freshUntil = now + s.freshWindowSecs * 1000;
-  t.marginFinal = marginFinal;
+  t.marginFinal = staked.marginFinal;
 }
 
-function killTrade(repos: PipeDeps['repos'], t: Trade, reason: 'QUOTE_STALE'): void {
+function killTrade(repos: PipeDeps['repos'], t: Trade, reason: 'QUOTE_STALE' | 'ROUNDING_DESTROYS_MARGIN'): void {
   t.status = 'KILLED';
   t.killReason = reason;
   repos.trades.update(t);
