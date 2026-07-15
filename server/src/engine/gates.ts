@@ -47,7 +47,7 @@ export function runKillBattery(c: Candidate, ctx: GateContext): GateVerdict {
   for (const leg of c.legs) {
     const book = ctx.books.get(leg.book);
     if (!book) return kill('ONE_SPORT_RULE');
-    if (!book.sharpExempt && book.sport !== c.sport) return kill('ONE_SPORT_RULE');
+    if (s.oneSportRule !== 0 && !book.sharpExempt && book.sport !== c.sport) return kill('ONE_SPORT_RULE');
     legBooks.push(book);
   }
 
