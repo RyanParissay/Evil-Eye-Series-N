@@ -1,0 +1,39 @@
+[
+  {
+    "id": "evt1", "sport_key": "basketball_nba", "commence_time": "2026-07-15T02:10:00Z",
+    "home_team": "Suns", "away_team": "Nuggets",
+    "bookmakers": [
+      { "key": "pinnacle", "markets": [
+        { "key": "h2h", "outcomes": [
+          { "name": "Suns", "price": 1.95 }, { "name": "Nuggets", "price": 1.95 } ] },
+        { "key": "totals", "outcomes": [
+          { "name": "Over", "price": 1.92, "point": 8.5 }, { "name": "Under", "price": 1.98, "point": 8.5 } ] } ] },
+      { "key": "fanduel", "markets": [
+        { "key": "h2h", "outcomes": [
+          { "name": "Suns", "price": 1.9 }, { "name": "Nuggets", "price": 2.05 } ] },
+        { "key": "spreads", "outcomes": [
+          { "name": "Suns", "price": 1.91, "point": -3.5 }, { "name": "Nuggets", "price": 1.95, "point": 3.5 } ] } ] },
+      { "key": "nowhere-book", "markets": [
+        { "key": "h2h", "outcomes": [
+          { "name": "Suns", "price": 3.0 }, { "name": "Nuggets", "price": 3.0 } ] } ] }
+    ]
+  },
+  {
+    "id": "evt2", "sport_key": "soccer_epl", "commence_time": "2026-07-15T18:00:00Z",
+    "home_team": "Arsenal", "away_team": "Chelsea",
+    "bookmakers": [
+      { "key": "pinnacle", "markets": [
+        { "key": "h2h", "outcomes": [
+          { "name": "Arsenal", "price": 2.9 }, { "name": "Chelsea", "price": 2.6 }, { "name": "Draw", "price": 3.4 } ] } ] },
+      { "key": "bet365", "markets": [
+        { "key": "h2h", "outcomes": [
+          { "name": "Arsenal", "price": 3.1 }, { "name": "Chelsea", "price": 2.5 }, { "name": "Draw", "price": 3.3 } ] } ] }
+    ]
+  },
+  {
+    "id": "evt3", "sport_key": "cricket_odi", "commence_time": "2026-07-15T10:00:00Z",
+    "home_team": "A", "away_team": "B",
+    "bookmakers": [ { "key": "pinnacle", "markets": [
+      { "key": "h2h", "outcomes": [ { "name": "A", "price": 1.9 }, { "name": "B", "price": 1.9 } ] } ] } ]
+  }
+]

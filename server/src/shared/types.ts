@@ -12,5 +12,11 @@ export interface Trade {
 }
 export interface Quote { book: string; sport: string; event: string; market: string;
   selection: string; odds: number; line: number | null; fetchedAt: number; eventStartsAt: number; }
-export interface OddsProvider { fetchQuotes(now: number): Quote[]; }
+export interface OddsProvider {
+  fetchQuotes(now: number): Quote[];
+  /** Live providers refresh their snapshot here (awaited by the runner and the
+   *  scan route); sim never defines it. Must never throw — a failed refresh
+   *  keeps the last cache and logs, so the chain survives (Plan 6 Design §4). */
+  refresh?(now: number): Promise<void>;
+}
 export interface AlertSender { sendVerified(trade: Trade): void; } // sim: events_log row

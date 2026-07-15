@@ -119,14 +119,21 @@ export function startScheduler(deps: PipeDeps, planDeps: PlanDeps, timer: Timer,
   }
 
   function onTimer(gen: number): void {
-    if (stopped || gen !== generation) return; // stale wake (superseded by a manual scan): drop it
-    let delayMs = RETRY_MS;
-    try {
-      delayMs = Math.max(0, runDue() - clock()); // overdue ats clamp to "run immediately"
-    } catch (err) {
-      console.error('[scheduler] tick failed — retrying in 60s', err);
-    }
-    arm(delayMs); // the ONE live timeout: the chain reschedules itself
+    if (stopped || gen !== generation) return; // stale wake: drop it
+    void (async () => {
+      try {
+        if (deps.provider.refresh) await deps.provider.refresh(clock());
+      } catch {
+        /* refresh never throws by contract; belt-and-suspenders */
+      }
+      let delayMs = RETRY_MS;
+      try {
+        delayMs = Math.max(0, runDue() - clock());
+      } catch (err) {
+        console.error('[scheduler] tick failed — retrying in 60s', err);
+      }
+      arm(delayMs);
+    })();
   }
 
   arm(0); // seed the chain; with lastScanAt null the first tick scans immediately

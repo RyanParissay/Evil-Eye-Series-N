@@ -236,11 +236,12 @@ export function createApp(o: AppOptions): App {
     res.json({ view, trades });
   });
 
-  app.post('/api/scan', (_req, res) => {
+  app.post('/api/scan', async (_req, res) => {
     const now = clock();
     if (isQuietHours(now, repos.settings.all())) {
       return fail(res, 503, 'quiet_hours', 'scanning is paused during Vancouver quiet hours');
     }
+    if (deps.provider.refresh) await deps.provider.refresh(now); // live snapshot first; sim no-ops
     res.json(scheduler.scanNow(now));
   });
 
