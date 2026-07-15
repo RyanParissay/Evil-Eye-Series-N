@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AppState } from '../lib/api';
 import { LiveCard } from '../components/LiveCard';
 import { PendingCard } from '../components/PendingCard';
+import { ViewAll } from '../components/ViewAll';
 
 interface TradesScreenProps {
   state: AppState | null;
@@ -30,6 +31,7 @@ export function TradesScreen({ state, now, refresh }: TradesScreenProps) {
       {pending.map((t) => (
         <PendingCard key={t.id} trade={t} now={now} />
       ))}
+      <ViewAll killedToday={state?.counts.killedToday ?? 0} />
     </main>
   );
 }
