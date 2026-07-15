@@ -17,6 +17,10 @@ import { arbMargin, devigFairProbs, evEdge, middleMetrics } from '../engine/odds
 const PINNACLE = 'pinnacle';
 const OVER = 'over';
 const UNDER = 'under';
+// Soccer h2h — the ONLY market sanctioned for 3-leg arbs (home/draw/away).
+// Matches the sim provider's 1X2 identifiers (providers/simOdds.ts).
+const SOCCER = 'soccer';
+const SOCCER_H2H_MARKET = '1X2';
 
 function toLeg(q: Quote): Candidate['legs'][number] {
   return { book: q.book, selection: q.selection, odds: q.odds, fetchedAt: q.fetchedAt };
@@ -48,8 +52,10 @@ export function detectCandidates(quotes: Quote[], s: Settings): Candidate[] {
 
 /**
  * ARB: best odds per outcome across books within ONE line group; qualifies at
- * arbMargin ≥ minArbMarginPct/100. Two outcomes only, except soccer h2h
- * (home/draw/away) where three legs are sanctioned.
+ * arbMargin ≥ minArbMarginPct/100. Two outcomes only, except soccer h2h (1X2)
+ * groups, which require ALL THREE outcomes present — a 2-leg subset of a 1X2
+ * market is a false arb (the unquoted draw beats both legs), so an incomplete
+ * snapshot yields nothing.
  */
 function detectArbs(group: Quote[], s: Settings, out: Candidate[]): void {
   const bestBySelection = new Map<string, Quote>();
@@ -57,8 +63,9 @@ function detectArbs(group: Quote[], s: Settings, out: Candidate[]): void {
     const best = bestBySelection.get(q.selection);
     if (!best || q.odds > best.odds) bestBySelection.set(q.selection, q);
   }
-  const n = bestBySelection.size;
-  if (n !== 2 && !(n === 3 && group[0]!.sport === 'soccer')) return;
+  const first = group[0]!;
+  const soccerH2h = first.sport === SOCCER && first.market === SOCCER_H2H_MARKET;
+  if (bestBySelection.size !== (soccerH2h ? 3 : 2)) return;
   const legs = [...bestBySelection.values()];
   const margin = arbMargin(legs.map((l) => l.odds));
   if (margin < s.minArbMarginPct / 100) return;

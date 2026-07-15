@@ -69,6 +69,26 @@ test('ARB: 3-outcome groups outside soccer never combine', () => {
   ], S)).toEqual([]);
 });
 
+test('ARB: 3 selections on a soccer non-h2h market never combine', () => {
+  // Soccer, but NOT the h2h (1X2) market — 3-leg sanction is h2h-only per plan.
+  const o = { sport: 'soccer', event: 'SNH', market: 'double-chance' };
+  expect(detectCandidates([
+    mkQ('sportsinteraction', '1X', 3.2, o),
+    mkQ('betway', '12', 3.6, o),
+    mkQ('bwin', 'X2', 3.1, o),
+  ], S)).toEqual([]);
+});
+
+test('ARB: soccer h2h with only 2 of 3 outcomes quoted yields no arb', () => {
+  const o = { sport: 'soccer', event: 'SOC2', market: '1X2' };
+  // 2.1/2.1 reads as a fat +4.76% two-way "arb" — but the unquoted draw
+  // beats BOTH legs. Incomplete 1X2 snapshots must yield nothing.
+  expect(detectCandidates([
+    mkQ('bet365', 'home', 2.1, o),
+    mkQ('fanduel', 'away', 2.1, o),
+  ], S)).toEqual([]);
+});
+
 test('ARB: line groups are sacred — over 220.5 never pairs with under 219.5', () => {
   const t = { event: 'TOT', market: 'total' };
   // Cross-line pair would show a fat +4.76% "margin" — must never be combined.
