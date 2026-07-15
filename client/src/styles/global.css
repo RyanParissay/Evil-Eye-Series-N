@@ -1,0 +1,135 @@
+/* client/src/styles/global.css — complete TRADES-screen + shell stylesheet.
+   Every value from design-inventory §0–§2 unless marked "not pinned by inventory". */
+
+/* ---------- base (§0.1) ---------- */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: #000;
+  color: var(--body-text);
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+body { min-height: 100vh; }
+a { color: #fff; text-decoration: underline; }
+a:hover { color: var(--yellow); }
+::selection { background: var(--yellow); color: #000; }
+button { font-family: inherit; cursor: pointer; }
+button:disabled { cursor: default; }
+
+/* ---------- page shell (§0.5, locked call 15) ---------- */
+.page { max-width: 860px; margin: 0 auto; padding: 24px 22px 80px; }
+
+/* ---------- header (§1) ---------- */
+.header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.wordmark { font-size: 16px; font-weight: 500; letter-spacing: 0.16em; color: #fff; }
+.wordmark .v2 { color: var(--yellow); }
+.mode-badge { border: 2px solid var(--yellow); color: var(--yellow); font-size: 12px; letter-spacing: 0.16em; padding: 6px 14px; font-weight: 500; }
+
+/* ---------- joined-chip nav (§0.4) ---------- */
+.nav { display: flex; gap: 0; border: 2px solid #fff; width: max-content; margin-top: 14px; }
+.nav button { background: none; border: none; border-left: 2px solid #fff; color: var(--muted-label); padding: 8px 18px; font-size: 12px; font-weight: 500; letter-spacing: 0.14em; }
+.nav button:first-child { border-left: none; }
+.nav button.active { background: #fff; color: #000; }
+
+/* ---------- status line (§1) ---------- */
+.status-line { margin-top: 12px; padding: 8px 0; border-bottom: 1px solid var(--grey-divider); font-size: 11px; letter-spacing: 0.1em; color: var(--muted-label); text-align: right; white-space: nowrap; }
+.status-line .time { color: #fff; }
+
+/* ---------- section headers (§2.1, §2.3) ---------- */
+.section-header { margin: 16px 0 8px; font-size: 15px; font-weight: 600; letter-spacing: 0.14em; color: #fff; }
+.section-header.pending { font-weight: 500; color: var(--muted-label); }
+.section-header.inline { margin: 0; }
+
+/* ---------- empty states (locked call 12 — new copy) ---------- */
+.empty-note { font-size: 12px; color: var(--faint); letter-spacing: 0.08em; padding: 14px; }
+
+/* ---------- trade cards (§2.1, §2.3; locked call 13) ---------- */
+.trade-card { border: 2px solid var(--grey-panel); padding: 12px 14px; font-variant-numeric: tabular-nums; }
+.trade-card + .trade-card { border-top: none; }
+.trade-card.pending { opacity: 0.82; }
+.card-top { display: flex; justify-content: space-between; font-size: 14px; }
+.card-title { font-weight: 600; }
+.card-title.pending { color: var(--body-text); }
+.tag { border: 1px solid #fff; color: #fff; font-size: 11px; letter-spacing: 0.1em; padding: 2px 6px; margin-right: 8px; }
+.tag.pending { border-color: var(--muted-label); color: var(--muted-label); }
+.card-status { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.status-text { font-size: 13px; font-weight: 500; letter-spacing: 0.1em; color: var(--body-text); }
+.status-text.pending { color: var(--muted-label); }
+.status-value { font-weight: 600; color: #fff; }
+.status-value.stale { color: var(--yellow); }
+.status-value.dim { color: var(--body-text); }
+.refresh-chip { background: rgba(255, 255, 255, 0.75); border: none; color: #000; font-size: 11px; font-weight: 500; letter-spacing: 0.12em; padding: 4px 10px; }
+
+/* legs (§2.1, §2.3) */
+.legs { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 10px; }
+.leg-btn { white-space: nowrap; background: var(--raised-bg); border: 2px solid var(--grey-strongest); color: #fff; padding: 9px 14px; font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; text-align: left; }
+.leg-btn:hover { border-color: #fff; color: #fff; background: var(--hover-bg); }
+.leg-btn.pending { border-color: var(--grey-divider); color: var(--body-text); }
+.leg-stake { display: inline-block; border-left: 1px solid var(--grey-strongest); margin-left: 14px; padding-left: 14px; color: #fff; font-weight: 700; }
+.leg-arrow { margin-left: 10px; color: var(--muted-label); }
+
+/* action row + metric box (§2.1, locked call 6) */
+.action-row { display: flex; gap: 10px; margin-top: 12px; align-items: center; }
+.confirm-btn { border: none; color: #000; font-size: 11px; letter-spacing: 0.12em; padding: 8px 16px; font-weight: 500; }
+.confirm-btn:hover { opacity: 0.85; }
+.confirm-btn.state-confirm { background: #fff; }
+.confirm-btn.state-confirmed { background: var(--green); }
+.confirm-btn.state-unconfirm { background: var(--yellow); }
+.limited-btn { background: none; color: #fff; border: 2px solid #fff; font-size: 11px; letter-spacing: 0.12em; padding: 6px 14px; }
+.limited-btn.open { background: #fff; color: #000; }
+.metric-box { margin-left: auto; padding: 6px 14px; font-size: 11px; font-weight: 500; letter-spacing: 0.12em; white-space: nowrap; }
+.metric-box.arb { border: 2px solid var(--margin-tint); color: var(--margin-tint); }
+.metric-box.edge { border: 2px solid var(--edge-tint); color: var(--edge-tint); }
+
+/* ---------- TRADE LIMITED? panel (§2.2) ---------- */
+.limited-panel { border: 1px solid var(--grey-panel); background: var(--inset-bg); margin-top: 12px; padding: 12px 14px; }
+.limited-label { font-size: 11px; letter-spacing: 0.14em; color: var(--muted-label); }
+.limited-label.max { margin: 12px 0 6px; }
+.book-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; } /* margin-top not pinned by inventory */
+.book-chip { background: var(--raised-bg); color: var(--body-text); border: 2px solid var(--grey-strongest); font-size: 12px; padding: 6px 12px; }
+.book-chip.selected { background: #fff; color: #000; border-color: #fff; }
+.limited-row { display: flex; gap: 10px; align-items: center; } /* row layout not pinned by inventory */
+.limited-input { width: 110px; background: #000; color: #fff; border: 2px solid var(--grey-panel); padding: 8px 10px; font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; font-family: inherit; }
+.limited-input:focus { border-color: #fff; outline: none; }
+.send-btn { padding: 9px 16px; font-size: 11px; letter-spacing: 0.12em; font-weight: 500; border: none; }
+.send-btn.disabled { background: var(--faint); color: var(--hover-bg); }
+.send-btn.ready { background: #fff; color: #000; }
+.send-btn.armed { background: var(--yellow); color: #000; }
+
+/* ---------- VIEW ALL TRADES (§2.4, §2.5) ---------- */
+.viewall { margin-top: 16px; } /* section rhythm §0.5; exact top-margin not pinned */
+.cta { display: block; width: 100%; background: var(--yellow); color: #000; text-align: center; font-size: 12px; letter-spacing: 0.14em; font-weight: 500; padding: 11px 16px; border: none; }
+.cta:hover { background: #fff; }
+.cta.open { background: var(--cta-greyed-open); }
+.cta.open:hover { background: #fff; }
+.cta-caption { font-size: 11px; letter-spacing: 0.08em; color: var(--faint); text-align: center; margin-top: 8px; } /* margin-top not pinned by inventory */
+.va-box { border: 2px solid var(--trade-log); }
+.va-row { display: grid; grid-template-columns: 0.6fr 1.7fr 2fr 0.9fr 1.1fr; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--grey-subtle-row); font-size: 12px; }
+.va-cat { color: var(--muted-label); letter-spacing: 0.08em; }
+.va-event { color: #fff; }
+.va-legs { color: var(--muted-label); }
+.va-metric.arb { color: var(--margin-tint); }
+.va-metric.edge { color: var(--edge-tint); }
+.va-status { text-align: right; letter-spacing: 0.08em; }
+.va-footer { display: flex; gap: 20px; padding: 10px 14px; }
+.list-btn { background: none; border: none; font-size: 12px; letter-spacing: 0.14em; color: var(--faint); padding: 0; }
+.list-btn:hover { color: #fff; }
+.hist-header-row { display: flex; justify-content: space-between; align-items: baseline; margin: 18px 0 8px; }
+.grave-toggle { background: none; border: 1px solid var(--grey-strongest); color: var(--muted-label); padding: 3px 10px; font-size: 11px; letter-spacing: 0.1em; }
+.grave-toggle:hover { color: #fff; }
+.hist-row { display: grid; grid-template-columns: 2.4fr 1.5fr 1fr; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--grey-subtle-row); font-size: 12px; }
+.hist-desc { color: var(--body-text); }
+.hist-outcome { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+.chip { border: 1px solid currentColor; padding: 2px 8px; letter-spacing: 0.1em; font-size: 11px; }
+.hist-when { color: var(--muted-label); text-align: right; letter-spacing: 0.06em; white-space: nowrap; }
+.graveyard { padding: 10px 14px; }
+.grave-title { font-size: 11px; letter-spacing: 0.14em; color: var(--faint); }
+.grave-row { display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid var(--grey-subtle-row); font-size: 12px; color: var(--muted-label); }
+.grave-reason { letter-spacing: 0.08em; color: var(--faint); }
+
+/* ---------- placeholder screens (locked call 15 — new copy) ---------- */
+.placeholder { border: 1px solid var(--grey-panel); margin-top: 16px; padding: 13px 16px; } /* padding patterned on §3.3; not pinned */
+.placeholder-label { font-size: 11px; letter-spacing: 0.14em; color: var(--muted-label); }
+.placeholder-body { font-size: 12px; color: var(--faint); letter-spacing: 0.08em; margin-top: 8px; }

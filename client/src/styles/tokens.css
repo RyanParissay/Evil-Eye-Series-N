@@ -1,0 +1,28 @@
+/* client/src/styles/tokens.css — design tokens, verbatim from design-inventory §0.2 */
+:root {
+  --yellow: #F5D90A;
+  --blue: #5CA8FF;
+  --pink: #FF7AC6;
+  --green: #43d17a;
+  --green-money: #37c86f;
+  --red: #e0442c;
+  --grey-strongest: #cfcfcf;
+  --grey-panel: #ababab;
+  --grey-divider: #8f8f8f;
+  --grey-subtle-row: #4a4a4a;
+  --margin-tint: #a8e8be;
+  --edge-tint: #f2e08a;
+  --trade-log: #f5ecb8;
+  --body-text: #d6d6d6;
+  --muted-label: #9a9a9a;
+  --faint: #5a5a5a;
+  --raised-bg: #161616;
+  --hover-bg: #1e1e1e;
+  --inset-bg: #0d0d0d;
+  --cta-greyed-open: #6a6a6a;
+  --pink-dim-border: #6e2a4e;
+  --blue-dim-border: #2a3a52;
+  --chart-bg: #d9d9d9;
+  --chart-ink: #111;
+  --chart-minor: #999;
+}
