@@ -37,7 +37,7 @@
 - ALL UI copy verbatim from `docs/handoff/design-inventory.md` §5 (exact glyphs listed in Design §16). New copy not in the inventory is flagged `(NEW copy)` where it appears.
 - Data kept forever — exports never delete; settings history is journaled, not overwritten silently (Design §11); no table ever loses rows.
 - Quiet hours 00:00–08:00 America/Vancouver; all wall-clock rendering via `Intl.DateTimeFormat` with `timeZone: 'America/Vancouver'` (never a fixed UTC offset).
-- Ports: server **4400**, Vite dev **5174**. All commands run from the repo root.
+- Ports: server **4400**, Vite dev **5174**. All commands run from the repo root. **Worktree isolation:** the user's own dev servers permanently occupy 4400/5174 from the main checkout — every manual verify/smoke boots from the EXECUTION WORKTREE with the server port patched to a free port ≥ 4499 (temporary local edit of `PORT` in `server/src/index.ts`, never committed; client pointed at it via `EE_API_TARGET`), curls adjusted to match, and NEVER against the main checkout.
 - TDD every task; commit after every task. The full suite must stay green throughout (server 117 + client 20 at this plan's authoring baseline, plus Plan 3's — and possibly Plan 4's — additions).
 
 ## Interface Contracts (referenced by all tasks)
@@ -2948,7 +2948,9 @@ Expected: server suite + client suite all pass; both typechecks clean.
 
 - [ ] **Step 3: End-to-end smoke (manual, real processes)**
 
-Terminal A: `npm run dev` (4400). Terminal B: `npm run dev:client` (5174). Then:
+> **Worktree isolation (PM directive):** the user's dev servers occupy 4400/5174 from the main checkout. Run this smoke FROM THE EXECUTION WORKTREE with the server port patched to a free port ≥ 4499 (temporarily edit `PORT` in `server/src/index.ts`; revert before committing) and start the client with `EE_API_TARGET=http://localhost:<port> npm run dev:client` (Vite auto-bumps its own port). Adjust every `localhost:4400`/`:5174` below to the patched ports. Never boot against, or POST to, the user's 4400.
+
+Terminal A: `npm run dev` (patched port). Terminal B: `EE_API_TARGET=http://localhost:<port> npm run dev:client`. Then:
 1. SETTINGS renders all six panels with live values; every mockup label present verbatim.
 2. Mix: drag EV to 0 → over the next scans NO EV pick ever promotes (TRADES tab); the brain rationale gains the mix clause. Restore 47/24/29.
 3. `curl -s -X PATCH localhost:4400/api/settings -d '{"mixArbPct":50}' -H 'content-type: application/json'` → 400 (trio rule).
