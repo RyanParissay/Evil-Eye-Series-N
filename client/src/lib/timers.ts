@@ -9,7 +9,7 @@ export interface LiveTimer {
 export function liveTimer(freshUntil: number, now: number): LiveTimer {
   const diffMs = freshUntil - now;
   if (diffMs > 0) return { phase: 'FRESH', seconds: Math.ceil(diffMs / 1000) };
-  return { phase: 'STALE', seconds: Math.floor((now - freshUntil) / 1000) };
+  return { phase: 'STALE', seconds: Math.floor((now - freshUntil) / 1000) }; // not -diffMs: -0 breaks toEqual
 }
 
 /** CHECKING AGAIN IN — clamps at 0; the client NEVER resets to 75. */
