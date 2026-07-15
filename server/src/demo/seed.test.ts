@@ -163,6 +163,7 @@ test('additive-only: a pre-existing non-demo trade survives untouched; nothing i
     marginInitial: 0.03, marginRecheck: 0.03, marginFinal: 0.03, status: 'VERIFIED', killReason: null,
     resultCents: null, createdAt: NOW - 1_000, verifyDueAt: NOW - 900, verifiedAt: NOW - 500,
     freshUntil: NOW + 1_000, settledAt: null, eventStartsAt: NOW + 3_600_000,
+    confirmedAt: null, // merge-integration: Plan 4's confirmed_at column surfaces on every read
   };
   repos.trades.insert(other, dayKey(NOW - 1_000), 'moneyline');
 
