@@ -43,12 +43,7 @@ export function TwilioWhatsAppSender(
         return;
       }
 
-      // NOTE (deviation, type-only, zero runtime effect): `whatsappNumber` is a
-      // Plan 5 Settings field not yet merged into this Phase A branch's
-      // shared/defaults.ts (out of this task's file scope). This cast is a
-      // narrow type bridge only; it disappears once Plan 5's Settings widening
-      // merges. See implementer report for full detail.
-      const to = (repos.settings.all() as unknown as { whatsappNumber: string }).whatsappNumber;
+      const to = repos.settings.all().whatsappNumber;
       const sid = env.TWILIO_ACCOUNT_SID ?? '';
       const token = env.TWILIO_AUTH_TOKEN ?? '';
       const from = env.TWILIO_WHATSAPP_FROM ?? '';

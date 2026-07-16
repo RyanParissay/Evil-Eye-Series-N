@@ -41,9 +41,7 @@ test('dev mode short-circuits BEFORE any network — throwing fetch proves it', 
 
 test('live mode posts Messages.json with basic auth; failures log wa_error, never throw', async () => {
   const repos = Repos(openDb(':memory:'));
-  // NOTE (deviation, type-only, zero runtime effect): see twilio.ts NOTE — same
-  // Plan 5 Settings-field gap; `as any` is a narrow, test-only type bridge.
-  repos.settings.set({ whatsappNumber: '+1 604 555 8112' } as any);
+  repos.settings.set({ whatsappNumber: '+1 604 555 8112' });
   const calls: { url: string; init: RequestInit }[] = [];
   const fetchImpl = (async (url: RequestInfo | URL, init?: RequestInit) => {
     calls.push({ url: String(url), init: init ?? {} });

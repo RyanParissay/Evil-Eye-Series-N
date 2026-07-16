@@ -6,6 +6,7 @@ import { dayKey } from '../scheduler/vancouverTime.js';
 import { displayName, lastPass, type PassPayload } from '../brain/pass.js';
 import { DEFAULT_SETTINGS, type Settings } from '../shared/defaults.js';
 import { disabledSportSet } from '../pipeline/eligibility.js';
+import { modeLabel } from '../live/mode.js';
 
 const DAY_MS = 86_400_000;
 /** $3/month hard cap — Plan 6 enforces the spend; Plan 5 displays it honestly. */
@@ -16,7 +17,7 @@ export interface SettingsBookView {
 }
 
 export interface SettingsView {
-  mode: 'SIMULATED';
+  mode: 'SIMULATED' | 'LIVE';
   settings: Settings;
   forecaster: {
     projectedPerDay: number; dailyAllowance: number; usedThisMonth: number;
@@ -58,15 +59,19 @@ export function buildSettingsView(deps: PipeDeps, now: number): SettingsView {
     || s.heatHalfLifeDays !== DEFAULT_SETTINGS.heatHalfLifeDays;
 
   const last = lastPass(repos);
-  const llmSpentCents = repos.eventsLog.byKind('llm_spend')
-    .reduce((sum, e) => sum + ((JSON.parse(e.payload) as { costCents?: number }).costCents ?? 0), 0);
+  // The LLM ledger is integer micro-dollars (Plan 6); convert to cents for display,
+  // rounding UP so spend is never understated.
+  const llmSpentCents = Math.ceil(
+    repos.eventsLog.byKind('llm_spend')
+      .reduce((sum, e) => sum + ((JSON.parse(e.payload) as { costMicro?: number }).costMicro ?? 0), 0) / 10_000,
+  );
   const scans = repos.eventsLog.byKind('scan');
   const backupRows = repos.eventsLog.byKind('backup'); // Plan 6 writes these
   const disabled = disabledSportSet(s);
   const sports = [...new Set(books.filter((b) => b.sport !== 'ANY').map((b) => b.sport))].sort();
 
   return {
-    mode: 'SIMULATED',
+    mode: modeLabel(s),
     settings: s,
     forecaster: {
       projectedPerDay,

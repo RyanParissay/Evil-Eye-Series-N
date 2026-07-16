@@ -73,7 +73,7 @@ export function buildAnalyticsView(deps: PipeDeps, profile: Profile, range: Rang
   }).reverse(); // newest first — TRADE LIMITED? reports prepend live (inventory §2.2)
 
   return {
-    simulated: true, // Plan 6 flips this with live mode
+    simulated: s.liveMode !== 1, // honest in both modes (Plan 6)
     today: dayKey(now),
     profile: profileView(profile),
     range,
