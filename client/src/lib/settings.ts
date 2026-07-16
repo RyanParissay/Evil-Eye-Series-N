@@ -33,7 +33,7 @@ export interface ForecasterView {
 }
 
 export interface SettingsView {
-  mode: 'SIMULATED';
+  mode: 'SIMULATED' | 'LIVE';
   settings: SettingsValues;
   forecaster: ForecasterView;
   brain: { lastPassAt: number | null; lastPassBooks: number | null;
@@ -270,4 +270,22 @@ export function journalMinText(s: SettingsValues): string {
 
 export function advSettingsToggle(open: boolean): string {
   return open ? 'ADVANCED SETTINGS — COLLAPSE' : 'ADVANCED SETTINGS →';
+}
+
+// ---- live mode (Plan 6) -------------------------------------------------------
+
+export function modeSwitchLabel(mode: 'SIMULATED' | 'LIVE', armed: boolean): string {
+  if (!armed) return mode;
+  return mode === 'SIMULATED' ? 'GO LIVE? ✓' : 'GO SIMULATED? ✓'; // NEW copy — the §2.2 armed pattern
+}
+
+/** 409 payload → names-only note (NEW copy). */
+export function missingText(names: string[]): string {
+  return names.length === 0 ? '' : `MISSING: ${names.join(' · ')}`;
+}
+
+/** The sim-honest SIM chips flip when the server reports live (Design §10). */
+export function inputStatus(live: boolean, kind: 'feed' | 'poll'): { text: string; tone: 'sim' | 'green' | 'muted' } {
+  if (!live) return { text: 'SIM', tone: 'sim' };
+  return kind === 'feed' ? { text: 'LIVE', tone: 'green' } : { text: 'POLL 45S', tone: 'muted' };
 }

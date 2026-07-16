@@ -25,7 +25,7 @@ export function App() {
       <Nav tab={tab} onSelect={setTab} />
       <StatusLine state={state} />
       {tab === 'TRADES' && <TradesScreen state={state} now={now} refresh={refresh} />}
-      {tab === 'BRAIN' && <BrainScreen />}
+      {tab === 'BRAIN' && <BrainScreen live={modeLabel === 'LIVE'} />}
       {tab === 'ANALYTICS' && <AnalyticsScreen />}
       {tab === 'SETTINGS' && <SettingsScreen />}
     </div>

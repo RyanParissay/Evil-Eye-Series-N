@@ -215,3 +215,20 @@ export const sendWaTest = (): Promise<boolean> => postAction('/api/whatsapp/test
 // ---- demo data (feat-demo-seed) ----------------------------------------------
 
 export const seedDemo = (): Promise<boolean> => postAction('/api/demo/seed');
+
+// ---- mode (Plan 6) ---------------------------------------------------------------
+export async function setMode(live: 0 | 1): Promise<{ ok: boolean; missing: string[] }> {
+  try {
+    const res = await fetch('/api/mode', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ live }),
+    });
+    if (res.ok) return { ok: true, missing: [] };
+    const body = (await res.json()) as { error?: { message?: string } };
+    const m = /missing: (.+)$/.exec(body.error?.message ?? '');
+    return { ok: false, missing: m ? m[1]!.split(', ') : [] };
+  } catch {
+    return { ok: false, missing: [] };
+  }
+}

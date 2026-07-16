@@ -25,7 +25,7 @@ export function SettingsScreen() {
         <RiskBankrollPanel s={view.settings} refresh={refresh} />
         <BrainPanel s={view.settings} brain={view.brain} now={Date.now()} refresh={refresh} />
         <WhatsappPanel s={view.settings} refresh={refresh} />
-        <DataPanel backups={view.backups} mode={view.mode} />
+        <DataPanel backups={view.backups} mode={view.mode} refresh={refresh} />
       </div>
       <AdvancedSettings view={view} now={Date.now()} refresh={refresh} />
     </main>

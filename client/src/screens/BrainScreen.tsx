@@ -9,7 +9,7 @@ import { SiteDetail } from '../components/SiteDetail';
 import { SiteTable } from '../components/SiteTable';
 import { StrategyPerformance } from '../components/StrategyPerformance';
 
-export function BrainScreen() {
+export function BrainScreen({ live }: { live: boolean }) {
   const { brain, refresh } = useBrain();
   const [selectedSite, setSelectedSite] = useState('betmgm');
   const [allSites, setAllSites] = useState(false);
@@ -54,6 +54,7 @@ export function BrainScreen() {
         brain={brain}
         open={settingsOpen}
         onToggle={() => setSettingsOpen((v) => !v)}
+        live={live}
       />
     </main>
   );

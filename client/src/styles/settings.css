@@ -58,6 +58,9 @@
 .chip-live { border: 1px solid currentColor; font-size: 11px; letter-spacing: 0.1em; padding: 2px 8px; }
 .chip-live.sim { color: var(--yellow); }
 .chip-live.green { color: var(--green); }
+.chip-live.muted { color: var(--muted-label); } /* POLL 45S — live inbound-poll status */
+.badge-sim.live { border-color: #fff; color: #fff; }
+.badge-sim.armed { background: var(--yellow); color: #000; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; } /* the design's ONLY rounded element */
 .dot.yellow { background: var(--yellow); }
 .dot.green { background: var(--green); }

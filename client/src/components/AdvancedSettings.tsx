@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { patchBook, patchSettings } from '../lib/api';
 import {
-  advSettingsToggle, bookRow, fallbackItems, journalMinText, killRuleRows,
+  advSettingsToggle, bookRow, fallbackItems, inputStatus, journalMinText, killRuleRows,
   lastTickText, memoryText, planText, safetyRows, sportCell, thresholdTexts,
   type SettingsView,
 } from '../lib/settings';
@@ -16,6 +16,7 @@ interface AdvancedSettingsProps {
 export function AdvancedSettings({ view, now, refresh }: AdvancedSettingsProps) {
   const [open, setOpen] = useState(false);
   const s = view.settings;
+  const feed = inputStatus(view.mode === 'LIVE', 'feed'); // INPUTS chips follow the mode (Design §10)
 
   const toggleBook = async (name: string, enabled: boolean) => {
     await patchBook(name, { enabled: enabled ? 0 : 1 });
@@ -49,7 +50,7 @@ export function AdvancedSettings({ view, now, refresh }: AdvancedSettingsProps) 
               <header className="panel-head">
                 INPUTS
                 <span className="panel-head-note" style={{ float: 'right' }}>
-                  <span className="dot yellow" /> 5 / 5 INPUTS SIM
+                  <span className={`dot ${view.mode === 'LIVE' ? 'green' : 'yellow'}`} /> 5 / 5 INPUTS {view.mode === 'LIVE' ? 'LIVE' : 'SIM'}
                 </span>
               </header>
               <div className="input-row2">
@@ -58,13 +59,13 @@ export function AdvancedSettings({ view, now, refresh }: AdvancedSettingsProps) 
                   <span className="masked">NO KEY — SIM</span>
                   <button className="mini-btn">EDIT</button>
                   <span>{planText(view.forecaster.planMonthly)}</span>
-                  <span className="chip-live sim">SIM</span>
+                  <span className={`chip-live ${feed.tone}`}>{feed.text}</span>
                   <span>{lastTickText(view.lastTickAt, now)}</span>
                 </div>
               </div>
               <div className="input-row2">
                 <div className="input-title">RESULTS FEED</div>
-                <div className="input-right"><span className="chip-live sim">SIM</span></div>
+                <div className="input-right"><span className={`chip-live ${feed.tone}`}>{feed.text}</span></div>
                 <div className="input-helper">Settles every receipt after games end · ~40 credits/day, already in the forecast</div>
               </div>
               <div className="input-row2">

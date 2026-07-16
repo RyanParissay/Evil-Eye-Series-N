@@ -5,6 +5,7 @@ import {
   killSwitchValue, lastDigestText, lastTickText, llmBudgetText, memoryText,
   mixRows, planText, quietHoursText, rebalanceMix, riskRows, safetyRows,
   scanWindowText, sportCell, staleText, thresholdTexts, toleranceText,
+  inputStatus, missingText, modeSwitchLabel,
   validWaNumber, verifyGapText,
 } from './settings';
 
@@ -148,4 +149,24 @@ test('EDGE THRESHOLDS, fallback radios, safety rows, kill rules, journal stepper
   expect(journalMinText(S)).toBe('1 / DAY');
   expect(advSettingsToggle(false)).toBe('ADVANCED SETTINGS →');
   expect(advSettingsToggle(true)).toBe('ADVANCED SETTINGS — COLLAPSE');
+});
+
+test('mode switch labels: badge, armed confirms, both directions', () => {
+  expect(modeSwitchLabel('SIMULATED', false)).toBe('SIMULATED');
+  expect(modeSwitchLabel('SIMULATED', true)).toBe('GO LIVE? ✓');
+  expect(modeSwitchLabel('LIVE', false)).toBe('LIVE');
+  expect(modeSwitchLabel('LIVE', true)).toBe('GO SIMULATED? ✓');
+});
+
+test('missing names render as names — never values', () => {
+  expect(missingText(['ODDS_API_KEY', 'TWILIO_AUTH_TOKEN']))
+    .toBe('MISSING: ODDS_API_KEY · TWILIO_AUTH_TOKEN');
+  expect(missingText([])).toBe('');
+});
+
+test('INPUTS statuses follow the mode', () => {
+  expect(inputStatus(false, 'feed')).toEqual({ text: 'SIM', tone: 'sim' });
+  expect(inputStatus(true, 'feed')).toEqual({ text: 'LIVE', tone: 'green' });
+  expect(inputStatus(false, 'poll')).toEqual({ text: 'SIM', tone: 'sim' });
+  expect(inputStatus(true, 'poll')).toEqual({ text: 'POLL 45S', tone: 'muted' });
 });

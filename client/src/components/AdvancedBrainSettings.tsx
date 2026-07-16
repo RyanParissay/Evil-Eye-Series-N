@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchTrades, type TradeView } from '../lib/api';
 import { modelControlRows, traceLines, traceTitle, type BrainView, type SubTone } from '../lib/brain';
+import { inputStatus } from '../lib/settings';
 
 // Verbatim design-inventory §3.8 — a spec display; the real math lives in server/src/engine.
 const STRATEGY_CORE = `# arbitrage — 2 or 3 legs
@@ -24,13 +25,17 @@ const PIPELINE = ['SCAN', 'NORMALIZE', 'DE-VIG', 'EDGE MATH', 'GATE BATTERY', 'S
 
 interface InputRow { src: string; detail: string; status: string; tone: SubTone }
 
-/** Detail sentences verbatim §3.8; statuses are sim-honest (SIM until Plan 6 wires the feeds). */
-function inputRows(brain: BrainView): InputRow[] {
+/** Detail sentences verbatim §3.8; statuses follow the mode (SIM in sim; the feeds
+ *  go LIVE and the WhatsApp poll goes POLL 45S when the server reports live — Design §10). */
+function inputRows(brain: BrainView, live: boolean): InputRow[] {
+  const feed = inputStatus(live, 'feed');
+  const poll = inputStatus(live, 'poll');
+  const tone = (t: 'sim' | 'green' | 'muted'): SubTone => (t === 'sim' ? 'yellow' : t);
   return [
-    { src: 'THE ODDS API', detail: 'Odds feed · 16 books · poll 20 min (5–8 min near start)', status: 'SIM', tone: 'yellow' },
-    { src: 'PINNACLE FEED', detail: 'Reference pricer — de-vig anchor for fair odds', status: 'SIM', tone: 'yellow' },
-    { src: 'WHATSAPP REPLIES', detail: 'Confirms + limit reports via Twilio', status: 'SIM', tone: 'yellow' },
-    { src: 'SETTLED RESULTS', detail: 'Final scores for grading + P/L', status: 'SIM', tone: 'yellow' },
+    { src: 'THE ODDS API', detail: 'Odds feed · 16 books · poll 20 min (5–8 min near start)', status: feed.text, tone: tone(feed.tone) },
+    { src: 'PINNACLE FEED', detail: 'Reference pricer — de-vig anchor for fair odds', status: feed.text, tone: tone(feed.tone) },
+    { src: 'WHATSAPP REPLIES', detail: 'Confirms + limit reports via Twilio', status: poll.text, tone: tone(poll.tone) },
+    { src: 'SETTLED RESULTS', detail: 'Final scores for grading + P/L', status: feed.text, tone: tone(feed.tone) },
     { src: 'LIMITS LOG', detail: 'Your reported max bets (Advanced Analytics)', status: `${brain.limitsThisMonth} THIS MONTH`, tone: 'yellow' },
     { src: 'LLM — HAIKU', detail: 'Consolidation pass · strategy text + heat review', status: '$0.00 / $3.00', tone: 'muted' },
   ];
@@ -76,16 +81,17 @@ interface AdvancedBrainSettingsProps {
   brain: BrainView;
   open: boolean;
   onToggle: () => void;
+  live: boolean;
 }
 
-export function AdvancedBrainSettings({ brain, open, onToggle }: AdvancedBrainSettingsProps) {
+export function AdvancedBrainSettings({ brain, open, onToggle, live }: AdvancedBrainSettingsProps) {
   const [modelRoomOpen, setModelRoomOpen] = useState(false);
   return (
     <div className="viewall">
       {open && (
         <div className="brain-panel">
           <div className="brain-section-head">INPUTS — WHAT THE BRAIN IS CONSUMING</div>
-          {inputRows(brain).map((r) => (
+          {inputRows(brain, live).map((r) => (
             <div className="input-row" key={r.src}>
               <span className="input-src">{r.src}</span>
               <span className="input-detail">{r.detail}</span>
