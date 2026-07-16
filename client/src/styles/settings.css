@@ -15,6 +15,9 @@
 .kv-value { color: #fff; font-weight: 500; text-align: right; }
 .kv-value.yellow { color: var(--yellow); }
 .kv-value.red { color: var(--red); }
+/* F3: DEFAULT QUIT RULE is a long right-aligned quote — cap its width so it wraps
+   cleanly rather than crushing the key label (design-inventory §5). */
+.kv-value.kv-quit { max-width: 62%; }
 
 /* ---------- STRATEGY MIX (§5.1) ---------- */
 .mix-row { margin-top: 14px; }
