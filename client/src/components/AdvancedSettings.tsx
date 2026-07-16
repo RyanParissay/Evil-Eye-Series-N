@@ -65,7 +65,8 @@ export function AdvancedSettings({ view, now, refresh }: AdvancedSettingsProps) 
               </div>
               <div className="input-row2">
                 <div className="input-title">RESULTS FEED</div>
-                <div className="input-right"><span className={`chip-live ${feed.tone}`}>{feed.text}</span></div>
+                {/* §13: no live results feed ships in Plan 6 — this source stays SIM even in LIVE. */}
+                <div className="input-right"><span className="chip-live sim">SIM</span></div>
                 <div className="input-helper">Settles every receipt after games end · ~40 credits/day, already in the forecast</div>
               </div>
               <div className="input-row2">

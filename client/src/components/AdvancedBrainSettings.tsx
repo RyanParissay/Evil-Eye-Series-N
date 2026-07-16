@@ -35,7 +35,8 @@ function inputRows(brain: BrainView, live: boolean): InputRow[] {
     { src: 'THE ODDS API', detail: 'Odds feed · 16 books · poll 20 min (5–8 min near start)', status: feed.text, tone: tone(feed.tone) },
     { src: 'PINNACLE FEED', detail: 'Reference pricer — de-vig anchor for fair odds', status: feed.text, tone: tone(feed.tone) },
     { src: 'WHATSAPP REPLIES', detail: 'Confirms + limit reports via Twilio', status: poll.text, tone: tone(poll.tone) },
-    { src: 'SETTLED RESULTS', detail: 'Final scores for grading + P/L', status: feed.text, tone: tone(feed.tone) },
+    // §13: no live results feed ships in Plan 6 — SETTLED RESULTS stays SIM even in LIVE.
+    { src: 'SETTLED RESULTS', detail: 'Final scores for grading + P/L', status: 'SIM', tone: 'yellow' },
     { src: 'LIMITS LOG', detail: 'Your reported max bets (Advanced Analytics)', status: `${brain.limitsThisMonth} THIS MONTH`, tone: 'yellow' },
     { src: 'LLM — HAIKU', detail: 'Consolidation pass · strategy text + heat review', status: '$0.00 / $3.00', tone: 'muted' },
   ];
