@@ -168,8 +168,8 @@ test('cost tiles: honest em-dashes when empty', () => {
     value: '−$18.40', note: 'Σ (UNROUNDED − ROUNDED WORST-CASE) OVER 41 CONFIRMED PAIRS',
   });
   expect(roundingTile(null)).toEqual({ value: '—', note: 'NO CONFIRMED PAIRS YET' });
-  expect(retentionTile({ medianPct: 81, dieAtRecheckPct: 23, thresholdPct: 95 })).toEqual({
-    value: '81% MEDIAN', note: 'PROMOTION THRESHOLD 95% · 23% OF CANDIDATES DIE AT RECHECK',
+  expect(retentionTile({ medianPct: 81, dieAtRecheckPct: 23, thresholdPct: 92 })).toEqual({
+    value: '81% MEDIAN', note: 'PROMOTION THRESHOLD 92% · 23% OF CANDIDATES DIE AT RECHECK',
   });
   expect(retentionTile(null)).toEqual({ value: '—', note: 'NO RECHECKS YET' });
   expect(closingEdgeTile({ avgPct: 1.1, beatClosePct: 62, legs: 40 })).toEqual({

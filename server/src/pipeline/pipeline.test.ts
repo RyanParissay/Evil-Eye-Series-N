@@ -22,7 +22,7 @@ function mulberry32(seed: number): () => number {
 }
 
 const NOW = 1_784_000_000_000; // 2026-07-13 ~20:33 Vancouver — same day across the whole loop
-const VNOW = NOW + 75_000; //    one default verify gap later
+const VNOW = NOW + 60_000; //    one default verify gap later
 const DAY = dayKey(NOW);
 
 /** Refetches replay the scan snapshot verbatim (drift frozen) — recheck edge equals initial edge. */
@@ -89,7 +89,7 @@ function mkTrade(o: Partial<Trade> & { id: string }): Trade {
   };
 }
 
-test('scan creates PENDING trades with null stakes and 75s verifyDueAt', () => {
+test('scan creates PENDING trades with null stakes and 60s verifyDueAt', () => {
   const { deps, repos } = makeHarness();
   const res = runScan(deps, NOW);
 
@@ -98,7 +98,7 @@ test('scan creates PENDING trades with null stakes and 75s verifyDueAt', () => {
   expect(pending).toHaveLength(res.created);
   for (const t of pending) {
     expect(t.status).toBe('PENDING');
-    expect(t.verifyDueAt).toBe(NOW + 75_000); // default verifyGapSecs = 75
+    expect(t.verifyDueAt).toBe(NOW + 60_000); // default verifyGapSecs = 60
     expect(t.createdAt).toBe(NOW);
     expect(t.verifiedAt).toBeNull();
     expect(t.freshUntil).toBeNull();

@@ -7,7 +7,7 @@ import { DEFAULT_SETTINGS } from '../shared/defaults.js';
 
 test('opens in-memory db, seeds defaults, round-trips a trade', () => {
   const r = Repos(openDb(':memory:'));
-  expect(r.settings.all().tolerancePct).toBe(5);
+  expect(r.settings.all().tolerancePct).toBe(8);
   expect(r.books.all().length).toBe(16);
   expect(r.books.byName('pinnacle')?.sharpExempt).toBe(1);
   expect(r.profiles.all()[0]?.name).toBe('RYAN');
@@ -59,7 +59,7 @@ test('settings.set persists a patch; all() hands out copies, never the module ob
   const r = Repos(db);
   expect(r.settings.set({ tolerancePct: 7 }).tolerancePct).toBe(7);
   expect(Repos(db).settings.all().tolerancePct).toBe(7); // persisted across Repos instances
-  expect(DEFAULT_SETTINGS.tolerancePct).toBe(5); // module object untouched
+  expect(DEFAULT_SETTINGS.tolerancePct).toBe(8); // module object untouched
   const s = r.settings.all();
   s.bankrollCents = 0; // mutating a returned object…
   expect(r.settings.all().bankrollCents).toBe(1_000_000); // …never leaks back

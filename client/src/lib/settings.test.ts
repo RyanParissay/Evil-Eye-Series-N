@@ -9,7 +9,7 @@ import {
 } from './settings';
 
 const S = {
-  tolerancePct: 5, verifyGapSecs: 75, staleRemoveMin: 10, freshWindowSecs: 120,
+  tolerancePct: 8, verifyGapSecs: 60, staleRemoveMin: 10, freshWindowSecs: 120,
   minArbMarginPct: 0.75, minEvEdgePct: 2.0, middleRatio: 1.5,
   kellyFraction: 0.25, kellyCapPct: 5, bankrollCents: 1_000_000,
   flatPairCents: 10_000, roundToCents: 500, minStakeCents: 1_000, dailyPickCap: 12,
@@ -28,7 +28,7 @@ test('SCAN RULES rows derive from the store — mockup strings at defaults', () 
   expect(scanWindowText(S)).toBe('08:00 – 24:00 PT');
   expect(quietHoursText(S)).toBe('00:00 – 08:00 · NO SENDS, NO SCANS');
   expect(cadenceText(S)).toBe('BASE 20 MIN · 5–8 MIN < 2H TO START');
-  expect(verifyGapText(S)).toBe('75 S');
+  expect(verifyGapText(S)).toBe('60 S');
   expect(staleText(S)).toBe('10 MIN');
   expect(scanWindowText({ ...S, quietEndHour: 9, quietStartHour: 1 })).toBe('09:00 – 01:00 PT');
 });
@@ -66,7 +66,7 @@ test('RISK & BANKROLL rows — mockup strings at defaults', () => {
     ['MIN STAKE / ROUND TO', '$10 / $5'],
     ['TRADES PER DAY CAP', '12'],
   ]);
-  expect(toleranceText(S)).toBe('5% · 0–100%');
+  expect(toleranceText(S)).toBe('8% · 0–100%');
 });
 
 test('BRAIN panel rows', () => {

@@ -3,7 +3,7 @@
 ## Master prompt notes (accumulate these; user will ask for a full "master prompt" to code the real app later)
 
 1. **No prices/stakes until verification.** Pending-verification cards show only book + selection + odds (no stake suggestions). The moment a bet passes verification (promoted to VERIFIED LIVE), the app recommends exact amounts to bet and shows prices per leg ("BET $35 ↗" style).
-2. **Line-move tolerance gate (pending → verified).** Default: edge/margin may weaken by up to 5% (relative) between first sighting and the verification recheck and still be promoted. This tolerance is user-configurable in SETTINGS from 0% to 100% — 100% means the edge can get up to twice as weak and still be accepted. Exposed in SETTINGS as "LINE MOVE TOLERANCE" (RISK & BANKROLL panel).
+2. **Line-move tolerance gate (pending → verified).** Default: edge/margin may weaken by up to 8% (relative) between first sighting and the verification recheck and still be promoted. This tolerance is user-configurable in SETTINGS from 0% to 100% — 100% means the edge can get up to twice as weak and still be accepted. Exposed in SETTINGS as "LINE MOVE TOLERANCE" (RISK & BANKROLL panel).
 
 ## Other locked-in product decisions (from chat)
 - No "skip" feature anywhere (no skip reply code, no SKIPPED status).

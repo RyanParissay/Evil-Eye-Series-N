@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { DEFAULT_SETTINGS } from './defaults.js';
 test('locked defaults match MASTER PROMPT', () => {
   expect(DEFAULT_SETTINGS).toMatchObject({
-    tolerancePct: 5, verifyGapSecs: 75, staleRemoveMin: 10, freshWindowSecs: 120,
+    tolerancePct: 8, verifyGapSecs: 60, staleRemoveMin: 10, freshWindowSecs: 120,
     minArbMarginPct: 0.75, minEvEdgePct: 2.0, middleRatio: 1.5,
     kellyFraction: 0.25, kellyCapPct: 5, bankrollCents: 1_000_000,
     flatPairCents: 10_000, roundToCents: 500, minStakeCents: 1_000, dailyPickCap: 12,

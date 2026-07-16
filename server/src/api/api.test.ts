@@ -123,7 +123,7 @@ test('scheduler chain: firing the captured timer callback boot-scans and resched
   expect(h.timers).toHaveLength(1); // startScheduler seeded the chain
   h.timers[0]!.fn(); // boot tick: lastScanAt null → immediate scan, then reschedule
   expect(h.timers).toHaveLength(2); // single chain: exactly one new timeout
-  expect(h.timers[1]!.ms).toBe(75_000); // next due work is the 75s verify recheck
+  expect(h.timers[1]!.ms).toBe(60_000); // next due work is the 60s verify recheck
   expect(h.repos.trades.byStatus('PENDING').length).toBeGreaterThan(0);
 });
 
@@ -142,36 +142,36 @@ test('manual scan mid-cadence-sleep re-arms the chain to its +75s verify wake', 
     .send({ dailyPickCap: 500, sharpVelocityPerDayPerBook: 500, marketBreadthPerWeekPerBook: 500 })
     .expect(200);
 
-  h.timers[0]!.fn(); // boot tick: immediate scan, chain arms the +75s verify wake
-  h.advance(76_000);
+  h.timers[0]!.fn(); // boot tick: immediate scan, chain arms the +60s verify wake
+  h.advance(61_000);
   h.timers[1]!.fn(); // wave-1 verify runs, chain arms the next cadence scan
   expect(h.timers).toHaveLength(3);
-  expect(h.timers[2]!.ms).toBeGreaterThan(75_000); // mid-cadence sleep: the next wake is minutes away
+  expect(h.timers[2]!.ms).toBeGreaterThan(60_000); // mid-cadence sleep: the next wake is minutes away
 
   h.advance(120_000); // two minutes into the sleep — the common manual-scan moment
-  const scanAt = NOW + 76_000 + 120_000;
+  const scanAt = NOW + 61_000 + 120_000;
   const scan = await request(h.app).post('/api/scan').expect(200);
   expect(scan.body.scan.created).toBeGreaterThan(0);
 
   // The manual scan must re-arm the chain: exactly ONE new wake, due at the
-  // +75s verify recheck — NOT left to the old cadence wake minutes out.
+  // +60s verify recheck — NOT left to the old cadence wake minutes out.
   expect(h.timers).toHaveLength(4);
-  expect(h.timers[3]!.ms).toBe(75_000);
+  expect(h.timers[3]!.ms).toBe(60_000);
 
-  // Firing that wake at +75s verifies the manual scan's pendings on time.
-  h.advance(75_000);
+  // Firing that wake at +60s verifies the manual scan's pendings on time.
+  h.advance(60_000);
   h.timers[3]!.fn();
   const state = await request(h.app).get('/api/state').expect(200);
   expect(state.body.trades.pending).toHaveLength(0);
   const wave2 = (state.body.trades.verified as Array<{ verifiedAt: number | null }>)
-    .filter((t) => t.verifiedAt === scanAt + 75_000);
+    .filter((t) => t.verifiedAt === scanAt + 60_000);
   expect(wave2.length).toBeGreaterThan(0);
 });
 
 test('stale wake after a manual scan is a no-op: no double scan, no extra timer, cadence intact', async () => {
   const h = makeApp();
-  h.timers[0]!.fn(); // boot scan; +75s verify wake armed
-  h.advance(76_000);
+  h.timers[0]!.fn(); // boot scan; +60s verify wake armed
+  h.advance(61_000);
   h.timers[1]!.fn(); // wave-1 verify; cadence scan wake armed — mid-cadence sleep begins
   const staleWake = h.timers[2]!; // superseded by the manual scan below
 
@@ -179,11 +179,11 @@ test('stale wake after a manual scan is a no-op: no double scan, no extra timer,
   await request(h.app).post('/api/scan').expect(200);
   expect(h.timers).toHaveLength(4); // the manual scan armed the replacement wake
 
-  h.advance(75_000);
+  h.advance(60_000);
   h.timers[3]!.fn(); // the live chain's wake: due work runs, next wake armed
   const timerCount = h.timers.length;
   const trades = tradeCount(h);
-  const at = NOW + 76_000 + 60_000 + 75_000;
+  const at = NOW + 61_000 + 60_000 + 60_000;
   const nextScan = h.scheduler.nextScanAt(at);
 
   staleWake.fn(); // the pre-manual-scan wake finally fires — stale generation
@@ -276,7 +276,7 @@ test('PATCH settings tolerance 101 → 400', async () => {
   const got = await request(h.app).get('/api/settings');
   expect(got.status).toBe(200);
   expect(got.body.settings.scanBaseMin).toBe(15); // persisted
-  expect(got.body.settings.verifyGapSecs).toBe(75); // untouched keys keep defaults
+  expect(got.body.settings.verifyGapSecs).toBe(60); // untouched keys keep defaults
 });
 
 test('quiet-hours scan → 503 quiet_hours', async () => {
@@ -338,7 +338,7 @@ function pendingTrade(id: string, now: number, event: string, category: Trade['c
     id, profileId: 1, category, event, sport: 'basketball', legs,
     marginInitial: 0.02, marginRecheck: null, marginFinal: null,
     status: 'PENDING', killReason: null, resultCents: null,
-    createdAt: now, verifyDueAt: now + 75_000, verifiedAt: null, freshUntil: null,
+    createdAt: now, verifyDueAt: now + 60_000, verifiedAt: null, freshUntil: null,
     settledAt: null, eventStartsAt: now + 3_600_000,
   };
 }
@@ -604,7 +604,7 @@ test('analytics reflects the driven pipeline: confirm → monthly/funnel/leaderb
   expect(v.advanced.openBets[0].stakeCents).toBeGreaterThan(0);
   const all = v.advanced.leaderboards.boards.find((b: { title: string }) => b.title === 'ALL CATEGORIES');
   expect(all.rows.length).toBeGreaterThan(0);
-  expect(v.advanced.costOfSafety.retention.thresholdPct).toBe(95); // 100 − default tolerance 5
+  expect(v.advanced.costOfSafety.retention.thresholdPct).toBe(92); // 100 − default tolerance 8
 });
 
 test('a limited report surfaces in the analytics limits log with display names', async () => {
