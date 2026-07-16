@@ -37,7 +37,7 @@ function frozen(base: OddsProvider): OddsProvider {
 const NOW = 1_784_000_000_000; // 2026-07-13 20:33 Vancouver — outside quiet hours
 const QUIET_NOW = NOW + 6 * 3_600_000; // 2026-07-14 02:33 Vancouver — inside 00:00-08:00 quiet
 
-function makeApp(startNow: number = NOW) {
+function makeApp(startNow: number = NOW, env: NodeJS.ProcessEnv = {}) {
   let now = startNow;
   const timers: Array<{ fn: () => void; ms: number }> = [];
   const rng = mulberry32(42);
@@ -50,7 +50,7 @@ function makeApp(startNow: number = NOW) {
     provider: frozen(SimOddsProvider(rng)),
     sender: { sendVerified: (t: Trade): void => { sent.push(t); } },
     fetchImpl: (() => { throw new Error('NETWORK CALL ATTEMPTED IN SIM SUITE'); }) as unknown as typeof fetch,
-    env: {},
+    env,
   });
   return { ...made, sent, timers, advance: (ms: number): void => { now += ms; } };
 }
@@ -793,4 +793,19 @@ test('sim mode never attempts a network call anywhere in the app lifecycle', asy
   const h = makeApp();
   await promoteSome(h); // scans, verifies, sends (sim sender), snapshots — no fetch
   expect((await request(h.app).get('/api/state')).body.mode).toBe('SIMULATED');
+});
+
+test('SIM is STRUCTURALLY network-inert even with a real-looking ANTHROPIC key (F7)', async () => {
+  // Fake creds PRESENT + a THROWING fetch: in SIMULATED mode NO hook may touch the
+  // network — the digest is gated on liveMode, not on key presence. If the digest
+  // ever reached fetch it would land an 'llm_error' row (the throwing stub is caught).
+  const h = makeApp(NOW, { ANTHROPIC_API_KEY: 'fake-key-would-be-billable' });
+  h.repos.journal.add(NOW - 1, 'Daily check: 16 of 16 books green'); // a line the digest would consume
+  await h.scheduler.pump(); // provider.refresh? + every hook + due actions — must attempt ZERO network
+  const kinds = h.repos.eventsLog.all().map((e) => e.kind);
+  expect(kinds).not.toContain('llm_error');          // a real fetch attempt would surface here
+  expect(kinds).not.toContain('llm_spend');
+  expect(kinds).not.toContain('llm_skipped_budget');
+  expect(h.repos.journal.all().some((j) => j.text.startsWith('Consolidation digest:'))).toBe(false);
+  expect(h.repos.settings.all().liveMode).toBe(0);   // never left SIMULATED
 });

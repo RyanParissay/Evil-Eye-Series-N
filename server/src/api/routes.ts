@@ -253,6 +253,10 @@ export function createApp(o: AppOptions): App {
   hooks.push({
     name: 'brain-digest',
     nextAt(now: number): number | null {
+      // SIM is STRUCTURALLY network-inert: the digest never fires unless LIVE, no
+      // matter what credentials are present (F7). A real ANTHROPIC_API_KEY loaded
+      // in SIM must NOT cause a real Anthropic call — liveMode is the only gate.
+      if (deps.s().liveMode !== 1) return null;
       if (!writer.available()) return null;
       if (deps.s().brainKillSwitch !== 0) return null; // the switch stops autonomous text too
       const today = dayKey(now);
