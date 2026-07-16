@@ -5,6 +5,7 @@ import type { OddsProvider, Quote, Trade } from '../shared/types.js';
 import type { PipeDeps } from './scan.js';
 import { runScan } from './scan.js';
 import { runVerifyDue } from './verify.js';
+import { arbMargin } from '../engine/odds.js';
 
 const NOW = Date.UTC(2026, 6, 14, 19, 0); // 2026-07-14 12:00 PDT
 const VNOW = NOW + 76_000;
@@ -75,6 +76,48 @@ test('a category at its mix allowance is held back with the mix clause; others p
   expect(promotedCats.length).toBeGreaterThan(0);
   expect(promotedCats.every((c) => c !== 'ARB')).toBe(true);
   expect(promotedCats.includes('MIDDLE')).toBe(true);
+});
+
+test('an ARB that SURVIVES verification is held back at its own mix cap (F2)', () => {
+  // The seed-42 snapshot kills its ARB candidates at scan (ROUNDING_DESTROYS_MARGIN),
+  // so the ARB mix clause never bites there. This plants a genuine cross-book ARB that
+  // DOES survive the recheck, with the ARB category already at its allowance.
+  const repos = Repos(openDb(':memory:'));
+  const EVENT = 'Suns vs Nuggets';
+  const q = (book: string, selection: string): Quote => ({
+    book, sport: 'basketball', event: EVENT, market: 'moneyline', selection,
+    odds: 2.2, line: null, fetchedAt: VNOW, eventStartsAt: VNOW + 3_600_000,
+  });
+  const deps: PipeDeps = {
+    repos,
+    provider: { fetchQuotes: () => [q('fanduel', 'home'), q('draftkings', 'away')] },
+    sender: { sendVerified: () => {} },
+    s: () => repos.settings.all(),
+    rng: mulberry32(1),
+  };
+  // ARB allowance at defaults = round(12 × 47%) = 6 — fill it with 6 sent ARBs today.
+  for (let i = 0; i < 6; i += 1) repos.trades.insert(sentSeed(`arb-${i}`, 'ARB'), DAY, null);
+  // A healthy 2-leg ARB (home 2.20 / away 2.20 → margin ≈ 9%): survives the tolerance
+  // gate (recheck === initial) and keeps a positive margin after $5 rounding.
+  const survivor: Trade = {
+    id: 'arb-survivor', profileId: 1, category: 'ARB', event: EVENT, sport: 'basketball',
+    legs: [
+      { book: 'fanduel', selection: 'home', odds: 2.2, stakeCents: null },
+      { book: 'draftkings', selection: 'away', odds: 2.2, stakeCents: null },
+    ],
+    marginInitial: arbMargin([2.2, 2.2]), marginRecheck: null, marginFinal: null, status: 'PENDING',
+    killReason: null, resultCents: null, createdAt: NOW, verifyDueAt: NOW + 60_000,
+    verifiedAt: null, freshUntil: null, settledAt: null, eventStartsAt: VNOW + 3_600_000,
+  };
+  repos.trades.insert(survivor, DAY, 'moneyline');
+
+  runVerifyDue(deps, VNOW);
+
+  // It passed verification but the ARB mix is already full → held back, not sent.
+  expect(repos.trades.byId('arb-survivor')!.status).toBe('EXPIRED');
+  expect(repos.trades.sentTodayByCategory(DAY, 'ARB')).toBe(6); // never a 7th ARB
+  const texts = repos.journal.all().map((j) => j.text);
+  expect(texts).toContain(`ARB ${EVENT} passed verification but was held back — ARB mix at its 47% cap.`);
 });
 
 test('a 0% mix share promotes nothing of that category', () => {
