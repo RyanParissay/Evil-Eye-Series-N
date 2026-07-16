@@ -404,7 +404,7 @@ const ENV = { ODDS_API_KEY: 'fake-key' } as NodeJS.ProcessEnv;
 
 test('mapEvents: h2h/totals/spreads map to engine markets; unknown books/sports drop', () => {
   const quotes = mapEvents(FIXTURE, NOW);
-  const nba = quotes.filter((q) => q.event === 'Nuggets @ Suns');
+  const nba = quotes.filter((q) => q.event === 'Nuggets @ Suns' && q.market === 'moneyline');
   expect(nba.length).toBeGreaterThan(0);
   expect(nba[0]).toMatchObject({ sport: 'basketball', market: 'moneyline', line: null });
   expect(new Set(nba.map((q) => q.selection))).toEqual(new Set(['home', 'away']));
@@ -756,7 +756,7 @@ function verified(): Trade {
 test('verifiedMessageText: verbatim card semantics + reply codes + optional link', () => {
   const text = verifiedMessageText(verified(), 'http://localhost:3000');
   expect(text).toContain('ARB Arsenal vs Chelsea · SOCCER');
-  expect(text).toContain('bet365 — home @ 3.10 │ BET $35');
+  expect(text).toContain('Bet365 — home @ 3.10 │ BET $35'); // displayName('bet365') === 'Bet365' (brain/pass.ts BOOK_DISPLAY)
   expect(text).toContain('Pinnacle — draw @ 3.65 │ BET $30');
   expect(text).toContain('MARGIN: 10.0%');
   expect(text).toContain('Reply 1 SECURED · 3 LIMITED');
@@ -941,7 +941,7 @@ test('pump runs due hooks and skips future ones; hook errors never kill the chai
   const ran: string[] = [];
   const hooks: HookTask[] = [
     { name: 'due', nextAt: () => now, run: async () => { ran.push('due'); } },
-    { name: 'future', nextAt: () => now + 60_000, run: async () => { ran.push('future'); } },
+    { name: 'future', nextAt: () => NOW + 60_000, run: async () => { ran.push('future'); } },
     { name: 'silent', nextAt: () => null, run: async () => { ran.push('silent'); } },
     { name: 'boom', nextAt: () => now, run: async () => { throw new Error('boom'); } },
   ];
@@ -2249,16 +2249,21 @@ grep -rln 'the-odds-api\.com\|api\.twilio\.com\|api\.anthropic\.com' server/src 
 #      server/src/live/inbound.ts, server/src/brain/text.ts
 # 2. No test sets a real-looking live credential or flips to live:
 grep -rn "liveMode: 1\|live: 1" server/src/**/*.test.ts client/src/**/*.test.ts
-#    → only mode.test.ts's wireMode + sim-settlement-gate units (fake env records, direct
-#      repos key set, throwing fetch — the sanctioned HARD GATE 1 pattern) — review each hit by hand
+#    → sanctioned hits ONLY: mode.test.ts (wireMode + sim-settlement-gate units) and inbound.test.ts
+#      set liveMode:1 DIRECTLY on isolated in-memory repos; api.test.ts's PATCH-liveMode (→400) and
+#      POST /api/mode (→409) tests exercise the REFUSAL path (liveMode STAYS 0). All fake env records /
+#      direct repos key set / throwing fetch — the sanctioned HARD GATE 1 pattern. Review each hit by hand.
 grep -rn "process.env.ODDS_API_KEY\s*=\|process.env.TWILIO" server/src client/src
 #    → no output (env is passed as records, never mutated)
 # 3. The .env path is read in exactly one place:
 grep -rn "evil-eye-arbitrage" server/src client/src
-#    → server/src/live/env.ts only
+#    → server/src/live/env.ts (the ONLY place the path is constructed/read) + server/src/index.ts
+#      (a COMMENT beside the loadV1Env() call — no read there). No client hits.
 # 4. Forbidden words:
 grep -rniE 'append-only|ghost|picker|grader|gatekeeper|CLV' server/src client/src
-#    → no output (exit 1)
+#    → clean in all PRODUCTION source. The only matches are the pre-existing forbidden-word ASSERTION
+#      REGEXES inside test files (api.test.ts + a client test) that PROVE these words never appear in
+#      rendered output. Exclude test files to confirm: `… | grep -v '\.test\.'` → no output.
 ```
 
 - [ ] **Step 2: Full-suite run**
