@@ -65,7 +65,7 @@ export function runVerifyDue(deps: PipeDeps, now: number): { promoted: number; k
       continue;
     }
 
-    const recheck = recomputeEdge(t, fresh, quotes);
+    const recheck = recomputeEdge(t, fresh, quotes, s);
     if (recheck === null) {
       // EV benchmark vanished — the edge cannot be recomputed, same as a missing quote.
       killTrade(repos, t, 'QUOTE_STALE');
@@ -137,13 +137,19 @@ interface Recheck {
   fairProbs: number[] | null;
 }
 
-function recomputeEdge(t: Trade, fresh: Quote[], all: Quote[]): Recheck | null {
+function recomputeEdge(t: Trade, fresh: Quote[], all: Quote[], s: Settings): Recheck | null {
   const odds = fresh.map((q) => q.odds);
   switch (t.category) {
     case 'ARB':
       return { edge: arbMargin(odds), fairProbs: null };
     case 'EV': {
-      const p = pinnacleFairProb(all, fresh[0]!);
+      // REFERENCE PRICER FALLBACK (Plan 5) — the recheck MIRRORS detection: pinnacle
+      // when the anchor is up, else the leave-one-out consensus (fallback 0). Anchor
+      // down + fallback 1/2 → no benchmark → the EV cannot be re-priced (QUOTE_STALE).
+      const anchorUp = all.some((q) => q.book === PINNACLE);
+      const p = anchorUp
+        ? pinnacleFairProb(all, fresh[0]!)
+        : s.anchorFallback === 0 ? consensusFairProb(all, fresh[0]!) : null;
       if (p === null) return null;
       return { edge: evEdge(p, odds[0]!), fairProbs: [p] };
     }
@@ -246,4 +252,25 @@ function pinnacleFairProb(all: Quote[], legQuote: Quote): number | null {
   const probs = devigFairProbs(selections.map((sel) => bestBySelection.get(sel)!.odds));
   const i = selections.indexOf(legQuote.selection);
   return i === -1 ? null : probs[i]!;
+}
+
+/** Leave-one-out consensus fair prob — the recheck mirror of detectEvsConsensus.
+ *  Devigs the BEST odds per selection among books ≠ the leg's own book, within the
+ *  leg's event+market+|line| group; must be a COMPLETE line (≥2 selections, all
+ *  present among the ≠B books) or null — no self-referential, no partial de-vig. */
+function consensusFairProb(all: Quote[], legQuote: Quote): number | null {
+  const group = all.filter((q) =>
+    q.event === legQuote.event && q.market === legQuote.market && lineGroup(q) === lineGroup(legQuote));
+  const groupSelections = [...new Set(group.map((q) => q.selection))];
+  if (groupSelections.length < 2) return null;
+  const benchmark = new Map<string, Quote>();
+  for (const q of group) {
+    if (q.book === legQuote.book) continue; // leave-one-out: never benchmark against self
+    const best = benchmark.get(q.selection);
+    if (!best || q.odds > best.odds) benchmark.set(q.selection, q);
+  }
+  if (!groupSelections.every((sel) => benchmark.has(sel))) return null; // incomplete line
+  const fair = devigFairProbs(groupSelections.map((sel) => benchmark.get(sel)!.odds));
+  const i = groupSelections.indexOf(legQuote.selection);
+  return i === -1 ? null : fair[i]!;
 }

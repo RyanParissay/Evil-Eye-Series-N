@@ -35,6 +35,15 @@ export function detectCandidates(quotes: Quote[], s: Settings): Candidate[] {
   // Engine odds math assumes odds > 1 — callers own hygiene, so drop garbage here.
   const clean = quotes.filter((q) => q.odds > 1);
 
+  // REFERENCE PRICER FALLBACK (Plan 5, Design §4): binds ONLY when the snapshot
+  // carries NO anchor at all. In sim the provider always quotes pinnacle, so this
+  // is dormant until a live outage — proven by stub providers, never by faking one.
+  //   0 (default) → FALL BACK TO CONSENSUS: EV devigs a leave-one-out benchmark.
+  //   1           → PAUSE EV + MIDDLES; arbs continue.
+  //   2           → PAUSE EVERYTHING.
+  const anchorUp = clean.some((q) => q.book === PINNACLE);
+  if (!anchorUp && s.anchorFallback === 2) return []; // PAUSE EVERYTHING
+
   const groups = new Map<string, Quote[]>();
   for (const q of clean) {
     const key = `${q.event}\u0000${q.market}\u0000${q.line === null ? 'ML' : Math.abs(q.line)}`;
@@ -44,9 +53,15 @@ export function detectCandidates(quotes: Quote[], s: Settings): Candidate[] {
   }
 
   const out: Candidate[] = [];
-  for (const group of groups.values()) detectArbs(group, s, out);
-  for (const group of groups.values()) detectEvs(group, s, out);
-  detectMiddles(clean, s, out);
+  for (const group of groups.values()) detectArbs(group, s, out); // arbs never need an anchor
+  if (anchorUp) {
+    for (const group of groups.values()) detectEvs(group, s, out);
+    detectMiddles(clean, s, out);
+  } else if (s.anchorFallback === 0) {
+    for (const group of groups.values()) detectEvsConsensus(group, s, out);
+    detectMiddles(clean, s, out); // middles need no anchor — they continue under consensus
+  }
+  // anchorFallback === 1 (anchor down): EV + MIDDLES paused; only the arbs above stand.
   return out;
 }
 
@@ -95,6 +110,40 @@ function detectEvs(group: Quote[], s: Settings, out: Candidate[]): void {
     const edge = evEdge(fairProb, q.odds);
     if (edge < s.minEvEdgePct / 100) continue;
     out.push({ category: 'EV', ...base(q), legs: [toLeg(q)], edge, fairProbs: [fairProb] });
+  }
+}
+
+/**
+ * Consensus EV (anchor down, fallback 0): a LEAVE-ONE-OUT benchmark. For each book
+ * B, the fair line devigs the BEST odds per selection among books ≠ B, so a book is
+ * NEVER measured against its own price — no self-referential edge (mirrors detectEvs's
+ * pinnacle exclusion). Two guards keep it honest: the group must carry ≥ 2 distinct
+ * selections (a lone outcome de-vigs to a phantom 1.0), and the ≠B benchmark must be a
+ * COMPLETE line — every selection in the group represented among the ≠B books — or a
+ * partial de-vig (e.g. 2-of-3 soccer 1X2) manufactures phantom edges; incomplete →
+ * emit nothing for B. Only a price that beats the OTHERS' best-price consensus qualifies.
+ */
+function detectEvsConsensus(group: Quote[], s: Settings, out: Candidate[]): void {
+  const groupSelections = [...new Set(group.map((q) => q.selection))];
+  if (groupSelections.length < 2) return; // a single outcome is not a de-vig-able market
+  const books = new Set(group.map((q) => q.book));
+  for (const book of books) {
+    const benchmark = new Map<string, Quote>();
+    for (const q of group) {
+      if (q.book === book) continue; // leave-one-out: B is excluded from its own benchmark
+      const best = benchmark.get(q.selection);
+      if (!best || q.odds > best.odds) benchmark.set(q.selection, q);
+    }
+    if (!groupSelections.every((sel) => benchmark.has(sel))) continue; // incomplete line → skip B
+    const fair = devigFairProbs(groupSelections.map((sel) => benchmark.get(sel)!.odds));
+    const fairBySelection = new Map(groupSelections.map((sel, i) => [sel, fair[i]!]));
+    for (const q of group) {
+      if (q.book !== book) continue;
+      const fairProb = fairBySelection.get(q.selection)!;
+      const edge = evEdge(fairProb, q.odds);
+      if (edge < s.minEvEdgePct / 100) continue;
+      out.push({ category: 'EV', ...base(q), legs: [toLeg(q)], edge, fairProbs: [fairProb] });
+    }
   }
 }
 

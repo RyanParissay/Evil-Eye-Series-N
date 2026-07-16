@@ -8,6 +8,9 @@ import { detectCandidates } from './candidates.js';
 const NOW = 1_752_000_000_000;
 const STARTS = NOW + 3_600_000;
 const S: Settings = { ...DEFAULT_SETTINGS }; // copy, never alias
+// F1: anchor-down + PAUSE EV+MIDDLES — keeps the pinnacle-less ARB tests ARB-scoped
+// (default anchorFallback=0 would otherwise emit consensus EV from these snapshots).
+const S1: Settings = { ...DEFAULT_SETTINGS, anchorFallback: 1 };
 
 function mkQ(book: string, selection: string, odds: number, o: Partial<Quote> = {}): Quote {
   return {
@@ -23,7 +26,7 @@ test('ARB: clean 2-leg arb detected with best-price legs', () => {
     mkQ('fanduel', 'home', 2.05), // worse home price — must not be picked
     mkQ('bet365', 'away', 1.9), //   worse away price — must not be picked
     mkQ('fanduel', 'away', 2.1),
-  ], S);
+  ], S1);
   expect(cands).toHaveLength(1);
   const c = cands[0]!;
   expect(c.category).toBe('ARB');
@@ -48,7 +51,7 @@ test('ARB: 3-leg soccer h2h arb across three books', () => {
     mkQ('bwin', 'draw', 3.4, o),
     mkQ('bwin', 'away', 3.1, o),
     mkQ('sportsinteraction', 'away', 2.9, o),
-  ], S);
+  ], S1);
   expect(cands).toHaveLength(1);
   const c = cands[0]!;
   expect(c.category).toBe('ARB');
@@ -66,7 +69,7 @@ test('ARB: 3-outcome groups outside soccer never combine', () => {
     mkQ('bet365', 'home', 3.2, o),
     mkQ('fanduel', 'draw', 3.6, o),
     mkQ('pointsbet', 'away', 3.1, o),
-  ], S)).toEqual([]);
+  ], S1)).toEqual([]);
 });
 
 test('ARB: 3 selections on a soccer non-h2h market never combine', () => {
@@ -76,7 +79,7 @@ test('ARB: 3 selections on a soccer non-h2h market never combine', () => {
     mkQ('sportsinteraction', '1X', 3.2, o),
     mkQ('betway', '12', 3.6, o),
     mkQ('bwin', 'X2', 3.1, o),
-  ], S)).toEqual([]);
+  ], S1)).toEqual([]);
 });
 
 test('ARB: soccer h2h with only 2 of 3 outcomes quoted yields no arb', () => {
@@ -86,7 +89,7 @@ test('ARB: soccer h2h with only 2 of 3 outcomes quoted yields no arb', () => {
   expect(detectCandidates([
     mkQ('bet365', 'home', 2.1, o),
     mkQ('fanduel', 'away', 2.1, o),
-  ], S)).toEqual([]);
+  ], S1)).toEqual([]);
 });
 
 test('ARB: line groups are sacred — over 220.5 never pairs with under 219.5', () => {
@@ -95,12 +98,12 @@ test('ARB: line groups are sacred — over 220.5 never pairs with under 219.5', 
   expect(detectCandidates([
     mkQ('bet365', 'over', 2.1, { ...t, line: 220.5 }),
     mkQ('fanduel', 'under', 2.1, { ...t, line: 219.5 }),
-  ], S)).toEqual([]);
+  ], S1)).toEqual([]);
   // Control: the identical prices on the SAME line are a legitimate arb.
   const same = detectCandidates([
     mkQ('bet365', 'over', 2.1, { ...t, line: 220.5 }),
     mkQ('fanduel', 'under', 2.1, { ...t, line: 220.5 }),
-  ], S);
+  ], S1);
   expect(same).toHaveLength(1);
   expect(same[0]!.category).toBe('ARB');
 });
@@ -142,6 +145,63 @@ test('EV: fair probs live per |line| — signed ±3.5 group together, off-line q
   expect(c.category).toBe('EV');
   expect(c.legs).toEqual([{ book: 'draftkings', selection: 'away', odds: 2.15, fetchedAt: NOW }]);
   expect(c.edge).toBeCloseTo(0.075, 12);
+});
+
+/** A pinnacle-less moneyline snapshot whose best-price legs form a real arb
+ *  (best home 2.15 / best away 1.95 → +2.21%). Complete lines, 3 books. */
+function anchorlessArb(): Quote[] {
+  return [
+    mkQ('bet365', 'home', 2.15), mkQ('bet365', 'away', 1.85),
+    mkQ('fanduel', 'home', 2.10), mkQ('fanduel', 'away', 1.90),
+    mkQ('draftkings', 'home', 2.05), mkQ('draftkings', 'away', 1.95),
+  ];
+}
+
+test('anchor down + FALL BACK TO CONSENSUS (default): EV detects against the leave-one-out consensus', () => {
+  const s: Settings = { ...DEFAULT_SETTINGS, anchorFallback: 0 };
+  // 3-book NON-arb moneyline, complete lines, NO pinnacle. bet365 home (2.10) beats the
+  // best-of-the-OTHERS devig (fanduel/draftkings); nothing else clears the 2% bar, and a
+  // book is NEVER measured against its own price (leave-one-out — no self-referential edge).
+  const cands = detectCandidates([
+    mkQ('bet365', 'home', 2.10), mkQ('bet365', 'away', 1.80),
+    mkQ('fanduel', 'home', 1.95), mkQ('fanduel', 'away', 1.85),
+    mkQ('draftkings', 'home', 1.90), mkQ('draftkings', 'away', 1.88),
+  ], s);
+  const evs = cands.filter((c) => c.category === 'EV');
+  expect(evs).toHaveLength(1);
+  expect(evs[0]!.legs[0]).toMatchObject({ book: 'bet365', selection: 'home' });
+  expect(evs[0]!.edge).toBeCloseTo(0.0308, 3);
+  expect(cands.some((c) => c.category === 'ARB')).toBe(false); // best home 2.10 / away 1.88 → no arb
+});
+
+test('anchor down consensus is COMPLETE-LINE only: a partial 3-way (2 of 3) de-vig is refused', () => {
+  const s: Settings = { ...DEFAULT_SETTINGS, anchorFallback: 0 };
+  const o = { sport: 'soccer', event: 'SOCX', market: '1X2' };
+  // NO single book (excluding the candidate) carries a complete 1X2 line: bet365 lacks
+  // away, fanduel lacks draw. Every leave-one-out benchmark is missing a selection →
+  // de-vigging 2 of 3 would manufacture phantom edges → NO EV emitted for either book.
+  const cands = detectCandidates([
+    mkQ('bet365', 'home', 3.2, o), mkQ('bet365', 'draw', 3.6, o),   // no away
+    mkQ('fanduel', 'home', 3.3, o), mkQ('fanduel', 'away', 3.0, o), // no draw
+  ], s);
+  expect(cands.filter((c) => c.category === 'EV')).toHaveLength(0);
+});
+
+test('anchor down + PAUSE EV+MIDDLES: arbs continue, nothing else', () => {
+  const out = detectCandidates(anchorlessArb(), { ...DEFAULT_SETTINGS, anchorFallback: 1 });
+  expect(out.some((c) => c.category === 'ARB')).toBe(true);
+  expect(out.every((c) => c.category === 'ARB')).toBe(true); // EV + middles paused
+});
+
+test('anchor down + PAUSE EVERYTHING: no candidates at all, arbs included', () => {
+  expect(detectCandidates(anchorlessArb(), { ...DEFAULT_SETTINGS, anchorFallback: 2 })).toEqual([]);
+});
+
+test('anchor UP: the fallback setting is inert — pinnacle stays the benchmark', () => {
+  const withPinnacle = [...anchorlessArb(), mkQ('pinnacle', 'home', 2.0), mkQ('pinnacle', 'away', 2.0)];
+  // Even at PAUSE EVERYTHING, an anchor present means nothing pauses — EV runs via pinnacle.
+  const cands = detectCandidates(withPinnacle, { ...DEFAULT_SETTINGS, anchorFallback: 2 });
+  expect(cands.some((c) => c.category === 'EV')).toBe(true);
 });
 
 test('MIDDLE: opposite selections on different lines, best price per side', () => {

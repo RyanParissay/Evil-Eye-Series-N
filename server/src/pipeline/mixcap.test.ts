@@ -120,6 +120,43 @@ test('an ARB that SURVIVES verification is held back at its own mix cap (F2)', (
   expect(texts).toContain(`ARB ${EVENT} passed verification but was held back — ARB mix at its 47% cap.`);
 });
 
+test('anchor-down CONSENSUS EV survives the recheck via the leave-one-out consensus (F1)', () => {
+  const repos = Repos(openDb(':memory:'));
+  repos.settings.set({ anchorFallback: 0 });
+  const EVENT = 'X vs Y';
+  const mk = (book: string, selection: string, odds: number): Quote => ({
+    book, sport: 'basketball', event: EVENT, market: 'moneyline', selection,
+    odds, line: null, fetchedAt: VNOW, eventStartsAt: VNOW + 3_600_000,
+  });
+  // NO pinnacle → anchor down. bet365 home 2.10 beats the fanduel/draftkings consensus.
+  const snapshot = [
+    mk('bet365', 'home', 2.10), mk('bet365', 'away', 1.80),
+    mk('fanduel', 'home', 1.95), mk('fanduel', 'away', 1.85),
+    mk('draftkings', 'home', 1.90), mk('draftkings', 'away', 1.88),
+  ];
+  const deps: PipeDeps = {
+    repos,
+    provider: { fetchQuotes: () => snapshot },
+    sender: { sendVerified: () => {} },
+    s: () => repos.settings.all(),
+    rng: mulberry32(1),
+  };
+  const ev: Trade = {
+    id: 'ev-consensus', profileId: 1, category: 'EV', event: EVENT, sport: 'basketball',
+    legs: [{ book: 'bet365', selection: 'home', odds: 2.10, stakeCents: null }],
+    marginInitial: 0.0308, marginRecheck: null, marginFinal: null, status: 'PENDING',
+    killReason: null, resultCents: null, createdAt: NOW, verifyDueAt: NOW + 60_000,
+    verifiedAt: null, freshUntil: null, settledAt: null, eventStartsAt: VNOW + 3_600_000,
+  };
+  repos.trades.insert(ev, DAY, 'moneyline');
+
+  runVerifyDue(deps, VNOW);
+
+  const after = repos.trades.byId('ev-consensus')!;
+  expect(after.status).toBe('VERIFIED'); // re-priced via consensus — NOT killed QUOTE_STALE
+  expect(after.marginFinal).toBeCloseTo(0.0308, 3);
+});
+
 test('a 0% mix share promotes nothing of that category', () => {
   const { deps, repos } = mkDeps();
   repos.settings.set({ mixArbPct: 71, mixMiddlePct: 0, mixEvPct: 29 });
