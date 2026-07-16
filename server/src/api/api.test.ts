@@ -55,13 +55,22 @@ function makeApp(startNow: number = NOW, env: NodeJS.ProcessEnv = {}) {
   return { ...made, sent, timers, advance: (ms: number): void => { now += ms; } };
 }
 
-/** Scan then advance past the 75s verify gap and tick — yields VERIFIED trades. */
+/** Scan then advance past the verify gap and tick — yields VERIFIED trades.
+ *  F5 (robust against vitest parallel-load timing): the seeded scan is
+ *  deterministic and normally promotes on the FIRST cycle (so the happy path is
+ *  unchanged — it returns immediately). As a safety net it re-scans a couple
+ *  more times if nothing promoted, and fails with a CLEAR message rather than
+ *  letting a caller's `verified[0]!` deref throw opaquely. */
 async function promoteSome(h: ReturnType<typeof makeApp>) {
-  await request(h.app).post('/api/scan').expect(200);
-  h.advance(76_000);
-  h.scheduler.tick();
-  const state = await request(h.app).get('/api/state').expect(200);
-  return state.body.trades.verified as Array<{ id: string; status: string; legs: { book: string }[] }>;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await request(h.app).post('/api/scan').expect(200);
+    h.advance(76_000);
+    h.scheduler.tick();
+    const state = await request(h.app).get('/api/state').expect(200);
+    const verified = state.body.trades.verified as Array<{ id: string; status: string; legs: { book: string }[] }>;
+    if (verified.length > 0) return verified;
+  }
+  throw new Error('promoteSome: no VERIFIED trade after 3 scan+recheck cycles — fixture/seed regressed');
 }
 
 test('clock guards: NOW is active hours, QUIET_NOW is quiet hours', () => {
