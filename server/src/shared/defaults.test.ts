@@ -28,3 +28,7 @@ test('settings-screen defaults (Plan 5)', () => {
   });
   expect(DEFAULT_SETTINGS.mixArbPct + DEFAULT_SETTINGS.mixMiddlePct + DEFAULT_SETTINGS.mixEvPct).toBe(100);
 });
+
+test('live-mode default is SIMULATED', () => {
+  expect(DEFAULT_SETTINGS.liveMode).toBe(0);
+});

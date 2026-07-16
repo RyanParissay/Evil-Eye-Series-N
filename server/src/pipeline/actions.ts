@@ -106,6 +106,10 @@ export function settleTrade(repos: Repos, id: string, result: 'WON' | 'LOST', am
  */
 export function runSimSettlement(deps: PipeDeps, now: number): { settled: number; won: number; lost: number } {
   const { repos } = deps;
+  // Plan 6 (Design §13): rng outcomes are SIM-ONLY. In LIVE mode nothing
+  // auto-settles until a real results feed ships — fabricating WON/LOST on
+  // real money is the one dishonesty every plan forbids. Manual settles stand.
+  if (deps.s().liveMode === 1) return { settled: 0, won: 0, lost: 0 };
   let won = 0;
   let lost = 0;
 

@@ -17,6 +17,9 @@ export const DEFAULT_SETTINGS = {
   anchorFallback: 0, oneSportRule: 1, journalMinPerDay: 1,
   // String settings — the store is k/v JSON; validation lives in settingsPatch.
   whatsappNumber: '', disabledSports: '',
+  // Live mode (Plan 6). Flipped ONLY by POST /api/mode — PATCH /api/settings
+  // refuses this key because flipping has side effects (rewiring, env gating).
+  liveMode: 0,
 };
 
 export type Settings = typeof DEFAULT_SETTINGS;

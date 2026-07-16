@@ -17,6 +17,16 @@ export interface Timer {
   setTimeout(fn: () => void, ms: number): unknown;
 }
 
+/** A live-mode cadence riding the ONE timer chain (Plan 6, HARD GATE 5).
+ *  nextAt: when this hook next wants to run at `now` (null = not scheduled —
+ *  e.g. sim mode, quiet hours). run: the work; MUST resolve — the runner also
+ *  guards, but hooks own their own error logging. */
+export interface HookTask {
+  name: string;
+  nextAt(now: number): number | null;
+  run(now: number): Promise<void>;
+}
+
 /** The db/market-derived halves of PlanState; the runner supplies lastScanAt itself. */
 export interface PlanDeps {
   pendingVerifyDueAts(): number[];
@@ -32,6 +42,9 @@ export interface ScanSummary {
 export interface SchedulerHandle {
   /** Test/manual hook: run every due action at clock() now. Never schedules — the timer chain stays single. */
   tick(): void;
+  /** The timer callback's body: provider refresh → due hooks → due actions.
+   *  Exposed for tests and manual driving; the chain calls it on every wake. */
+  pump(): Promise<void>;
   /** Manual scan (POST /api/scan): the full scan bundle immediately, bypassing the cadence, then re-arms the chain so the +75s verify recheck is honored. */
   scanNow(now: number): ScanSummary;
   /** When the next scan will run — the dashboard's countdown. */
@@ -54,7 +67,9 @@ export function defaultPlanDeps(deps: PipeDeps): PlanDeps {
 
 const RETRY_MS = 60_000; // a failed tick must never end the chain — retry in a minute
 
-export function startScheduler(deps: PipeDeps, planDeps: PlanDeps, timer: Timer, clock: () => number): SchedulerHandle {
+export function startScheduler(
+  deps: PipeDeps, planDeps: PlanDeps, timer: Timer, clock: () => number, hooks: HookTask[] = [],
+): SchedulerHandle {
   let lastScanAt: number | null = null;
   let plannedScanAt: number | null = null; // set whenever a tick computes when the next scan lands
   let stopped = false;
@@ -118,27 +133,88 @@ export function startScheduler(deps: PipeDeps, planDeps: PlanDeps, timer: Timer,
     }
   }
 
+  async function runDueHooks(): Promise<void> {
+    for (const h of hooks) {
+      const now = clock();
+      const at = h.nextAt(now);
+      if (at === null || at > now) continue;
+      try {
+        await h.run(now);
+      } catch (err) {
+        // Hooks own their logging; this guard is why the chain cannot die (Design §11).
+        console.error(`[scheduler] hook ${h.name} failed`, err);
+      }
+    }
+  }
+
+  /** Soonest future hook wake, or +∞ when no hook wants one. */
+  function nextHookWake(now: number): number {
+    let min = Number.POSITIVE_INFINITY;
+    for (const h of hooks) {
+      const at = h.nextAt(now);
+      if (at !== null) min = Math.min(min, Math.max(at, now));
+    }
+    return min;
+  }
+
+  /** One wake of the chain: live snapshot → due hooks → due plan actions. */
+  async function pumpHooks(): Promise<void> {
+    try {
+      if (deps.provider.refresh) await deps.provider.refresh(clock());
+    } catch {
+      /* refresh never throws by contract; belt-and-suspenders */
+    }
+    await runDueHooks();
+  }
+
   /** Arm the chain's next wake under the current generation. */
   function arm(delayMs: number): void {
     const gen = generation;
     timer.setTimeout(() => { onTimer(gen); }, delayMs);
   }
 
-  function onTimer(gen: number): void {
-    if (stopped || gen !== generation) return; // stale wake (superseded by a manual scan): drop it
+  /** Run the due plan actions and re-arm — the synchronous tail shared by both onTimer paths. */
+  function finishTick(): void {
     let delayMs = RETRY_MS;
     try {
-      delayMs = Math.max(0, runDue() - clock()); // overdue ats clamp to "run immediately"
+      const nextPlanAt = runDue();
+      delayMs = Math.max(0, Math.min(nextPlanAt, nextHookWake(clock())) - clock());
     } catch (err) {
       console.error('[scheduler] tick failed — retrying in 60s', err);
     }
-    arm(delayMs); // the ONE live timeout: the chain reschedules itself
+    arm(delayMs);
+  }
+
+  function onTimer(gen: number): void {
+    if (stopped || gen !== generation) return; // stale wake: drop it
+    // Stay fully synchronous when there is genuinely no async work THIS wake:
+    // no live refresh, and no hook currently due. This preserves the sim
+    // scheduler tests (fake timer, fire-and-assert) even after createApp
+    // registers hooks (Plan 6 T7) whose nextAt returns null in sim/no-key.
+    // Only detour through a microtask when a refresh or a due hook must be awaited.
+    const now = clock();
+    const anyHookDue = hooks.some((h) => {
+      const at = h.nextAt(now);
+      return at !== null && at <= now;
+    });
+    if (!deps.provider.refresh && !anyHookDue) {
+      finishTick();
+      return;
+    }
+    void (async () => {
+      await pumpHooks();
+      finishTick();
+    })();
   }
 
   arm(0); // seed the chain; with lastScanAt null the first tick scans immediately
 
   return {
     tick(): void {
+      runDue();
+    },
+    async pump(): Promise<void> {
+      await pumpHooks();
       runDue();
     },
     scanNow(now: number): ScanSummary {
