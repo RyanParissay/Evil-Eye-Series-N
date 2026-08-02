@@ -303,6 +303,9 @@ export function createApp(o: AppOptions): App {
       quietHours: isQuietHours(now, s),
       trades: { verified, pending },
       counts: { verifiedToday: repos.trades.verifiedSentToday(day), killedToday },
+      // §2.2: feed health — null in SIM (the sim provider never defines health(),
+      // by construction, so no error state is ever possible there).
+      feedHealth: deps.provider.health ? deps.provider.health() : null,
     });
   });
 

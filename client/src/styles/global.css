@@ -37,6 +37,15 @@ button:disabled { cursor: default; }
 .status-line { margin-top: 12px; padding: 8px 0; border-bottom: 1px solid var(--grey-divider); font-size: 11px; letter-spacing: 0.1em; color: var(--muted-label); text-align: right; white-space: nowrap; }
 .status-line .time { color: #fff; }
 
+/* ---------- feed health (§2.2) ---------- */
+.feed-health { display: flex; align-items: center; gap: 8px; margin: 14px 0 4px; font-size: 11px; letter-spacing: 0.08em; }
+.feed-chip { border: 1px solid currentColor; padding: 2px 8px; letter-spacing: 0.1em; font-size: 11px; }
+.feed-chip.sim { color: var(--yellow); }
+.feed-chip.muted { color: var(--muted-label); }
+.feed-chip.green { color: var(--green); }
+.feed-chip.red { color: var(--red); }
+.feed-health-detail { color: var(--muted-label); }
+
 /* ---------- section headers (§2.1, §2.3) ---------- */
 .section-header { margin: 16px 0 8px; font-size: 15px; font-weight: 600; letter-spacing: 0.14em; color: #fff; }
 .section-header.pending { font-weight: 500; color: var(--muted-label); }

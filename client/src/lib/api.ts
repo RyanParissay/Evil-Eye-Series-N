@@ -44,13 +44,25 @@ export interface TradeView {
   edgePct: number | null;
 }
 
+/** §2.2: feed health for the live odds provider. null in the payload means SIM
+ *  (the sim provider never fetches, by construction — no error state possible).
+ *  lastFetchOk null (within a non-null FeedHealth) means no fetch attempted yet —
+ *  honestly distinct from a failed fetch (false). */
+export interface FeedHealth {
+  lastFetchAt: number | null;
+  lastFetchOk: boolean | null;
+  lastFetchError: string | null;
+  lastSuccessfulFetchAt: number | null;
+}
+
 export interface AppState {
-  mode: 'SIMULATED';
+  mode: 'SIMULATED' | 'LIVE';
   now: number;
   nextScanAt: number;
   quietHours: boolean;
   trades: { verified: TradeView[]; pending: TradeView[] };
   counts: { verifiedToday: number; killedToday: number };
+  feedHealth: FeedHealth | null;
 }
 
 /** ARB cards show marginPct; EV/MIDDLE show edgePct. Missing value → 0. */
@@ -69,6 +81,37 @@ export interface StatusLineView {
 export function deriveStatusLine(state: AppState | null): StatusLineView {
   if (state === null) return { nextScanText: '—', modeLabel: 'SIMULATED' };
   return { nextScanText: formatScanTime(state.nextScanAt), modeLabel: state.mode };
+}
+
+export interface FeedHealthView {
+  tone: 'sim' | 'muted' | 'green' | 'red';
+  text: string;
+  detail: string;
+}
+
+function secondsAgoText(at: number, now: number): string {
+  return `${Math.max(0, Math.round((now - at) / 1000))}S AGO`;
+}
+
+/** TRADES-screen feed-health chip (§2.2). SIM (or server down, mirroring
+ *  deriveStatusLine's default) never shows an error — the sim provider never
+ *  fetches, by construction. In LIVE: no fetch attempted yet is neutral, NOT
+ *  an error; OK shows time since the last successful fetch; a failure shows
+ *  an honest last-known-good time (never fabricated) instead of the error text. */
+export function deriveFeedHealth(state: AppState | null, now: number): FeedHealthView {
+  if (state === null || state.mode !== 'LIVE') return { tone: 'sim', text: 'FEED · SIM', detail: '' };
+  const h = state.feedHealth;
+  if (h === null || h.lastFetchOk === null) {
+    return { tone: 'muted', text: 'FEED · AWAITING FIRST FETCH', detail: '' };
+  }
+  if (h.lastFetchOk) {
+    return { tone: 'green', text: 'FEED OK', detail: secondsAgoText(h.lastSuccessfulFetchAt ?? now, now) };
+  }
+  return {
+    tone: 'red',
+    text: 'FEED ERROR',
+    detail: h.lastSuccessfulFetchAt === null ? 'NO SUCCESSFUL FETCH YET' : `LAST OK ${secondsAgoText(h.lastSuccessfulFetchAt, now)}`,
+  };
 }
 
 export async function fetchState(): Promise<AppState | null> {

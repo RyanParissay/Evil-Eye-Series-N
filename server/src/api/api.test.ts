@@ -109,6 +109,59 @@ test('boot → POST /api/scan → pending appear WITHOUT stakes', async () => {
   expect(h.repos.snapshots.byProfile(1).length).toBe(1);
 });
 
+// ---- §2.2 live-fetch hardening ----------------------------------------------
+
+test('GET /api/state: SIM never exposes feedHealth (the sim provider has no health — no error state possible)', async () => {
+  const h = makeApp();
+  await request(h.app).post('/api/scan').expect(200);
+  const res = await request(h.app).get('/api/state').expect(200);
+  expect(res.body.feedHealth).toBeNull();
+});
+
+test('POST /api/scan refreshes a live-shaped provider BEFORE reading its quotes (manual scan must not read a stale cache)', async () => {
+  const order: string[] = [];
+  const rng = mulberry32(7);
+  const spyProvider: OddsProvider = {
+    fetchQuotes: (now: number) => { order.push('fetchQuotes'); return frozen(SimOddsProvider(rng)).fetchQuotes(now); },
+    refresh: async () => { order.push('refresh'); },
+  };
+  const made = createApp({
+    dbPath: ':memory:',
+    clock: () => NOW,
+    timer: { setTimeout: (): unknown => 0 },
+    rng,
+    provider: spyProvider,
+    sender: { sendVerified: (): void => {} },
+    fetchImpl: (() => { throw new Error('NETWORK CALL ATTEMPTED'); }) as unknown as typeof fetch,
+    env: {},
+  });
+  await request(made.app).post('/api/scan').expect(200);
+  expect(order[0]).toBe('refresh'); // refresh must complete before the scan reads quotes
+  expect(order).toContain('fetchQuotes');
+});
+
+test('GET /api/state surfaces a live-shaped provider\'s feedHealth() verbatim', async () => {
+  const rng = mulberry32(7);
+  const health = { lastFetchAt: NOW, lastFetchOk: true, lastFetchError: null, lastSuccessfulFetchAt: NOW };
+  const spyProvider: OddsProvider = {
+    fetchQuotes: (now: number) => frozen(SimOddsProvider(rng)).fetchQuotes(now),
+    refresh: async () => {},
+    health: () => health,
+  };
+  const made = createApp({
+    dbPath: ':memory:',
+    clock: () => NOW,
+    timer: { setTimeout: (): unknown => 0 },
+    rng,
+    provider: spyProvider,
+    sender: { sendVerified: (): void => {} },
+    fetchImpl: (() => { throw new Error('NETWORK CALL ATTEMPTED'); }) as unknown as typeof fetch,
+    env: {},
+  });
+  const res = await request(made.app).get('/api/state').expect(200);
+  expect(res.body.feedHealth).toEqual(health);
+});
+
 test('advance fake clock 76s → verify runs → GET /api/state shows verified WITH stakes', async () => {
   const h = makeApp();
   const verified = await promoteSome(h);

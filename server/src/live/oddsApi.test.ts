@@ -81,3 +81,57 @@ test('a failed refresh keeps the last cache and writes provider_error — never 
   expect(errs).toHaveLength(1);
   expect(errs[0]!.payload).not.toContain('fake-key'); // NEVER a value in the payload
 });
+
+// ---- feed health (§2.2 live-fetch hardening) --------------------------------
+// A broken feed (401/429/500) must never look identical to "no opportunities" —
+// health() surfaces what refresh()'s own catch used to hide silently.
+
+test('health(): before any refresh, no-attempt state — never attempted is NOT the same as failed', () => {
+  const repos = Repos(openDb(':memory:'));
+  const fetchImpl = (async () => new Response('{}', { status: 200 })) as typeof fetch;
+  const p = OddsApiProvider(fetchImpl, ENV, repos);
+  expect(p.health!()).toEqual({
+    lastFetchAt: null, lastFetchOk: null, lastFetchError: null, lastSuccessfulFetchAt: null,
+  });
+});
+
+test('health(): a successful refresh marks ok and stamps both fetch timestamps', async () => {
+  const repos = Repos(openDb(':memory:'));
+  const fetchImpl = (async () => new Response(JSON.stringify(FIXTURE), { status: 200 })) as typeof fetch;
+  const p = OddsApiProvider(fetchImpl, ENV, repos);
+  await p.refresh!(NOW);
+  expect(p.health!()).toEqual({
+    lastFetchAt: NOW, lastFetchOk: true, lastFetchError: null, lastSuccessfulFetchAt: NOW,
+  });
+});
+
+test('health(): a 401/429/500-style refresh failure is captured with a short, safe message', async () => {
+  const repos = Repos(openDb(':memory:'));
+  const fetchImpl = (async () => new Response('unauthorized', { status: 401 })) as typeof fetch;
+  const p = OddsApiProvider(fetchImpl, ENV, repos);
+  await p.refresh!(NOW); // must not reject
+  const h = p.health!();
+  expect(h.lastFetchAt).toBe(NOW);
+  expect(h.lastFetchOk).toBe(false);
+  expect(h.lastFetchError).toContain('401');
+  expect(h.lastFetchError).not.toContain('fake-key'); // NEVER a value (HARD GATE 3)
+  expect(h.lastSuccessfulFetchAt).toBeNull(); // never succeeded yet
+});
+
+test('health(): after a success then a failure, lastSuccessfulFetchAt survives the failure', async () => {
+  const repos = Repos(openDb(':memory:'));
+  let fail = false;
+  const fetchImpl = (async () => {
+    if (fail) return new Response('rate limited', { status: 429 });
+    return new Response(JSON.stringify(FIXTURE), { status: 200 });
+  }) as typeof fetch;
+  const p = OddsApiProvider(fetchImpl, ENV, repos);
+  await p.refresh!(NOW);
+  fail = true;
+  await p.refresh!(NOW + 60_000);
+  const h = p.health!();
+  expect(h.lastFetchAt).toBe(NOW + 60_000);   // most recent attempt, even though it failed
+  expect(h.lastFetchOk).toBe(false);
+  expect(h.lastFetchError).toContain('429');
+  expect(h.lastSuccessfulFetchAt).toBe(NOW);  // the last GOOD fetch, honestly distinct from the last attempt
+});

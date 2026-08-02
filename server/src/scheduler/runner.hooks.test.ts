@@ -47,6 +47,21 @@ test('pump awaits provider.refresh before the scan work', async () => {
   expect(order).toContain('fetch');
 });
 
+test('§2.2: a provider.refresh that throws (contract violation) still never kills the chain — belt-and-suspenders', async () => {
+  const deps = mkDeps();
+  let calls = 0;
+  let now = NOW;
+  deps.provider = {
+    fetchQuotes: () => [],
+    refresh: async () => { calls += 1; throw new Error('boom — misbehaving provider'); },
+  };
+  const scheduler = startScheduler(deps, defaultPlanDeps(deps), { setTimeout: () => 0 }, () => now, []);
+  await scheduler.pump(); // must not reject despite refresh() breaking its own never-throw contract
+  now += 61_000;
+  await scheduler.pump();
+  expect(calls).toBe(2); // both pumps completed — the chain survives every attempt
+});
+
 test('tick() stays synchronous and hook-free — sim tests keep their contract', () => {
   const deps = mkDeps();
   const ran: string[] = [];
