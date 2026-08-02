@@ -24,9 +24,10 @@ npm run dev:client     # Vite on :5174 (proxies /api → :4400)
 - **Feature work happens in worktrees**, never long-lived branches in this
   folder: `git worktree add ~/evil-eye-worktrees/<feature> -b wt/<feature>`.
   Merge to `main` → `git worktree remove` + delete the branch. Ephemeral only.
-- **Ports:** server is hard-coded to 4400 (`index.ts`) — only one v2 dev
-  server runs at a time (env-override is a TASKS.md item). Client proxy
-  target: `EE_API_TARGET=http://localhost:<port> npm run dev:client`.
+- **Ports:** server defaults to 4400, override with `EE_PORT` (`index.ts`) —
+  never `PORT`, reserved for V1's server. Worktree convention: 4410+, e.g.
+  `EE_PORT=4411 npm run dev`. Client proxy target:
+  `EE_API_TARGET=http://localhost:<port> npm run dev:client`.
   `server/data/` is per-checkout and gitignored, so db state isolates itself.
 - **TASKS.md** is the passive backlog: when a bug or worthwhile follow-up
   surfaces during other work, add a concise entry there (do NOT actively hunt

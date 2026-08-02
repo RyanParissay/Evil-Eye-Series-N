@@ -31,11 +31,10 @@ git worktree remove ~/evil-eye-worktrees/<feature> && git branch -d wt/<feature>
 
 - All worktrees live in `~/evil-eye-worktrees/` — never scattered elsewhere.
 - No permanent worktrees; remove after merge.
-- Ports: the V2 server port is currently HARD-CODED to 4400
-  (`server/src/index.ts` — so only ONE v2 dev server can run at a time;
-  see TASKS.md for the env-override task). Tests and typecheck need no
-  server, so parallel worktree development still works — just don't expect
-  two live servers. The client proxy target is overridable:
+- Ports: the V2 server defaults to 4400, overridable via `EE_PORT`
+  (`server/src/index.ts`) — never `PORT`, reserved for V1's server. Worktree
+  convention: 4410+, e.g. `EE_PORT=4411 npm run dev`, so multiple v2 dev
+  servers can run at once. The client proxy target is overridable:
   `EE_API_TARGET=http://localhost:<port> npm run dev:client`.
   `server/data/` is per-checkout and gitignored, so db state self-isolates.
 - (V1 ports, if ever needed: 8787/5173.)

@@ -8,7 +8,19 @@ import { join } from 'node:path';
 import { createApp } from './api/routes.js';
 import { loadV1Env } from './live/env.js';
 
-const PORT = 4400; // locked — the V1 PORT variable belongs to V1's server (Plan 6 Decision 2)
+const DEFAULT_PORT = 4400;
+
+// V2-specific override — never `PORT`, which is reserved for V1's server
+// (Plan 6 Decision 2). Defensive parse: non-numeric/out-of-range falls back
+// to the default so a bad env value can't crash boot or bind an odd port.
+function resolvePort(raw: string | undefined): number {
+  if (raw === undefined || raw === '') return DEFAULT_PORT;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > 65535) return DEFAULT_PORT;
+  return n;
+}
+
+const PORT = resolvePort(process.env.EE_PORT);
 
 loadV1Env(); // ~/evil-eye-arbitrage/.env (or EE_ENV_PATH) — names only, never overwrites
 
