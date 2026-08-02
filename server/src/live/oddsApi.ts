@@ -2,7 +2,7 @@
 // cache; fetchQuotes stays synchronous so the pipeline is untouched. Injected
 // fetchImpl only — tests stub it; NOTHING here can run against the real API in
 // a test (HARD GATE 2). Credits come from the API's own usage headers.
-import type { OddsProvider, Quote } from '../shared/types.js';
+import type { FeedHealth, OddsProvider, Quote } from '../shared/types.js';
 import type { Repos } from '../db/db.js';
 
 const BASE = 'https://api.the-odds-api.com/v4';
@@ -97,6 +97,11 @@ export function recordCredits(repos: Repos, headers: Headers, now: number): void
 
 export function OddsApiProvider(fetchImpl: typeof fetch, env: NodeJS.ProcessEnv, repos: Repos): OddsProvider {
   let cache: Quote[] = [];
+  // §2.2: feed health, the honest record refresh()'s own catch used to hide.
+  // lastFetchOk starts null (no attempt yet) — distinct from a failed attempt.
+  let health: FeedHealth = {
+    lastFetchAt: null, lastFetchOk: null, lastFetchError: null, lastSuccessfulFetchAt: null,
+  };
   return {
     fetchQuotes(): Quote[] {
       return cache;
@@ -115,12 +120,17 @@ export function OddsApiProvider(fetchImpl: typeof fetch, env: NodeJS.ProcessEnv,
         }
         cache = mapEvents(merged, now);
         if (headers !== null) recordCredits(repos, headers, now);
+        health = { lastFetchAt: now, lastFetchOk: true, lastFetchError: null, lastSuccessfulFetchAt: now };
       } catch (err) {
         // Keep the stale cache; the message NEVER contains a value (HARD GATE 3).
-        repos.eventsLog.add(now, 'provider_error', JSON.stringify({
-          message: err instanceof Error ? err.message.slice(0, 200) : 'unknown',
-        }));
+        const message = err instanceof Error ? err.message.slice(0, 200) : 'unknown';
+        repos.eventsLog.add(now, 'provider_error', JSON.stringify({ message }));
+        // Preserve lastSuccessfulFetchAt across the failure — "time since last good fetch" must stay honest.
+        health = { ...health, lastFetchAt: now, lastFetchOk: false, lastFetchError: message };
       }
+    },
+    health(): FeedHealth {
+      return health;
     },
   };
 }

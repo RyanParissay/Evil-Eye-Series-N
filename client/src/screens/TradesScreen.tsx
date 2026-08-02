@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AppState } from '../lib/api';
+import { FeedHealthLine } from '../components/FeedHealthLine';
 import { LiveCard } from '../components/LiveCard';
 import { PendingCard } from '../components/PendingCard';
 import { ViewAll } from '../components/ViewAll';
@@ -16,6 +17,7 @@ export function TradesScreen({ state, now, refresh }: TradesScreenProps) {
   const pending = state?.trades.pending ?? [];
   return (
     <main>
+      <FeedHealthLine state={state} now={now} />
       <h2 className="section-header">VERIFIED LIVE ({verified.length})</h2>
       {verified.length === 0 && <div className="empty-note">NOTHING VERIFIED RIGHT NOW</div>}
       {verified.map((t) => (

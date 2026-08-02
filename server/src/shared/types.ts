@@ -21,5 +21,18 @@ export interface OddsProvider {
    *  scan route); sim never defines it. Must never throw — a failed refresh
    *  keeps the last cache and logs, so the chain survives (Plan 6 Design §4). */
   refresh?(now: number): Promise<void>;
+  /** Feed health (§2.2): live providers report the outcome of their last refresh
+   *  here so a broken feed (401/429/500) is never silently indistinguishable
+   *  from "no opportunities"; sim never defines it (never fetches, by construction). */
+  health?(): FeedHealth;
+}
+/** lastFetchOk === null means no fetch has been attempted yet — honestly distinct
+ *  from a failed fetch (false). lastFetchError is a short, safe message — never
+ *  key material. lastSuccessfulFetchAt survives across later failures. */
+export interface FeedHealth {
+  lastFetchAt: number | null;
+  lastFetchOk: boolean | null;
+  lastFetchError: string | null;
+  lastSuccessfulFetchAt: number | null;
 }
 export interface AlertSender { sendVerified(trade: Trade): void; } // sim: events_log row

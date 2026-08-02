@@ -157,7 +157,11 @@ export function startScheduler(
     return min;
   }
 
-  /** One wake of the chain: live snapshot → due hooks → due plan actions. */
+  /** One wake of the chain: live snapshot → due hooks → due plan actions.
+   *  §2.2: this catch is belt-and-suspenders only — refresh() itself never
+   *  throws (it catches and records provider.health() + a provider_error
+   *  event on failure, so a broken feed is visible via GET /api/state's
+   *  feedHealth instead of looking identical to "no opportunities"). */
   async function pumpHooks(): Promise<void> {
     try {
       if (deps.provider.refresh) await deps.provider.refresh(clock());
