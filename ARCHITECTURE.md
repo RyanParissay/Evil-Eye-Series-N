@@ -91,7 +91,9 @@ injected, never read ambiently.
   `OddsApiProvider` + `TwilioWhatsAppSender`.
 - `live/oddsApi.ts` — `OddsApiProvider(fetch, env, repos)`: async `refresh`
   fills cache, sync `fetchQuotes` reads it; `recordCredits` from API usage
-  headers. Injected fetch only.
+  headers; `health()` reports `FeedHealth` (last fetch ok/error + last
+  successful fetch — surfaced via `GET /api/state.feedHealth`, null in SIM).
+  Injected fetch only.
 - `live/twilio.ts` — `TwilioWhatsAppSender`; dev-mode short-circuits before
   any network (dev is default).
 - `live/inbound.ts` — 45s inbound-WhatsApp poll hook, live-only, dedupes by
@@ -134,9 +136,9 @@ injected, never read ambiently.
   `[inboundPollHook, backupHook?, brain-digest]`. `TradeView` serialization
   (`STAKE_VISIBLE` set, labels, `middleEdgePct`). ~23 routes (§8). Error
   contract `{error:{code,message}}`.
-- `index.ts` — **the only place real time/fetch/fs exist.** `PORT = 4400`
-  (locked). `loadV1Env()`, hands `createApp` the one real
-  setTimeout/Date.now/Math.random/fetch/env/backup dir.
+- `index.ts` — **the only place real time/fetch/fs exist.** Port from
+  `EE_PORT` (default 4400; never `PORT` — that's V1's). `loadV1Env()`, hands
+  `createApp` the one real setTimeout/Date.now/Math.random/fetch/env/backup dir.
 
 **Dependency direction:** `shared` ← `engine` ← `pipeline`/`brain`/`analytics`
 ← `api`. `db`/`scheduler`/`live`/`providers` are seam layers wired only at
@@ -254,8 +256,8 @@ blocks; client 8 files / 63 blocks. Notable suites:
 
 ## 8. Ports, env, routes
 
-- **Ports:** server 4400 (locked in `index.ts`); Vite dev 5174; proxy target
-  overridable via `EE_API_TARGET`. Worktree convention: 4410+ per CLAUDE.md.
+- **Ports:** server `EE_PORT` (default 4400, `index.ts`); Vite dev 5174; proxy
+  target overridable via `EE_API_TARGET`. Worktree convention: 4410+ per CLAUDE.md.
 - **Routes (~23):** `GET /api/state`, `GET /api/trades`, `POST /api/scan`,
   `POST /api/trades/:id/{confirm,unconfirm,limited,settle}`,
   `GET/PATCH /api/settings`, `GET /api/settings/view`, `GET /api/brain`,
