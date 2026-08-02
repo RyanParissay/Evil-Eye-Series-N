@@ -95,6 +95,42 @@ export function staleText(s: SettingsValues): string {
   return `${s.staleRemoveMin} MIN`;
 }
 
+// ---- SCAN RULES — editable-knob value text (§2.3 settings editability) ------
+
+export function quietStartText(s: SettingsValues): string {
+  return `${pad2(s.quietStartHour)}:00`;
+}
+
+export function quietEndText(s: SettingsValues): string {
+  return `${pad2(s.quietEndHour)}:00`;
+}
+
+export function scanBaseText(s: SettingsValues): string {
+  return `${s.scanBaseMin} MIN`;
+}
+
+export function hotMinText(s: SettingsValues): string {
+  return `${s.scanHotMinMin} MIN`;
+}
+
+export function hotMaxText(s: SettingsValues): string {
+  return `${s.scanHotMaxMin} MIN`;
+}
+
+export function hotWindowText(s: SettingsValues): string {
+  return `${s.hotWindowHours} H`;
+}
+
+/**
+ * Clamp a stepper's proposed next value into [min, max] BEFORE it is ever PATCHed —
+ * mirrors the server's `routes.ts` validation (HOUR_KEYS 0–23, everything else just
+ * "must be positive") so a click can never produce an out-of-range PATCH body. No
+ * ceiling by default: most settings knobs have a positive floor and no server max.
+ */
+export function clampStepper(value: number, min: number, max = Infinity): number {
+  return Math.max(min, Math.min(max, value));
+}
+
 export type RowTone = 'plain' | 'yellow' | 'red';
 
 export function forecastRows(f: ForecasterView): [string, string, RowTone][] {
@@ -145,6 +181,36 @@ export function riskRows(s: SettingsValues): [string, string][] {
 
 export function toleranceText(s: SettingsValues): string {
   return `${s.tolerancePct}% · 0–100%`;
+}
+
+// ---- RISK & BANKROLL — editable-knob value text (§2.3 settings editability) -
+
+export function flatPairText(s: SettingsValues): string {
+  return `${formatCents(s.flatPairCents)} CAD`;
+}
+
+export function kellyFractionText(s: SettingsValues): string {
+  return s.kellyFraction.toFixed(2);
+}
+
+export function kellyCapText(s: SettingsValues): string {
+  return `${s.kellyCapPct}%`;
+}
+
+export function bankrollText(s: SettingsValues): string {
+  return `${formatCents(s.bankrollCents)} CAD`;
+}
+
+export function minStakeText(s: SettingsValues): string {
+  return formatCents(s.minStakeCents);
+}
+
+export function roundToText(s: SettingsValues): string {
+  return formatCents(s.roundToCents);
+}
+
+export function dailyCapText(s: SettingsValues): string {
+  return String(s.dailyPickCap);
 }
 
 // ---- BRAIN (§5.4) --------------------------------------------------------------------

@@ -1,11 +1,13 @@
 import { expect, test } from 'vitest';
 import {
-  advSettingsToggle, backupsText, bookRow, cadenceText, consolidationText,
-  fallbackItems, forecastRows, heatWeightsValue, journalMinText, killRuleRows,
-  killSwitchValue, lastDigestText, lastTickText, llmBudgetText, memoryText,
-  mixRows, planText, quietHoursText, rebalanceMix, riskRows, safetyRows,
-  scanWindowText, sportCell, staleText, thresholdTexts, toleranceText,
-  inputStatus, missingText, modeSwitchLabel,
+  advSettingsToggle, backupsText, bankrollText, bookRow, cadenceText, clampStepper,
+  consolidationText, dailyCapText, fallbackItems, flatPairText, forecastRows,
+  heatWeightsValue, hotMaxText, hotMinText, hotWindowText, journalMinText,
+  kellyCapText, kellyFractionText, killRuleRows, killSwitchValue, lastDigestText,
+  lastTickText, llmBudgetText, memoryText, minStakeText, mixRows, planText,
+  quietEndText, quietHoursText, quietStartText, rebalanceMix, riskRows,
+  roundToText, safetyRows, scanBaseText, scanWindowText, sportCell, staleText,
+  thresholdTexts, toleranceText, inputStatus, missingText, modeSwitchLabel,
   validWaNumber, verifyGapText,
 } from './settings';
 
@@ -32,6 +34,16 @@ test('SCAN RULES rows derive from the store — mockup strings at defaults', () 
   expect(verifyGapText(S)).toBe('60 S');
   expect(staleText(S)).toBe('10 MIN');
   expect(scanWindowText({ ...S, quietEndHour: 9, quietStartHour: 1 })).toBe('09:00 – 01:00 PT');
+});
+
+test('SCAN RULES new editable-knob rows — value text at defaults (§2.3)', () => {
+  expect(quietStartText(S)).toBe('00:00');
+  expect(quietEndText(S)).toBe('08:00');
+  expect(quietStartText({ ...S, quietStartHour: 23 })).toBe('23:00');
+  expect(scanBaseText(S)).toBe('20 MIN');
+  expect(hotMinText(S)).toBe('5 MIN');
+  expect(hotMaxText(S)).toBe('8 MIN');
+  expect(hotWindowText(S)).toBe('2 H');
 });
 
 test('CREDIT FORECASTER rows format live numbers, projection tinted yellow', () => {
@@ -68,6 +80,25 @@ test('RISK & BANKROLL rows — mockup strings at defaults', () => {
     ['TRADES PER DAY CAP', '12'],
   ]);
   expect(toleranceText(S)).toBe('8% · 0–100%');
+});
+
+test('RISK & BANKROLL new editable-knob rows — value text at defaults (§2.3)', () => {
+  expect(flatPairText(S)).toBe('$100 CAD');
+  expect(kellyFractionText(S)).toBe('0.25');
+  expect(kellyCapText(S)).toBe('5%');
+  expect(bankrollText(S)).toBe('$10,000 CAD');
+  expect(minStakeText(S)).toBe('$10');
+  expect(roundToText(S)).toBe('$5');
+  expect(dailyCapText(S)).toBe('12');
+});
+
+test('clampStepper blocks out-of-range client-side — mirrors server RANGE_RULES', () => {
+  expect(clampStepper(5, 1)).toBe(5);
+  expect(clampStepper(0, 1)).toBe(1);        // floor — a stepper click never sends <= 0
+  expect(clampStepper(-3, 1)).toBe(1);
+  expect(clampStepper(15, 0, 23)).toBe(15);
+  expect(clampStepper(30, 0, 23)).toBe(23);  // ceiling — mirrors HOUR_KEYS (0-23)
+  expect(clampStepper(-1, 0, 23)).toBe(0);
 });
 
 test('BRAIN panel rows', () => {

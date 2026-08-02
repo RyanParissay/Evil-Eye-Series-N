@@ -32,6 +32,10 @@
 .stepper-value { color: #fff; font-weight: 500; }
 .step-btn { width: 22px; height: 22px; background: none; border: 1px solid var(--grey-divider); color: var(--body-text); font-size: 12px; font-family: inherit; cursor: pointer; padding: 0; }
 .step-btn:hover { color: #fff; border-color: #fff; }
+/* §2.3 — a kv row hosting two steppers (e.g. "KELLY FRACTION / CAP"): same stepper
+   visual, just paired with a "/" separator instead of static combined text. */
+.kv-pair { display: flex; align-items: center; gap: 8px; }
+.kv-pair-sep { color: var(--muted-label); }
 
 /* ---------- BRAIN / WHATSAPP / DATA panel controls ---------- */
 .toggle-chip { background: none; border: 2px solid #fff; color: #fff; font-size: 11px; letter-spacing: 0.12em; padding: 2px 10px; font-family: inherit; cursor: pointer; }
